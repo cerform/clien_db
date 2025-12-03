@@ -112,6 +112,18 @@ def get_text(key: str, lang: str) -> str:
     """Get translated text"""
     return TEXTS.get(key, {}).get(lang, TEXTS.get(key, {}).get(LANG_EN, key))
 
+def is_user_admin(user_id: int) -> bool:
+    """Check if user is admin"""
+    load_env()
+    cfg = Config.from_env()
+    return user_id in cfg.ADMIN_USER_IDS
+
+def get_main_menu(user_id: int) -> types.ReplyKeyboardMarkup:
+    """Get main menu with admin button if user is admin"""
+    user_lang = get_user_lang(user_id)
+    is_admin = is_user_admin(user_id)
+    return main_menu(user_lang, is_admin)
+
 class ClientStates(StatesGroup):
     waiting_for_name = State()
     waiting_for_phone = State()
@@ -201,7 +213,7 @@ async def cmd_my_bookings(message: types.Message):
         if not bookings:
             await message.answer(
                 get_text("no_bookings", user_lang),
-                reply_markup=main_menu(user_lang)
+                reply_markup=get_main_menu(message.from_user.id)
             )
             return
         
@@ -210,9 +222,9 @@ async def cmd_my_bookings(message: types.Message):
             status = "✅" if b.get("status") == "confirmed" else "⏳"
             msg += f"{status} {b.get('date')} {b.get('slot_start')}-{b.get('slot_end')}\n"
         
-        await message.answer(msg, reply_markup=main_menu(user_lang))
+        await message.answer(msg, reply_markup=get_main_menu(message.from_user.id))
     except Exception as e:
-        await message.answer(f"{get_text('error', user_lang)} {str(e)[:100]}", reply_markup=main_menu(user_lang))
+        await message.answer(f"{get_text('error', user_lang)} {str(e)[:100]}", reply_markup=get_main_menu(message.from_user.id))
         logger.exception("Error getting bookings")
 
 async def cmd_help(message: types.Message):
@@ -226,21 +238,21 @@ async def cmd_help(message: types.Message):
         "4. Choose date, master & time\n"
         "5. Confirm booking\n\n"
         "📞 Support: contact@tattoo.studio",
-        reply_markup=main_menu(user_lang)
+        reply_markup=get_main_menu(message.from_user.id)
     )
 
 async def cmd_cancel(message: types.Message, state: FSMContext):
     """Cancel current operation"""
     user_lang = get_user_lang(message.from_user.id)
     await state.clear()
-    await message.answer(get_text("cancelled", user_lang), reply_markup=main_menu(user_lang))
+    await message.answer(get_text("cancelled", user_lang), reply_markup=get_main_menu(message.from_user.id))
 
 async def process_name(message: types.Message, state: FSMContext):
     """Process name"""
     user_lang = get_user_lang(message.from_user.id)
     if message.text == "❌ Cancel":
         await state.clear()
-        await message.answer(get_text("cancelled", user_lang), reply_markup=main_menu(user_lang))
+        await message.answer(get_text("cancelled", user_lang), reply_markup=get_main_menu(message.from_user.id))
         return
     
     name = sanitize_name(message.text.strip())
@@ -256,7 +268,7 @@ async def process_phone(message: types.Message, state: FSMContext):
     user_lang = get_user_lang(message.from_user.id)
     if message.text == "❌ Cancel":
         await state.clear()
-        await message.answer(get_text("cancelled", user_lang), reply_markup=main_menu(user_lang))
+        await message.answer(get_text("cancelled", user_lang), reply_markup=get_main_menu(message.from_user.id))
         return
     
     if not is_valid_phone(message.text):
@@ -278,7 +290,7 @@ async def process_consultation(message: types.Message, state: FSMContext):
     user_lang = get_user_lang(message.from_user.id)
     if message.text == "❌ Cancel":
         await state.clear()
-        await message.answer(get_text("cancelled", user_lang), reply_markup=main_menu(user_lang))
+        await message.answer(get_text("cancelled", user_lang), reply_markup=get_main_menu(message.from_user.id))
         return
     
     # Save tattoo description
