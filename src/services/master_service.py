@@ -9,6 +9,13 @@ logger = logging.getLogger(__name__)
 class MasterService:
     """Service for managing master data"""
     
+    # Новая структура БД
+    SHEET_NAME = "Мастера"
+    HEADERS = [
+        "ID", "Имя", "Специальность", "Опыт (лет)", "Рейтинг",
+        "Телефон", "Instagram", "Цена за сеанс (руб)", "Статус", "Описание"
+    ]
+    
     def __init__(self, sheets_client: GoogleSheetsClient):
         self.sheets = sheets_client
     

@@ -1,11 +1,11 @@
 from aiogram import Router, F
-from aiogram.types import Message, CallbackQuery
+from aiogram.types import Message, CallbackQuery, ReplyKeyboardMarkup, KeyboardButton
 from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 import logging
 
-from src.bot.keyboards import get_main_menu, get_cancel_keyboard
+from src.bot.keyboards import get_main_menu, get_cancel_keyboard, get_admin_menu
 from src.db.sheets_client import GoogleSheetsClient
 from src.services.client_service import ClientService
 from src.config import get_config
@@ -26,6 +26,24 @@ async def cmd_start(message: Message, state: FSMContext):
     config = get_config()
     sheets = GoogleSheetsClient(config.google_credentials_json, config.google_spreadsheet_id)
     client_service = ClientService(sheets)
+    
+    # Check if user is admin
+    if user_id in config.admin_ids:
+        admin_keyboard = ReplyKeyboardMarkup(
+            keyboard=[
+                [KeyboardButton(text="⚙️ Администратор")],
+                [KeyboardButton(text="👤 Личный кабинет")],
+                [KeyboardButton(text="📞 Контакты")],
+                [KeyboardButton(text="❓ Помощь")]
+            ],
+            resize_keyboard=True,
+            one_time_keyboard=False
+        )
+        await message.answer(
+            f"👋 Привет, администратор {message.from_user.first_name}!",
+            reply_markup=admin_keyboard
+        )
+        return
     
     # Check if user is already registered
     if client_service.client_exists(user_id):

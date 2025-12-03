@@ -6,9 +6,10 @@ venv/
 # Environment
 .env
 
-# Google OAuth tokens
+# Google OAuth tokens & credentials
 src/google/token.json
 src/google/credentials.json
+credentials.json
 
 # IDE
 .idea/

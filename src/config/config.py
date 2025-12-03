@@ -20,6 +20,9 @@ class Config:
     google_spreadsheet_id: str
     google_credentials_json: str
     
+    # OpenAI API
+    openai_api_key: Optional[str] = None
+    
     # Application
     timezone: str = "Europe/Moscow"
     log_level: str = "INFO"
@@ -49,10 +52,13 @@ class Config:
         admin_ids_str = os.getenv("ADMIN_IDS", "")
         admin_ids = [int(id.strip()) for id in admin_ids_str.split(",") if id.strip()]
         
+        openai_key = os.getenv("OPENAI_API_KEY")
+        
         return cls(
             telegram_bot_token=token,
             google_spreadsheet_id=spreadsheet_id,
             google_credentials_json=creds_json,
+            openai_api_key=openai_key,
             timezone=os.getenv("TIMEZONE", "Europe/Moscow"),
             log_level=os.getenv("LOG_LEVEL", "INFO"),
             admin_ids=admin_ids

@@ -2,7 +2,7 @@ import logging
 from typing import List, Dict, Any, Optional
 from google.oauth2.service_account import Credentials
 from google.auth.transport.requests import Request
-from google.api_discovery import build
+from googleapiclient.discovery import build
 from pathlib import Path
 
 logger = logging.getLogger(__name__)

@@ -4,7 +4,6 @@ Telegram Bot для Тату-Салона
 Запуск бота (совместимо с aiogram 2.15)
 """
 
-import asyncio
 import logging
 import os
 from pathlib import Path
@@ -20,7 +19,7 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-async def main():
+def main():
     """Main bot function"""
     try:
         from aiogram import Bot, Dispatcher, types, executor
@@ -88,17 +87,19 @@ async def main():
             )
         
         # Установка команд
-        await bot.set_my_commands([
+        import asyncio
+        loop = asyncio.get_event_loop()
+        loop.run_until_complete(bot.set_my_commands([
             types.BotCommand("start", "Главное меню"),
             types.BotCommand("help", "Справка"),
             types.BotCommand("about", "О боте"),
-        ])
+        ]))
         
         print("🚀 Бот запущен успешно!")
         print("📌 Нажмите Ctrl+C для остановки\n")
         
-        # Запуск бота через executor
-        await executor.start_polling(dp, skip_updates=True)
+        # Запуск бота
+        executor.start_polling(dp, skip_updates=True)
         
     except ModuleNotFoundError as e:
         print(f"❌ Ошибка: Не найден модуль {e}")
@@ -109,10 +110,6 @@ async def main():
 
 if __name__ == '__main__':
     try:
-        # Для Windows используем ProactorEventLoop
-        if hasattr(asyncio, 'WindowsSelectorEventLoopPolicy'):
-            asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
-        
-        asyncio.run(main())
+        main()
     except KeyboardInterrupt:
         print("\n\n👋 Бот остановлен")

@@ -20,6 +20,7 @@ from src.config.logging_config import setup_logging
 from src.config import get_config, Config, set_config
 from src.bot.loader import init_bot, get_dispatcher
 from src.bot.handlers import start_handler, client_handler, master_handler, admin_handler
+from src.bot.handlers import admin_panel
 
 logger = logging.getLogger(__name__)
 
@@ -254,6 +255,7 @@ class BotSetup:
             main_router.include_router(client_handler.router)
             main_router.include_router(master_handler.router)
             main_router.include_router(admin_handler.router)
+            main_router.include_router(admin_panel.router)
             
             dp.include_router(main_router)
             logger.info("Handlers зарегистрированы")
