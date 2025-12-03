@@ -1,0 +1,7 @@
+DATE_FORMAT = "%Y-%m-%d"
+TIME_FORMAT = "%H:%M"
+DATETIME_FORMAT = f"{DATE_FORMAT} {TIME_FORMAT}"
+SHEET_CLIENTS = "clients"
+SHEET_MASTERS = "masters"
+SHEET_CALENDAR = "calendar"
+SHEET_BOOKINGS = "bookings"

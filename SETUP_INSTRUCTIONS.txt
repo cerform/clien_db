@@ -1,0 +1,145 @@
+╔════════════════════════════════════════════════════════════════════════════╗
+║              🎨 BOT SETUP - WHAT TO DO RIGHT NOW                           ║
+║                                                                            ║
+║              ⚠️  YOUR BOT NEEDS 3 THINGS TO WORK                           ║
+╚════════════════════════════════════════════════════════════════════════════╝
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+🔴 STEP 1: GET TELEGRAM BOT TOKEN (5 minutes)
+
+WHY: Your bot needs a token to authenticate with Telegram
+
+HOW:
+  1. Open Telegram
+  2. Find @BotFather (or search "BotFather")
+  3. Send: /newbot
+  4. Give it a name (e.g., "My Tattoo Bot")
+  5. Give it a username (e.g., "MyTattooBot_bot" - must end with _bot)
+  6. 🎉 You'll get a TOKEN that looks like:
+     
+     ✅ 1234567890:ABCdefGHIjklmnoPQRstuvWXYZabcdef1234
+
+WHAT TO DO WITH IT:
+  • Open: .env (in your project root)
+  • Find: BOT_TOKEN=YOUR_BOT_TOKEN_HERE
+  • Replace with: BOT_TOKEN=1234567890:ABCdefGHIjklmnoPQRstuvWXYZabcdef1234
+  • Save the file
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+🟠 STEP 2: GET GOOGLE CREDENTIALS (15 minutes)
+
+WHY: Your bot needs to read/write from Google Sheets and Calendar
+
+HOW:
+  1. Go: https://console.cloud.google.com/
+  2. Create new Project: Click dropdown at top → "New Project"
+     - Name: "TattooStudioBot"
+     - Create
+  
+  3. Enable APIs:
+     a) In search bar, type "Sheets API" → Enable
+     b) In search bar, type "Calendar API" → Enable
+  
+  4. Create OAuth credentials:
+     a) Go to "Credentials" in left menu
+     b) Click "+ Create Credentials" → "OAuth Client ID"
+     c) Choose: "Desktop app"
+     d) Click "Create"
+     e) Click "Download" (JSON file)
+     f) Rename to: credentials.json
+     g) Move to: Your project root directory
+  
+  5. ✅ You now have: credentials.json
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+🟢 STEP 3: CREATE DATABASE & GET SPREADSHEET ID (5 minutes)
+
+WHY: Your bot stores data in a Google Spreadsheet
+
+HOW:
+  1. Open Terminal
+  2. Go to project: cd /Users/simanbekov/ttmanager/tattoo_appointment_bot
+  3. Run: python3 create_google_sheets_structure.py
+  
+  WHAT HAPPENS:
+    • A browser window opens → Click "Allow" (give permissions)
+    • Script creates a Google Spreadsheet
+    • Script prints: "Spreadsheet ID: 1ABC2def3GHI..."
+  
+  WHAT TO DO:
+    • Copy the Spreadsheet ID
+    • Open .env
+    • Find: SPREADSHEET_ID=YOUR_SPREADSHEET_ID_HERE
+    • Replace with: SPREADSHEET_ID=1ABC2def3GHI...
+    • Save
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+📋 YOUR .env FILE SHOULD NOW LOOK LIKE:
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+BOT_TOKEN=1234567890:ABCdefGHIjklmnoPQRstuvWXYZabcdef1234
+SPREADSHEET_ID=1FqNAl2Z7Q3x4YaB5c6DeF7gHiJ8kLmNoPqRsT
+ADMIN_USER_IDS=438407739
+DEFAULT_TIMEZONE=Asia/Jerusalem
+ENV=development
+
+(Plus other optional settings at the bottom)
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+✅ READY TO RUN?
+
+Once you have:
+  ✅ BOT_TOKEN in .env
+  ✅ SPREADSHEET_ID in .env
+  ✅ credentials.json in project root
+  ✅ token.json created (from step 3)
+
+Then run:
+  
+  python3 run.py
+
+And test in Telegram:
+  
+  /start
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+❓ WHAT'S YOUR TELEGRAM ID?
+
+ADMIN_USER_IDS needs YOUR Telegram ID. To get it:
+  1. In Telegram, find @userinfobot
+  2. Send: /start
+  3. It shows your ID
+  4. Add to .env: ADMIN_USER_IDS=YOUR_ID
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+🎯 CHECKLIST BEFORE RUNNING
+
+[ ] BOT_TOKEN set in .env (from @BotFather)
+[ ] credentials.json in project root (from Google Cloud)
+[ ] python3 create_google_sheets_structure.py ran successfully
+[ ] SPREADSHEET_ID added to .env (from script output)
+[ ] token.json created (auto-created by script)
+[ ] ADMIN_USER_IDS set in .env (your Telegram ID)
+
+Once all checked → Run: python3 run.py
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+📖 DETAILED GUIDES
+
+For step-by-step Google setup: Read GOOGLE_SETUP.md
+For troubleshooting: Read SETUP.md
+For general questions: Read README.md
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Generated: Dec 3, 2025
+Status: All code ready, waiting for your API keys ✨
