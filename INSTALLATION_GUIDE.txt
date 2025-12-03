@@ -1,0 +1,202 @@
+📋 ИНСТРУКЦИЯ ПО УСТАНОВКЕ И КОНФИГУРАЦИИ
+
+═══════════════════════════════════════════════════════════════════════════════
+
+⚠️  ВАЖНО: Использование Python 3.10 или 3.11 вместо 3.14
+
+Проблема:
+- Python 3.14 не имеет предкомпилированных колес для некоторых пакетов
+- Требуется Rust компилятор, что усложняет установку
+
+РЕШЕНИЕ:
+1. Установите Python 3.10 или 3.11 с https://www.python.org/downloads/
+2. Создайте виртуальное окружение:
+   python -m venv venv
+3. Активируйте окружение:
+   venv\Scripts\activate.bat
+4. Установите зависимости:
+   pip install -r requirements.txt
+
+═══════════════════════════════════════════════════════════════════════════════
+
+📋 СТРУКТУРА ФАЙЛА .env
+
+✅ Файл создан: .env с полными примерами
+
+Основные переменные:
+
+1️⃣  TELEGRAM_BOT_TOKEN
+   - Получить: @BotFather в Telegram
+   - Написать: /newbot
+   - Скопировать токен в .env
+
+2️⃣  ADMIN_IDS
+   - Получить: @userinfobot в Telegram
+   - Вставить свой ID через запятую
+
+3️⃣  GOOGLE_SPREADSHEET_ID
+   - Получить из URL Google Sheets
+   - https://docs.google.com/spreadsheets/d/{ID}/edit
+
+4️⃣  GOOGLE_CREDENTIALS_JSON
+   - Скачать с Google Cloud Console
+   - IAM & Admin → Service Accounts → Create Key (JSON)
+   - Сохранить как credentials.json в корне проекта
+
+5️⃣  GOOGLE_CALENDAR_ID
+   - Получить из Google Calendar настроек
+   - https://myaccount.google.com/calendar → Параметры → ID календаря
+
+═══════════════════════════════════════════════════════════════════════════════
+
+🚀 БЫСТРЫЙ СТАРТ УСТАНОВКИ
+
+Шаг 1: Переустановить Python 3.10/3.11
+   ❌ Удалить Python 3.14
+   ✅ Установить Python 3.10 или 3.11 с python.org
+
+Шаг 2: Активировать виртуальное окружение
+   venv\Scripts\activate.bat
+
+Шаг 3: Установить зависимости
+   pip install -r requirements.txt
+
+Шаг 4: Проверить успешную установку
+   python -c "import aiogram; print('✅ aiogram установлен')"
+
+Шаг 5: Отредактировать .env
+   - Вставить TELEGRAM_BOT_TOKEN
+   - Вставить GOOGLE_SPREADSHEET_ID
+   - Вставить GOOGLE_CREDENTIALS_JSON
+   - Вставить ADMIN_IDS
+
+Шаг 6: Инициализировать БД
+   python init_db.py
+
+Шаг 7: Запустить бота
+   python src/main.py
+
+═══════════════════════════════════════════════════════════════════════════════
+
+📝 СОДЕРЖИМОЕ .env ФАЙЛА
+
+### TELEGRAM
+TELEGRAM_BOT_TOKEN=<получить у @BotFather>
+ADMIN_IDS=<ID из @userinfobot>
+
+### GOOGLE API
+GOOGLE_SPREADSHEET_ID=<из URL Google Sheets>
+GOOGLE_CREDENTIALS_JSON=credentials.json
+GOOGLE_CALENDAR_ID=<из Google Calendar параметров>
+
+### ПРИЛОЖЕНИЕ
+TIMEZONE=Europe/Moscow
+LOG_LEVEL=INFO
+SALON_NAME=Tattoo Salon
+SALON_ADDRESS=ул. Примерная, д. 42
+SALON_PHONE=+7 (999) 123-45-67
+SALON_EMAIL=info@tattoo-salon.ru
+
+### ВРЕМЯ РАБОТЫ
+SALON_OPEN_TIME=10:00
+SALON_CLOSE_TIME=22:00
+DAYS_OFF=6
+
+### ЛИСТЫ GOOGLE SHEETS
+SHEET_NAME_CLIENTS=clients
+SHEET_NAME_MASTERS=masters
+SHEET_NAME_BOOKINGS=bookings
+SHEET_NAME_CALENDAR=calendar
+
+### ОПЦИИ
+MIN_BOOKING_TIME_MINUTES=60
+DEFAULT_SERVICE_DURATION=60
+DEBUG=false
+TEST_MODE=false
+
+═══════════════════════════════════════════════════════════════════════════════
+
+🔧 УСТАНОВКА GOOGLE CREDENTIALS
+
+1. Перейди на: https://console.cloud.google.com
+
+2. Создай новый проект:
+   - Нажми на выпадающее меню проектов сверху
+   - Нажми "NEW PROJECT"
+   - Назови "Tattoo Bot"
+
+3. Включи API:
+   - В левой панели: "APIs & Services" → "Library"
+   - Ищи "Google Sheets API" → Enable
+   - Ищи "Google Calendar API" → Enable
+
+4. Создай Service Account:
+   - Left panel: "APIs & Services" → "Credentials"
+   - Нажми "Create Credentials" → "Service Account"
+   - Заполни форму
+   - Нажми "Create and Continue"
+
+5. Создай ключ:
+   - В Service Accounts, найди свой аккаунт
+   - Перейди на вкладку "Keys"
+   - Нажми "Add Key" → "Create new key"
+   - Выбери "JSON"
+   - Скачается файл credentials.json
+
+6. Положи файл в проект:
+   c:\Users\imse\OneDrive\Documents\Project\client_db\clien_db\credentials.json
+
+═════════════════════════════════════════════════════════════════════════════════
+
+📊 СОЗДАНИЕ GOOGLE SHEETS
+
+1. Откройте https://sheets.google.com
+
+2. Создайте новую таблицу
+
+3. Скопируйте ID из URL:
+   https://docs.google.com/spreadsheets/d/{ID}/edit
+
+4. Раздайте доступ Service Account:
+   - Откройте credentials.json
+   - Найдите "client_email"
+   - Поделитесь ссылкой на таблицу с этим email
+
+5. Создайте листы:
+   - clients
+   - masters
+   - bookings
+   - calendar
+
+═══════════════════════════════════════════════════════════════════════════════
+
+✅ ПРОВЕРКА УСТАНОВКИ
+
+После установки проверьте:
+
+python -c "import aiogram; print('✅ aiogram OK')"
+python -c "import google.sheets; print('✅ Google Sheets OK')"
+python -c "from dotenv import load_dotenv; print('✅ python-dotenv OK')"
+python -c "import pytz; print('✅ pytz OK')"
+
+Если все работает - ✅ Готово!
+
+═══════════════════════════════════════════════════════════════════════════════
+
+❓ ПРОБЛЕМЫ?
+
+Если pip install не работает из-за Rust:
+- Используйте Python 3.10 или 3.11 вместо 3.14
+- Или установите Visual Studio C++ Build Tools
+
+Если Google API не работает:
+- Проверьте, что credentials.json в проекте
+- Проверьте, что API включены в Google Cloud Console
+- Проверьте, что Service Account имеет доступ к таблице
+
+Если бот не запускается:
+- Проверьте .env файл
+- Убедитесь в правильности всех ключей
+- Смотрите логи в logs/bot.log
+
+═══════════════════════════════════════════════════════════════════════════════
