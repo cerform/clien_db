@@ -99,7 +99,9 @@ async def show_admin_menu(message: types.Message):
 
 async def cmd_back_menu(message: types.Message):
     """Go back to main menu"""
-    await message.answer("🏠 Main Menu", reply_markup=main_menu())
+    from src.utils.i18n import i18n
+    user_lang = i18n.get_user_language(message.from_user.id) or "ru"
+    await message.answer("🏠 Main Menu", reply_markup=main_menu(user_lang))
 
 async def cmd_view_clients(message: types.Message):
     """View all clients"""
