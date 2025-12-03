@@ -16,6 +16,10 @@ import logging
 
 logger = logging.getLogger(__name__)
 
+def get_user_lang(user_id: int) -> str:
+    """Helper to get user language with fallback to Russian"""
+    return i18n.get_user_language(user_id) or "ru"
+
 class AddMasterStates(StatesGroup):
     waiting_for_name = State()
     waiting_for_calendar_id = State()
@@ -53,6 +57,9 @@ def setup(dp: Dispatcher):
 
 async def cmd_admin(message: types.Message):
     """Admin dashboard"""
+    from src.utils.i18n import i18n
+    user_lang = i18n.get_user_language(message.from_user.id) or "ru"
+    
     load_env()
     cfg = Config.from_env()
     if message.from_user.id not in cfg.ADMIN_USER_IDS:
@@ -69,13 +76,16 @@ async def cmd_admin(message: types.Message):
 👥 Clients: {len(clients)}
 👨‍🎨 Masters: {len(masters)}
 📅 Bookings: {len(bookings)}"""
-        await message.answer(msg, reply_markup=admin_menu())
+        await message.answer(msg, reply_markup=admin_menu(user_lang))
     except Exception as e:
         await message.answer(f"❌ Error: {str(e)[:100]}")
         logger.exception("Admin error")
 
 async def show_admin_menu(message: types.Message):
     """Show admin menu"""
+    from src.utils.i18n import i18n
+    user_lang = i18n.get_user_language(message.from_user.id) or "ru"
+    
     load_env()
     cfg = Config.from_env()
     if message.from_user.id not in cfg.ADMIN_USER_IDS:
@@ -92,7 +102,7 @@ async def show_admin_menu(message: types.Message):
 👥 Clients: {len(clients)}
 👨‍🎨 Masters: {len(masters)}
 📅 Bookings: {len(bookings)}"""
-        await message.answer(msg, reply_markup=admin_menu())
+        await message.answer(msg, reply_markup=admin_menu(user_lang))
     except Exception as e:
         await message.answer(f"❌ Error: {str(e)[:100]}")
         logger.exception("Admin error")
@@ -116,16 +126,16 @@ async def cmd_view_clients(message: types.Message):
         clients = admin.list_clients()
         
         if not clients:
-            await message.answer("👥 No clients yet", reply_markup=admin_menu())
+            await message.answer("👥 No clients yet", reply_markup=admin_menu(get_user_lang(message.from_user.id)))
             return
         
         msg = "👥 Clients:\n\n"
         for c in clients[:20]:  # Show first 20
             msg += f"• {c.get('name')} - {c.get('phone', 'N/A')}\n"
         
-        await message.answer(msg, reply_markup=admin_menu())
+        await message.answer(msg, reply_markup=admin_menu(get_user_lang(message.from_user.id)))
     except Exception as e:
-        await message.answer(f"❌ Error: {str(e)[:100]}", reply_markup=admin_menu())
+        await message.answer(f"❌ Error: {str(e)[:100]}", reply_markup=admin_menu(get_user_lang(message.from_user.id)))
 
 async def cmd_view_bookings(message: types.Message):
     """View all bookings"""
@@ -140,7 +150,7 @@ async def cmd_view_bookings(message: types.Message):
         bookings = admin.list_bookings()
         
         if not bookings:
-            await message.answer("📋 No bookings yet", reply_markup=admin_menu())
+            await message.answer("📋 No bookings yet", reply_markup=admin_menu(get_user_lang(message.from_user.id)))
             return
         
         msg = "📋 Recent Bookings:\n\n"
@@ -148,9 +158,9 @@ async def cmd_view_bookings(message: types.Message):
             status = "✅" if b.get("status") == "confirmed" else "⏳"
             msg += f"{status} {b.get('date')} {b.get('slot_start')}\n"
         
-        await message.answer(msg, reply_markup=admin_menu())
+        await message.answer(msg, reply_markup=admin_menu(get_user_lang(message.from_user.id)))
     except Exception as e:
-        await message.answer(f"❌ Error: {str(e)[:100]}", reply_markup=admin_menu())
+        await message.answer(f"❌ Error: {str(e)[:100]}", reply_markup=admin_menu(get_user_lang(message.from_user.id)))
 
 async def cmd_add_master(message: types.Message, state: FSMContext):
     """Start adding new master"""
@@ -167,7 +177,7 @@ async def process_master_name(message: types.Message, state: FSMContext):
     """Process master name input"""
     if message.text == "❌ Cancel":
         await state.clear()
-        await message.answer("❌ Cancelled", reply_markup=admin_menu())
+        await message.answer("❌ Cancelled", reply_markup=admin_menu(get_user_lang(message.from_user.id)))
         return
     
     await state.update_data(name=message.text)
@@ -178,7 +188,7 @@ async def process_calendar_id(message: types.Message, state: FSMContext):
     """Process calendar ID input"""
     if message.text == "❌ Cancel":
         await state.clear()
-        await message.answer("❌ Cancelled", reply_markup=admin_menu())
+        await message.answer("❌ Cancelled", reply_markup=admin_menu(get_user_lang(message.from_user.id)))
         return
     
     await state.update_data(calendar_id=message.text)
@@ -192,7 +202,7 @@ async def process_specialties(message: types.Message, state: FSMContext):
     
     if message.text == "❌ Cancel":
         await state.clear()
-        await message.answer("❌ Cancelled", reply_markup=admin_menu())
+        await message.answer("❌ Cancelled", reply_markup=admin_menu(get_user_lang(message.from_user.id)))
         return
     
     if message.from_user.id not in cfg.ADMIN_USER_IDS:
@@ -213,10 +223,10 @@ async def process_specialties(message: types.Message, state: FSMContext):
             specialties=data.get("specialties", "")
         )
         
-        await message.answer(f"✅ Master added: {result.get('name')}", reply_markup=admin_menu())
+        await message.answer(f"✅ Master added: {result.get('name')}", reply_markup=admin_menu(get_user_lang(message.from_user.id)))
         await state.clear()
     except Exception as e:
-        await message.answer(f"❌ Error: {str(e)[:100]}", reply_markup=admin_menu())
+        await message.answer(f"❌ Error: {str(e)[:100]}", reply_markup=admin_menu(get_user_lang(message.from_user.id)))
         logger.exception("Add master error")
         await state.clear()
 
@@ -234,7 +244,7 @@ async def cmd_add_slot(message: types.Message, state: FSMContext):
         masters = admin.list_masters()
         
         if not masters:
-            await message.answer("❌ No masters found. Add masters first!", reply_markup=admin_menu())
+            await message.answer("❌ No masters found. Add masters first!", reply_markup=admin_menu(get_user_lang(message.from_user.id)))
             return
         
         # Show available masters
@@ -242,14 +252,14 @@ async def cmd_add_slot(message: types.Message, state: FSMContext):
         await state.set_state(AddSlotStates.waiting_for_date)
         await message.answer(f"{master_list}\n\n📅 Enter date (YYYY-MM-DD):", reply_markup=cancel_kb())
     except Exception as e:
-        await message.answer(f"❌ Error: {str(e)[:100]}", reply_markup=admin_menu())
+        await message.answer(f"❌ Error: {str(e)[:100]}", reply_markup=admin_menu(get_user_lang(message.from_user.id)))
         logger.exception("Add slot error")
 
 async def process_slot_date(message: types.Message, state: FSMContext):
     """Process slot date"""
     if message.text == "❌ Cancel":
         await state.clear()
-        await message.answer("❌ Cancelled", reply_markup=admin_menu())
+        await message.answer("❌ Cancelled", reply_markup=admin_menu(get_user_lang(message.from_user.id)))
         return
     
     await state.update_data(date=message.text)
@@ -260,7 +270,7 @@ async def process_slot_master(message: types.Message, state: FSMContext):
     """Process master ID"""
     if message.text == "❌ Cancel":
         await state.clear()
-        await message.answer("❌ Cancelled", reply_markup=admin_menu())
+        await message.answer("❌ Cancelled", reply_markup=admin_menu(get_user_lang(message.from_user.id)))
         return
     
     await state.update_data(master_id=message.text)
@@ -271,7 +281,7 @@ async def process_slot_start(message: types.Message, state: FSMContext):
     """Process start time"""
     if message.text == "❌ Cancel":
         await state.clear()
-        await message.answer("❌ Cancelled", reply_markup=admin_menu())
+        await message.answer("❌ Cancelled", reply_markup=admin_menu(get_user_lang(message.from_user.id)))
         return
     
     await state.update_data(start_time=message.text)
@@ -285,7 +295,7 @@ async def process_slot_end(message: types.Message, state: FSMContext):
     
     if message.text == "❌ Cancel":
         await state.clear()
-        await message.answer("❌ Cancelled", reply_markup=admin_menu())
+        await message.answer("❌ Cancelled", reply_markup=admin_menu(get_user_lang(message.from_user.id)))
         return
     
     if message.from_user.id not in cfg.ADMIN_USER_IDS:
@@ -309,10 +319,10 @@ async def process_slot_end(message: types.Message, state: FSMContext):
             available="yes"
         )
         
-        await message.answer(f"✅ Slot added!\n📅 {data.get('date')}\n⏰ {data.get('start_time')}-{data.get('end_time')}", reply_markup=admin_menu())
+        await message.answer(f"✅ Slot added!\n📅 {data.get('date')}\n⏰ {data.get('start_time')}-{data.get('end_time')}", reply_markup=admin_menu(get_user_lang(message.from_user.id)))
         await state.clear()
     except Exception as e:
-        await message.answer(f"❌ Error: {str(e)[:100]}", reply_markup=admin_menu())
+        await message.answer(f"❌ Error: {str(e)[:100]}", reply_markup=admin_menu(get_user_lang(message.from_user.id)))
         logger.exception("Add slot error")
         await state.clear()
 
@@ -361,10 +371,10 @@ async def cmd_sync(message: types.Message):
 
 Slots generated for next 30 days (9 AM - 6 PM)"""
         
-        await message.answer(msg, reply_markup=admin_menu())
+        await message.answer(msg, reply_markup=admin_menu(get_user_lang(message.from_user.id)))
         
     except Exception as e:
-        await message.answer(f"❌ Error: {str(e)[:100]}", reply_markup=admin_menu())
+        await message.answer(f"❌ Error: {str(e)[:100]}", reply_markup=admin_menu(get_user_lang(message.from_user.id)))
         logger.exception("Sync error")
 
 # Admin Chat Handlers
@@ -414,7 +424,7 @@ async def process_admin_message(message: types.Message, state: FSMContext):
     # Handle exit commands
     if message.text in ["/exit", "❌ Cancel"]:
         await state.clear()
-        await message.answer("👋 Chat ended. Saving all information.", reply_markup=admin_menu())
+        await message.answer("👋 Chat ended. Saving all information.", reply_markup=admin_menu(get_user_lang(message.from_user.id)))
         return
     
     try:
@@ -489,8 +499,8 @@ async def cmd_chat_stats(message: types.Message):
             f"• Schedule"
         )
 
-        await message.answer(stats_text, parse_mode="Markdown", reply_markup=admin_menu())
+        await message.answer(stats_text, parse_mode="Markdown", reply_markup=admin_menu(get_user_lang(message.from_user.id)))
 
     except Exception as e:
-        await message.answer(f"❌ Error: {str(e)}", reply_markup=admin_menu())
+        await message.answer(f"❌ Error: {str(e)}", reply_markup=admin_menu(get_user_lang(message.from_user.id)))
         logger.exception("Chat stats error")

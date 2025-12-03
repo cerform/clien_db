@@ -124,6 +124,8 @@ class ClientStates(StatesGroup):
 def setup(dp: Dispatcher):
     """Register all client handlers"""
     dp.message.register(cmd_start, Command(commands=["start"]))
+    # Admin button - all languages (must be before other handlers)
+    dp.message.register(cmd_show_admin, F.text.in_(["👨‍💼 Admin", "👨‍💼 Админ", "👨‍💼 מנהל"]))
     # Book appointment - all languages
     dp.message.register(cmd_book, F.text.in_(["📅 Book Appointment", "📅 Забронировать", "📅 הזמן תור"]))
     # My bookings - all languages
@@ -145,6 +147,11 @@ async def cmd_start(message: types.Message, state: FSMContext):
     from src.utils.i18n import i18n, LANG_RU, LANG_EN, LANG_HE
     user_lang = i18n.get_user_language(message.from_user.id)
     
+    # Check if user is admin
+    load_env()
+    cfg = Config.from_env()
+    is_admin = message.from_user.id in cfg.ADMIN_USER_IDS
+    
     # Welcome messages in different languages
     welcome_messages = {
         LANG_RU: "🎨 Добро пожаловать в Tattoo Studio!\n\nЗабронируйте свою идеальную татуировку 🔥",
@@ -154,9 +161,21 @@ async def cmd_start(message: types.Message, state: FSMContext):
     
     await message.answer(
         welcome_messages.get(user_lang, welcome_messages[LANG_RU]),
-        reply_markup=main_menu(user_lang)
+        reply_markup=main_menu(user_lang, is_admin)
     )
     await state.clear()
+
+async def cmd_show_admin(message: types.Message):
+    """Show admin panel - redirect to admin handlers"""
+    load_env()
+    cfg = Config.from_env()
+    if message.from_user.id not in cfg.ADMIN_USER_IDS:
+        await message.answer("❌ Not admin")
+        return
+    
+    # Import here to avoid circular dependency
+    from src.bot.handlers.admin_handlers import cmd_admin
+    await cmd_admin(message)
 
 async def cmd_book(message: types.Message, state: FSMContext):
     """Start booking - ask name"""

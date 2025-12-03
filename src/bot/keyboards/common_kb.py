@@ -10,8 +10,8 @@ def yes_no_kb(language: str = LANG_RU):
         [KeyboardButton(text=yes_text), KeyboardButton(text=no_text)]
     ], resize_keyboard=True)
 
-def main_menu(language: str = LANG_RU):
-    """Main menu keyboard - supports all languages"""
+def main_menu(language: str = LANG_RU, is_admin: bool = False):
+    """Main menu keyboard - supports all languages and admin mode"""
     buttons = {
         LANG_RU: [
             ["📅 Забронировать", "📋 Мои бронирования"],
@@ -27,7 +27,17 @@ def main_menu(language: str = LANG_RU):
         ]
     }
     
-    button_list = buttons.get(language, buttons[LANG_RU])
+    button_list = list(buttons.get(language, buttons[LANG_RU]))
+    
+    # Add admin button if user is admin
+    if is_admin:
+        admin_text = {
+            LANG_RU: "👨‍💼 Админ",
+            LANG_EN: "👨‍💼 Admin",
+            LANG_HE: "👨‍💼 מנהל"
+        }.get(language, "👨‍💼 Admin")
+        button_list.append([admin_text])
+    
     return ReplyKeyboardMarkup(
         keyboard=[[KeyboardButton(text=btn) for btn in row] for row in button_list],
         resize_keyboard=True
@@ -41,21 +51,21 @@ def admin_menu(language: str = LANG_RU):
             ["⏰ Слот", "📅 Синхро"],
             ["👥 Клиенты", "📋 Бронирования"],
             ["💬 Чат", "📊 Статистика"],
-            ["🏠 Главное меню"]
+            ["🏠 Главное меню", "🌐 Язык"]
         ],
         LANG_EN: [
             ["📊 Dashboard", "👨‍🎨 Add Master"],
             ["⏰ Add Slot", "📅 Sync Calendar"],
             ["👥 View Clients", "📋 View Bookings"],
             ["💬 Admin Chat", "📊 Chat Stats"],
-            ["🏠 Main Menu"]
+            ["🏠 Main Menu", "🌐 Language"]
         ],
         LANG_HE: [
             ["📊 לוח בקרה", "👨‍🎨 הוסף אומן"],
             ["⏰ הוסף משבצת", "📅 סנכרן לוח"],
             ["👥 צפה בלקוחות", "📋 צפה בהזמנות"],
             ["💬 צ'אט", "📊 סטטיסטיקה"],
-            ["🏠 תפריט ראשי"]
+            ["🏠 תפריט ראשי", "🌐 שפה"]
         ]
     }
     
