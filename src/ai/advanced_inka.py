@@ -346,6 +346,39 @@ class AdvancedINKA:
                         "required": ["user_id", "master_id", "date", "time", "service"]
                     }
                 }
+            },
+            {
+                "type": "function",
+                "function": {
+                    "name": "create_client",
+                    "description": "Создать или обновить профиль клиента",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "telegram_id": {
+                                "type": "string",
+                                "description": "Telegram ID пользователя"
+                            },
+                            "name": {
+                                "type": "string",
+                                "description": "Имя клиента"
+                            },
+                            "phone": {
+                                "type": "string",
+                                "description": "Номер телефона"
+                            },
+                            "email": {
+                                "type": "string",
+                                "description": "Email (опционально)"
+                            },
+                            "notes": {
+                                "type": "string",
+                                "description": "Заметки о клиенте"
+                            }
+                        },
+                        "required": ["telegram_id", "name"]
+                    }
+                }
             }
         ]
     
@@ -399,51 +432,90 @@ class AdvancedINKA:
     def get_calendar_slots(self, start_date: str, end_date: str, 
                           master_id: Optional[str] = None, 
                           duration_minutes: int = 60) -> Dict:
-        """Получить доступные слоты из календаря"""
+        """Получить доступные слоты из расписания (schedule таблица)"""
         try:
-            if not self.calendar_service:
-                # Фейковые данные если календарь недоступен
-                return self._generate_fake_slots(start_date, end_date, duration_minutes)
+            if not self.sheets_client:
+                return {"error": "Database connection not available"}
             
-            # Реальная интеграция с Google Calendar
-            start_datetime = datetime.strptime(start_date, "%Y-%m-%d")
-            end_datetime = datetime.strptime(end_date, "%Y-%m-%d") + timedelta(days=1)
+            # Парсим даты
+            start_dt = datetime.strptime(start_date, "%Y-%m-%d")
+            end_dt = datetime.strptime(end_date, "%Y-%m-%d")
             
-            # Пытаемся получить calendar_id из БД мастера или используем дефолтный
-            calendar_id = "f5d400333836744e002b77e85a46a76bc79d32df523bd49011d0f785df775a7c@group.calendar.google.com"
+            # Получаем расписание мастера
+            schedule_data = self.get_database_info("schedule")
+            if schedule_data.get("error"):
+                return {"error": f"Cannot get schedule: {schedule_data.get('error')}"}
             
+            schedule_rows = schedule_data.get("data", [])
+            
+            # Фильтруем расписание по мастеру если указан
             if master_id:
-                masters_data = self.get_database_info("Мастера", "id", master_id, limit=1)
-                if masters_data.get("data"):
-                    db_calendar_id = masters_data["data"][0].get("calendar_id")
-                    if db_calendar_id:
-                        calendar_id = db_calendar_id
+                schedule_rows = [s for s in schedule_rows if s.get("master_id") == master_id]
             
-            # Получаем занятые слоты
-            events_result = self.calendar_service.events().list(
-                calendarId=calendar_id,
-                timeMin=start_datetime.isoformat() + 'Z',
-                timeMax=end_datetime.isoformat() + 'Z',
-                singleEvents=True,
-                orderBy='startTime'
-            ).execute()
+            # Получаем бронирования из таблицы
+            bookings_data = self.get_database_info("bookings")
+            bookings = bookings_data.get("data", [])
             
-            events = events_result.get('items', [])
+            # Генерируем слоты на основе расписания
+            free_slots = []
+            current = start_dt
             
-            # Генерируем свободные слоты
-            free_slots = self._calculate_free_slots(
-                start_datetime, end_datetime, events, duration_minutes
-            )
+            while current <= end_dt:
+                day_of_week = current.strftime("%A").lower()
+                
+                # Находим расписание для этого дня
+                day_schedule = [s for s in schedule_rows if s.get("day_of_week") == day_of_week]
+                
+                for schedule in day_schedule:
+                    if schedule.get("is_working") != "true":
+                        continue
+                    
+                    start_time = schedule.get("start_time", "10:00")
+                    end_time = schedule.get("end_time", "18:00")
+                    
+                    # Генерируем слоты по 60 минут (или указанной длительности)
+                    slot_start_h, slot_start_m = map(int, start_time.split(":"))
+                    end_h, end_m = map(int, end_time.split(":"))
+                    
+                    current_slot = current.replace(hour=slot_start_h, minute=slot_start_m)
+                    end_slot_time = current.replace(hour=end_h, minute=end_m)
+                    
+                    while current_slot + timedelta(minutes=duration_minutes) <= end_slot_time:
+                        slot_end = current_slot + timedelta(minutes=duration_minutes)
+                        
+                        # Проверяем не забронирован ли этот слот
+                        is_booked = False
+                        for booking in bookings:
+                            if (booking.get("master_id") == schedule.get("master_id") and
+                                booking.get("date") == current.strftime("%Y-%m-%d")):
+                                # Простая проверка пересечения времени
+                                booking_start = booking.get("date", "") + " " + booking.get("time", "")
+                                if booking_start.split(" ")[0] == current.strftime("%Y-%m-%d"):
+                                    is_booked = True
+                                    break
+                        
+                        if not is_booked:
+                            free_slots.append({
+                                "date": current.strftime("%Y-%m-%d"),
+                                "time": current_slot.strftime("%H:%M"),
+                                "end_time": slot_end.strftime("%H:%M"),
+                                "master_id": schedule.get("master_id"),
+                                "duration_minutes": duration_minutes
+                            })
+                        
+                        current_slot += timedelta(minutes=60)
+                
+                current += timedelta(days=1)
             
             return {
-                "slots": free_slots,
+                "slots": free_slots[:20],  # Ограничиваем 20 слотами
                 "count": len(free_slots),
                 "master_id": master_id,
                 "duration_minutes": duration_minutes
             }
         
         except Exception as e:
-            logger.error(f"Calendar query error: {e}")
+            logger.error(f"Calendar query error: {e}", exc_info=True)
             return {"error": str(e)}
     
     def search_web(self, query: str, max_results: int = 3) -> Dict:
@@ -475,6 +547,69 @@ class AdvancedINKA:
             logger.error(f"Web search error: {e}")
             return {"error": str(e)}
     
+    def create_client(self, telegram_id: str, name: str, phone: str = "", 
+                     email: str = "", notes: str = "") -> Dict:
+        """Создать или обновить клиента в БД"""
+        try:
+            if not self.sheets_client:
+                return {"error": "Database connection not available"}
+            
+            # Получаем существующих клиентов
+            clients_data = self.get_database_info("clients", "telegram_id", str(telegram_id))
+            
+            # Если клиент уже существует, обновляем его
+            if clients_data.get("data") and len(clients_data["data"]) > 0:
+                existing_client = clients_data["data"][0]
+                logger.info(f"Client already exists: {existing_client}")
+                return {
+                    "success": True,
+                    "message": f"✅ Профиль найден: {name}",
+                    "client": existing_client,
+                    "is_new": False
+                }
+            
+            # Создаём нового клиента
+            import uuid
+            client_id = str(uuid.uuid4())
+            created_at = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            
+            # Подготавливаем строку для добавления
+            client_row = [
+                client_id,           # id
+                str(telegram_id),    # telegram_id
+                name,                # name
+                phone,               # phone
+                email,               # email
+                notes,               # notes
+                created_at,          # created_at
+                ""                   # last_visit
+            ]
+            
+            # Добавляем в таблицу
+            success = self.sheets_client.append_row("clients", client_row)
+            
+            if success:
+                logger.info(f"Client created: {client_id}, name={name}, phone={phone}")
+                return {
+                    "success": True,
+                    "message": f"✅ Создан профиль: {name}",
+                    "client": {
+                        "id": client_id,
+                        "telegram_id": str(telegram_id),
+                        "name": name,
+                        "phone": phone,
+                        "email": email,
+                        "notes": notes
+                    },
+                    "is_new": True
+                }
+            else:
+                return {"error": "Failed to create client in database"}
+        
+        except Exception as e:
+            logger.error(f"Client creation error: {e}", exc_info=True)
+            return {"error": str(e)}
+    
     def create_booking(self, user_id: str, master_id: str, date: str, 
                       time: str, service: str, notes: str = "") -> Dict:
         """Создать запись в БД"""
@@ -482,104 +617,72 @@ class AdvancedINKA:
             if not self.sheets_client:
                 return {"error": "Database connection not available"}
             
-            # Формируем данные для записи в таблицу bookings
+            # Сначала получаем или создаём клиента
+            clients_data = self.get_database_info("clients", "telegram_id", str(user_id))
+            
+            if not clients_data.get("data") or len(clients_data["data"]) == 0:
+                # Создаём нового клиента с базовой инфой
+                client_result = self.create_client(str(user_id), "Client", "", "", notes)
+                if client_result.get("error"):
+                    return client_result
+                client_id = client_result["client"]["id"]
+            else:
+                client_id = clients_data["data"][0]["id"]
+            
+            # Получаем информацию о мастере
+            masters_data = self.get_database_info("masters", "id", master_id, limit=1)
+            if not masters_data.get("data"):
+                return {"error": f"Master {master_id} not found"}
+            
+            master_name = masters_data["data"][0].get("name", f"Master {master_id}")
+            
+            # Создаём бронирование
+            import uuid
+            booking_id = str(uuid.uuid4())
+            created_at = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            
+            # Подготавливаем строку для добавления
             # Колонки: id, client_id, master_id, service_id, date, time, duration_min, price, status, notes, created_at
-            
-            # Получаем следующий ID
-            bookings_data = self.sheets_client.get_all_rows("bookings")
-            next_id = str(len(bookings_data)) if bookings_data else "1"
-            
             booking_row = [
-                next_id,                                    # id
-                user_id,                                    # client_id
-                master_id,                                  # master_id
-                service,                                    # service_id (используем название услуги)
-                date,                                       # date
-                time,                                       # time
-                "60",                                       # duration_min
-                "",                                         # price (оставляем пусто, сможет заполнить)
-                "confirmed",                                # status
-                notes,                                      # notes
-                datetime.now().strftime("%Y-%m-%d %H:%M:%S") # created_at
+                booking_id,          # id
+                client_id,           # client_id
+                master_id,           # master_id
+                service,             # service_id
+                date,                # date
+                time,                # time
+                "60",                # duration_min
+                "",                  # price (оставляем пусто)
+                "confirmed",         # status
+                notes,               # notes
+                created_at           # created_at
             ]
             
-            # Добавляем запись
-            self.sheets_client.append_row("bookings", booking_row)
+            # Добавляем запись в таблицу
+            success = self.sheets_client.append_row("bookings", booking_row)
             
-            logger.info(f"Booking created: user_id={user_id}, master_id={master_id}, date={date}, time={time}")
-            
-            return {
-                "success": True,
-                "message": f"✅ Запись создана! Дата: {date}, Время: {time}",
-                "booking_id": next_id,
-                "booking": {
-                    "user_id": user_id,
-                    "master_id": master_id,
-                    "date": date,
-                    "time": time,
-                    "service": service,
-                    "status": "confirmed"
+            if success:
+                logger.info(f"Booking created: {booking_id}, client={client_id}, master={master_id}, date={date}, time={time}")
+                return {
+                    "success": True,
+                    "message": f"✅ Запись создана!\n📅 {date}\n🕐 {time}\n🎨 {master_name}",
+                    "booking_id": booking_id,
+                    "booking": {
+                        "id": booking_id,
+                        "client_id": client_id,
+                        "master_id": master_id,
+                        "date": date,
+                        "time": time,
+                        "service": service,
+                        "status": "confirmed"
+                    }
                 }
-            }
+            else:
+                return {"error": "Failed to create booking in database"}
         
         except Exception as e:
             logger.error(f"Booking creation error: {e}", exc_info=True)
-            return {"error": f"Ошибка при создании записи: {str(e)}"}
-    
-    def _generate_fake_slots(self, start_date: str, end_date: str, duration: int) -> Dict:
-        """Генерация фейковых слотов для тестирования"""
-        slots = []
-        current = datetime.strptime(start_date, "%Y-%m-%d")
-        end = datetime.strptime(end_date, "%Y-%m-%d")
-        
-        while current <= end:
-            if current.weekday() < 6:  # Пн-Сб
-                for hour in [10, 12, 14, 16, 18]:
-                    slots.append({
-                        "date": current.strftime("%Y-%m-%d"),
-                        "time": f"{hour:02d}:00",
-                        "duration_minutes": duration,
-                        "available": True
-                    })
-            current += timedelta(days=1)
-        
-        return {"slots": slots[:10], "count": len(slots[:10])}
-    
-    def _calculate_free_slots(self, start_dt: datetime, end_dt: datetime, 
-                             events: List, duration: int) -> List[Dict]:
-        """Вычисление свободных слотов"""
-        # Упрощённая логика - в продакшене нужна более сложная
-        free_slots = []
-        working_hours = [(10, 0), (19, 0)]  # 10:00 - 19:00
-        
-        current = start_dt
-        while current < end_dt:
-            if current.weekday() < 6:
-                for hour in range(working_hours[0][0], working_hours[1][0]):
-                    slot_start = current.replace(hour=hour, minute=0)
-                    slot_end = slot_start + timedelta(minutes=duration)
-                    
-                    # Проверка конфликтов с существующими событиями
-                    is_free = True
-                    for event in events:
-                        event_start = datetime.fromisoformat(event['start'].get('dateTime', '').replace('Z', '+00:00'))
-                        event_end = datetime.fromisoformat(event['end'].get('dateTime', '').replace('Z', '+00:00'))
-                        
-                        if (slot_start < event_end and slot_end > event_start):
-                            is_free = False
-                            break
-                    
-                    if is_free:
-                        free_slots.append({
-                            "date": slot_start.strftime("%Y-%m-%d"),
-                            "time": slot_start.strftime("%H:%M"),
-                            "duration_minutes": duration
-                        })
-            
-            current += timedelta(days=1)
-        
-        return free_slots[:20]  # Ограничиваем 20 слотами
-    
+            return {"error": str(e)}
+
     def handle_function_call(self, function_name: str, arguments: Dict) -> str:
         """Обработка вызова функции"""
         try:
@@ -591,6 +694,8 @@ class AdvancedINKA:
                 result = self.search_web(**arguments)
             elif function_name == "create_booking":
                 result = self.create_booking(**arguments)
+            elif function_name == "create_client":
+                result = self.create_client(**arguments)
             else:
                 result = {"error": f"Unknown function: {function_name}"}
             
