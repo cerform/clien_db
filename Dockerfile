@@ -32,6 +32,16 @@ ENV PATH=/home/botuser/.local/bin:$PATH
 ENV PYTHONUNBUFFERED=1
 ENV PYTHONDONTWRITEBYTECODE=1
 
+# Переменные окружения для Cloud Run (должны быть установлены при развертывании)
+# TELEGRAM_BOT_TOKEN - задается в Cloud Run secrets
+# GOOGLE_SPREADSHEET_ID - задается в Cloud Run secrets
+# GOOGLE_CREDENTIALS_JSON - задается в Cloud Run secrets
+# OPENAI_API_KEY - задается в Cloud Run secrets
+# OPENAI_ASSISTANT_ID - задается в Cloud Run secrets
+ENV ADMIN_IDS="438407739,457343487"
+ENV TIMEZONE="Asia/Jerusalem"
+ENV LOG_LEVEL="INFO"
+
 # Переключение на непривилегированного пользователя
 USER botuser
 
