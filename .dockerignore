@@ -1,0 +1,119 @@
+# Git
+.git/
+.gitignore
+.gitattributes
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info/
+dist/
+build/
+*.egg
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+.hypothesis/
+
+# Virtual Environment
+venv/
+env/
+ENV/
+.venv
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Environment files
+.env
+.env.local
+.env.*.local
+
+# Credentials
+credentials.json
+token.json
+service-account.json
+*.pem
+*.key
+
+# Logs
+*.log
+logs/
+
+# Database
+*.db
+*.sqlite
+*.sqlite3
+
+# Documentation (для уменьшения размера образа)
+*.md
+docs/
+examples/
+
+# Test files
+tests/
+test_*.py
+*_test.py
+pytest.ini
+.coverage
+
+# CI/CD
+.github/
+.gitlab-ci.yml
+.travis.yml
+
+# Backup files
+*.bak
+*.backup
+*.old
+*.orig
+
+# OS
+Thumbs.db
+.DS_Store
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+
+# Scripts для разработки
+setup.sh
+setup.bat
+init_db.bat
+init_db.ps1
+run_bot.bat
+start.bat
+start.ps1
+bootstrap.sh
+
+# Project specific
+ADMIN_CHAT_*.md
+AI_*.md
+BOT_READY.txt
+BUTTON_FIX_REPORT.md
+CHANGELOG_*.md
+CHECKLIST.md
+DEPLOYMENT.md
+FINAL_*.md
+GITHUB_STATUS.md
+GOOGLE_SETUP.md
+INKA_*.md
+PROJECT_STATUS.md
+QUICK_START*.md
+README_*.md
+SETUP*.md
+START_HERE.txt
+TESTING_*.md
+*.txt
+!requirements.txt
+!RUN_BOT_INSTRUCTIONS.txt

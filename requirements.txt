@@ -18,3 +18,7 @@ pydantic>=2.0.0
 
 # Utilities
 pytz>=2023.3
+
+# Production dependencies for Cloud Run
+gunicorn>=21.2.0
+uvicorn[standard]>=0.24.0
