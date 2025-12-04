@@ -22,6 +22,7 @@ class Config:
     
     # OpenAI API
     openai_api_key: Optional[str] = None
+    openai_assistant_id: Optional[str] = None
     
     # Application
     timezone: str = "Europe/Moscow"
@@ -45,20 +46,27 @@ class Config:
         if not spreadsheet_id:
             raise ValueError("GOOGLE_SPREADSHEET_ID not set in .env")
         
+        # В Cloud Run credentials берутся автоматически из сервисного аккаунта
+        # Локально используется файл credentials.json
         creds_json = os.getenv("GOOGLE_CREDENTIALS_JSON", "credentials.json")
-        if not Path(creds_json).exists():
+        
+        # Проверяем файл только если запущено локально (не в Cloud Run)
+        is_cloud_run = os.getenv("K_SERVICE") is not None
+        if not is_cloud_run and not Path(creds_json).exists():
             raise FileNotFoundError(f"Google credentials file not found: {creds_json}")
         
         admin_ids_str = os.getenv("ADMIN_IDS", "")
         admin_ids = [int(id.strip()) for id in admin_ids_str.split(",") if id.strip()]
         
         openai_key = os.getenv("OPENAI_API_KEY")
+        openai_assistant = os.getenv("OPENAI_ASSISTANT_ID", "asst_LBGeLxauJ3nYbauR3pilbifN")
         
         return cls(
             telegram_bot_token=token,
             google_spreadsheet_id=spreadsheet_id,
             google_credentials_json=creds_json,
             openai_api_key=openai_key,
+            openai_assistant_id=openai_assistant,
             timezone=os.getenv("TIMEZONE", "Europe/Moscow"),
             log_level=os.getenv("LOG_LEVEL", "INFO"),
             admin_ids=admin_ids

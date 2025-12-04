@@ -27,6 +27,9 @@ COPY --from=builder --chown=botuser:botuser /root/.local /home/botuser/.local
 # Копирование кода приложения
 COPY --chown=botuser:botuser . .
 
+# Копирование .env файла
+COPY --chown=botuser:botuser .env .env
+
 # Обновление PATH
 ENV PATH=/home/botuser/.local/bin:$PATH
 ENV PYTHONUNBUFFERED=1
@@ -39,8 +42,8 @@ USER botuser
 HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
     CMD python -c "import sys; sys.exit(0)"
 
-# Порт для Cloud Run (хотя бот его не использует, Cloud Run требует)
+# Порт для Cloud Run
 EXPOSE 8080
 
-# Запуск бота
-CMD ["python", "-u", "run_bot.py"]
+# Запуск production бота с полной интеграцией
+CMD ["python", "-u", "run_production.py"]

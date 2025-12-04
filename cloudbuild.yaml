@@ -1,8 +1,9 @@
 steps:
-  # Сборка Docker образа
+  # Сборка Docker образа без кэша
   - name: 'gcr.io/cloud-builders/docker'
     args:
       - 'build'
+      - '--no-cache'
       - '-t'
       - 'gcr.io/$PROJECT_ID/telegram-bot:$COMMIT_SHA'
       - '-t'

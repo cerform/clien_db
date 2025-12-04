@@ -29,7 +29,25 @@ class GoogleSheetsClient:
         self.service = self._build_service()
     
     def _load_credentials(self, credentials_file: str) -> Credentials:
-        """Load credentials from JSON file"""
+        """Load credentials from JSON file or environment"""
+        import os
+        import json
+        from google.oauth2 import service_account
+        
+        # В Cloud Run используем default credentials
+        is_cloud_run = os.getenv("K_SERVICE") is not None
+        
+        if is_cloud_run:
+            # В Cloud Run используем default credentials из сервисного аккаунта
+            try:
+                from google.auth import default
+                credentials, _ = default(scopes=SCOPES)
+                return credentials
+            except Exception as e:
+                logger.error(f"Failed to get default credentials: {e}")
+                raise
+        
+        # Локально загружаем из файла
         if not Path(credentials_file).exists():
             raise FileNotFoundError(f"Credentials file not found: {credentials_file}")
         
@@ -81,6 +99,18 @@ class GoogleSheetsClient:
         except Exception as e:
             logger.error(f"Failed to get sheet values from {sheet_name}: {e}")
             return []
+    
+    def get_all_rows(self, sheet_name: str) -> List[List[Any]]:
+        """
+        Get all rows from a sheet (convenience method)
+        
+        Args:
+            sheet_name: Name of the sheet tab
+        
+        Returns:
+            List of rows with values
+        """
+        return self.get_sheet_values(sheet_name)
     
     def append_row(self, sheet_name: str, values: List[Any]) -> bool:
         """
