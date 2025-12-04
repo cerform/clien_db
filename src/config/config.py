@@ -5,9 +5,11 @@ from typing import List, Optional
 from dataclasses import dataclass
 from dotenv import load_dotenv
 
-# Load environment variables
+# Load environment variables from .env if it exists
 ENV_FILE = Path(__file__).parent.parent.parent / ".env"
-load_dotenv(ENV_FILE)
+if ENV_FILE.exists():
+    load_dotenv(ENV_FILE)
+# Если .env не существует - просто используем переменные окружения (в Cloud Run)
 
 @dataclass
 class Config:
@@ -40,11 +42,11 @@ class Config:
         """Load configuration from environment variables"""
         token = os.getenv("TELEGRAM_BOT_TOKEN")
         if not token:
-            raise ValueError("TELEGRAM_BOT_TOKEN not set in .env")
+            raise ValueError("TELEGRAM_BOT_TOKEN not set")
         
         spreadsheet_id = os.getenv("GOOGLE_SPREADSHEET_ID")
         if not spreadsheet_id:
-            raise ValueError("GOOGLE_SPREADSHEET_ID not set in .env")
+            raise ValueError("GOOGLE_SPREADSHEET_ID not set")
         
         # В Cloud Run credentials берутся автоматически из сервисного аккаунта
         # Локально используется файл credentials.json
