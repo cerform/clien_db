@@ -27,9 +27,6 @@ COPY --from=builder --chown=botuser:botuser /root/.local /home/botuser/.local
 # Копирование кода приложения
 COPY --chown=botuser:botuser . .
 
-# Копирование .env файла
-COPY --chown=botuser:botuser .env .env
-
 # Обновление PATH
 ENV PATH=/home/botuser/.local/bin:$PATH
 ENV PYTHONUNBUFFERED=1
