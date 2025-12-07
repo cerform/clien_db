@@ -839,18 +839,28 @@ class AdvancedINKA:
     def get_calendar_slots(self, start_date: str, end_date: str, 
                           master_id: Optional[str] = None, 
                           duration_minutes: int = 60) -> Dict:
-        """Получить доступные слоты из Google Calendar напрямую"""
+        """Получить доступные слоты из Google Calendar и системы записей"""
         try:
             # Парсим даты
             start_dt = datetime.strptime(start_date, "%Y-%m-%d")
             end_dt = datetime.strptime(end_date, "%Y-%m-%d")
             
-            # Получаем события из Google Calendar
+            # Получаем calendar_id мастера если указан
+            master_calendar_id = None
+            if master_id:
+                masters_data = self.get_database_info("masters")
+                masters = masters_data.get("data", [])
+                master = next((m for m in masters if m.get("id") == master_id), None)
+                if master:
+                    master_calendar_id = master.get("calendar_id")
+                    logger.info(f"📅 Using master calendar: {master_calendar_id}")
+            
+            # Получаем события из Google Calendar мастера
             calendar_events = []
-            if self.calendar_service:
+            if self.calendar_service and master_calendar_id:
                 try:
                     events_result = self.calendar_service.events().list(
-                        calendarId='primary',  # Используем основной календарь
+                        calendarId=master_calendar_id,  # Используем календарь мастера
                         timeMin=f"{start_date}T00:00:00Z",
                         timeMax=f"{end_date}T23:59:59Z",
                         singleEvents=True,
@@ -858,12 +868,25 @@ class AdvancedINKA:
                     ).execute()
                     
                     calendar_events = events_result.get('items', [])
-                    logger.info(f"📅 Retrieved {len(calendar_events)} events from Google Calendar")
+                    logger.info(f"📅 Retrieved {len(calendar_events)} events from master's Google Calendar")
                 except Exception as e:
-                    logger.warning(f"Failed to fetch calendar events (using fallback): {e}")
+                    logger.warning(f"Failed to fetch master calendar events: {e}")
                     calendar_events = []
-            else:
-                logger.warning("Calendar service not available, using fallback mode")
+            
+            # Получаем записи из таблицы Bookings
+            bookings_data = self.get_database_info("bookings")
+            bookings = bookings_data.get("data", [])
+            # Фильтруем записи по мастеру и датам
+            master_bookings = []
+            for b in bookings:
+                if b.get("status") in ["cancelled"]:
+                    continue
+                if master_id and b.get("master_id") != master_id:
+                    continue
+                booking_date = b.get("date", "")
+                if booking_date >= start_date and booking_date <= end_date:
+                    master_bookings.append(b)
+            logger.info(f"📅 Found {len(master_bookings)} bookings for master in date range")
             
             # Получаем расписание мастера из Sheets (для определения рабочих часов)
             schedule_data = self.get_database_info("schedule")
@@ -942,12 +965,24 @@ class AdvancedINKA:
                                 logger.warning(f"Error parsing calendar event: {e}")
                                 continue
                         
+                        # Проверяем пересечение с записями из Bookings
+                        if not is_booked:
+                            slot_date_str = current.strftime("%Y-%m-%d")
+                            slot_time_str = current_slot.strftime("%H:%M")
+                            for booking in master_bookings:
+                                if booking.get("date") == slot_date_str:
+                                    booking_time = booking.get("time", "")[:5]  # Берем HH:MM
+                                    if booking_time == slot_time_str:
+                                        is_booked = True
+                                        logger.debug(f"Slot {slot_time_str} on {slot_date_str} occupied by booking")
+                                        break
+                        
                         if not is_booked:
                             free_slots.append({
                                 "date": current.strftime("%Y-%m-%d"),
                                 "time": current_slot.strftime("%H:%M"),
                                 "end_time": slot_end.strftime("%H:%M"),
-                                "master_id": schedule.get("master_id"),
+                                "master_id": schedule.get("master_id") or master_id,
                                 "duration_minutes": duration_minutes
                             })
                         
@@ -958,9 +993,10 @@ class AdvancedINKA:
             return {
                 "slots": free_slots[:20],  # Ограничиваем 20 слотами
                 "count": len(free_slots),
+                "total_available": len(free_slots),
                 "master_id": master_id,
                 "duration_minutes": duration_minutes,
-                "source": "Google Calendar + Schedule"
+                "source": "Google Calendar + Bookings + Schedule"
             }
         
         except Exception as e:
