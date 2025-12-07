@@ -299,6 +299,42 @@ def get_dashboard_html() -> str:
                 100% { transform: rotate(360deg); }
             }
         </style>
+        <script>
+            // Define functions BEFORE they are used in onclick handlers
+            function goTo(path) {
+                window.location.href = path;
+            }
+            
+            function adminFunction(funcName) {
+                let message = '';
+                switch(funcName) {
+                    case 'edit_master':
+                        message = 'Напиши ИНКЕ в Telegram: "Обнови мастера [ID]: [параметры]"\nПримеры: "Обнови мастера 1: имя Анна, ставка 5000"';
+                        break;
+                    case 'edit_service':
+                        message = 'Напиши ИНКЕ в Telegram: "Измени услугу [ID]: [параметры]"\nПримеры: "Измени услугу 1: цена 3000"';
+                        break;
+                    case 'add_schedule':
+                        message = 'Напиши ИНКЕ в Telegram: "Добавь слот мастеру [ID] на [дату] [время]"\nПримеры: "Добавь выходной на 2025-12-25 с 10:00 до 18:00"';
+                        break;
+                    case 'cancel_booking':
+                        message = 'Напиши ИНКЕ в Telegram: "Отмени запись [ID] - [причина]"\nПримеры: "Отмени запись 42 - клиент отменил"';
+                        break;
+                    case 'export_stats':
+                        message = 'Напиши ИНКЕ в Telegram: "Дай статистику по [тип]"\nТипы: revenue (доход), bookings (записи), masters (мастера), services (услуги)';
+                        break;
+                    case 'broadcast':
+                        message = 'Напиши ИНКЕ в Telegram: "Отправь всем сообщение: [текст]"\nПримеры: "Отправь всем: новое предложение скидка 20%!"';
+                        break;
+                }
+                alert(`👑 Инструмент администратора\n\n${message}\n\nЭто отправляется в ИНКУ через Telegram (только админы!)`);
+            }
+            
+            function logout() {
+                localStorage.removeItem('admin_token');
+                window.location.href = '/login';
+            }
+        </script>
     </head>
     <body>
         <div class="container">
@@ -407,54 +443,17 @@ def get_dashboard_html() -> str:
         </div>
         
         <script>
-            // Load stats
+            // Load stats when page loads
             async function loadStats() {
                 try {
                     const response = await fetch('/api/stats');
                     const data = await response.json();
-                    
                     const statsDiv = document.getElementById('stats');
                     const statsHTML = `<div class="stat-box"><div class="stat-value">${data.clients_count}</div><div class="stat-label">Клиентов</div></div><div class="stat-box"><div class="stat-value">${data.masters_count}</div><div class="stat-label">Мастеров</div></div><div class="stat-box"><div class="stat-value">${data.services_count}</div><div class="stat-label">Услуг</div></div><div class="stat-box"><div class="stat-value">${data.bookings_count}</div><div class="stat-label">Записей</div></div>`;
                     statsDiv.innerHTML = statsHTML;
                 } catch (error) {
                     console.error('Error loading stats:', error);
                 }
-            }
-            
-            function goTo(path) {
-                window.location.href = path;
-            }
-            
-            function adminFunction(funcName) {
-                let message = '';
-                
-                switch(funcName) {
-                    case 'edit_master':
-                        message = 'Напиши ИНКЕ в Telegram: "Обнови мастера [ID]: [параметры]"\nПримеры: "Обнови мастера 1: имя Анна, ставка 5000"';
-                        break;
-                    case 'edit_service':
-                        message = 'Напиши ИНКЕ в Telegram: "Измени услугу [ID]: [параметры]"\nПримеры: "Измени услугу 1: цена 3000"';
-                        break;
-                    case 'add_schedule':
-                        message = 'Напиши ИНКЕ в Telegram: "Добавь слот мастеру [ID] на [дату] [время]"\nПримеры: "Добавь выходной на 2025-12-25 с 10:00 до 18:00"';
-                        break;
-                    case 'cancel_booking':
-                        message = 'Напиши ИНКЕ в Telegram: "Отмени запись [ID] - [причина]"\nПримеры: "Отмени запись 42 - клиент отменил"';
-                        break;
-                    case 'export_stats':
-                        message = 'Напиши ИНКЕ в Telegram: "Дай статистику по [тип]"\nТипы: revenue (доход), bookings (записи), masters (мастера), services (услуги)';
-                        break;
-                    case 'broadcast':
-                        message = 'Напиши ИНКЕ в Telegram: "Отправь всем сообщение: [текст]"\nПримеры: "Отправь всем: новое предложение скидка 20%!"';
-                        break;
-                }
-                
-                alert(`👑 Инструмент администратора\n\n${message}\n\nЭто отправляется в ИНКУ через Telegram (только админы!)`);
-            }
-            
-            function logout() {
-                localStorage.removeItem('admin_token');
-                window.location.href = '/login';
             }
             
             // Load on page load
@@ -581,6 +580,33 @@ def get_login_html() -> str:
                 100% { transform: rotate(360deg); }
             }
         </style>
+        <script>
+            // Define functions before they are used
+            function clearLogs() {
+                document.getElementById('logs').innerHTML = '';
+                document.getElementById('logCount').textContent = '0';
+            }
+            
+            async function testAllEndpoints() {
+                const endpoints = ['/api/stats', '/api/masters', '/api/services', '/api/clients', '/api/bookings'];
+                const logDiv = document.getElementById('logs');
+                const results = [];
+                
+                for (const endpoint of endpoints) {
+                    try {
+                        const response = await fetch(endpoint);
+                        const status = response.status;
+                        results.push({endpoint, status, ok: response.ok});
+                        logDiv.innerHTML += `<div class="log-entry" style="color: ${response.ok ? 'green' : 'red'}">[${new Date().toLocaleTimeString()}] ${endpoint}: ${status}</div>`;
+                    } catch (error) {
+                        results.push({endpoint, status: 'ERROR', ok: false});
+                        logDiv.innerHTML += `<div class="log-entry" style="color: red">[${new Date().toLocaleTimeString()}] ${endpoint}: ERROR - ${error.message}</div>`;
+                    }
+                }
+                
+                document.getElementById('logCount').textContent = results.length;
+            }
+        </script>
     </head>
     <body>
         <div class="login-box">
@@ -869,6 +895,136 @@ def get_console_html() -> str:
                 border-left: 4px solid #d29922;
             }
         </style>
+        <script>
+            // ===== Variables & State =====
+            let logs = [];
+            let eventCount = 0;
+            let errorCount = 0;
+            let apiCount = 0;
+            let logsContainer = null;
+            
+            const endpoints = [
+                {name: 'Stats', url: '/api/stats'},
+                {name: 'Masters', url: '/api/masters'},
+                {name: 'Services', url: '/api/services'},
+                {name: 'Clients', url: '/api/clients'},
+                {name: 'Bookings', url: '/api/bookings'},
+                {name: 'INKA Training', url: '/api/inka-training-stats'}
+            ];
+            
+            // ===== Log Functions =====
+            function addLog(message, type = 'info') {
+                const timestamp = new Date().toLocaleTimeString('ru-RU');
+                const entry = {message, type, timestamp};
+                logs.unshift(entry);
+                eventCount++;
+                if (type === 'error') errorCount++;
+                if (type === 'request') apiCount++;
+                if (logs.length > 100) logs.pop();
+                renderLogs();
+                updateStats();
+            }
+            
+            function renderLogs() {
+                if (logsContainer) {
+                    logsContainer.innerHTML = logs.map(log => `<div class="log-entry ${log.type}"><span class="timestamp">[${log.timestamp}]</span> ${log.message}</div>`).join('');
+                    logsContainer.scrollTop = 0;
+                }
+            }
+            
+            function updateStats() {
+                const totalElem = document.getElementById('total-events');
+                const errorElem = document.getElementById('error-count');
+                const apiElem = document.getElementById('api-count');
+                const lastElem = document.getElementById('last-update');
+                if (totalElem) totalElem.textContent = eventCount;
+                if (errorElem) errorElem.textContent = errorCount;
+                if (apiElem) apiElem.textContent = apiCount;
+                if (lastElem) lastElem.textContent = new Date().toLocaleTimeString('ru-RU');
+            }
+            
+            function clearLogs() {
+                logs = [];
+                eventCount = 0;
+                errorCount = 0;
+                apiCount = 0;
+                renderLogs();
+                updateStats();
+                addLog('✅ Логи очищены', 'success');
+            }
+            
+            async function testEndpoint(endpoint) {
+                try {
+                    const startTime = performance.now();
+                    const response = await fetch(endpoint.url, {signal: AbortSignal.timeout(5000)});
+                    const duration = Math.round(performance.now() - startTime);
+                    const status = response.status;
+                    addLog(`🌐 ${endpoint.name}: ${endpoint.url} → ${status} (${duration}ms)`, 'request');
+                    return {endpoint, status, duration};
+                } catch (error) {
+                    addLog(`❌ ${endpoint.name}: ${error.message}`, 'error');
+                    return {endpoint, status: 'error', duration: '-'};
+                }
+            }
+            
+            async function testAllEndpoints() {
+                addLog('🧪 Начало тестирования...', 'warning');
+                for (const endpoint of endpoints) {
+                    await testEndpoint(endpoint);
+                    await new Promise(r => setTimeout(r, 200));
+                }
+                addLog('✅ Тестирование завершено', 'success');
+            }
+            
+            function renderEndpoints() {
+                const endpointsContainer = document.getElementById('endpoints-container');
+                if (endpointsContainer) {
+                    endpointsContainer.innerHTML = endpoints.map(ep => `<button class="endpoint-btn" onclick="testEndpoint({name: '${ep.name}', url: '${ep.url}'})">${ep.name} → ${ep.url}</button>`).join('');
+                }
+            }
+            
+            function initLogging() {
+                logsContainer = document.getElementById('logs');
+                const originalLog = console.log;
+                const originalError = console.error;
+                const originalWarn = console.warn;
+                
+                console.log = function(...args) {
+                    originalLog(...args);
+                    addLog(`📝 ${args.join(' ')}`, 'info');
+                };
+                
+                console.error = function(...args) {
+                    originalError(...args);
+                    addLog(`❌ ${args.join(' ')}`, 'error');
+                };
+                
+                console.warn = function(...args) {
+                    originalWarn(...args);
+                    addLog(`⚠️ ${args.join(' ')}`, 'warning');
+                };
+                
+                const originalFetch = window.fetch;
+                window.fetch = function(...args) {
+                    const url = args[0];
+                    addLog(`📤 Fetch: ${url}`, 'request');
+                    return originalFetch.apply(this, args).then(response => {
+                        addLog(`📥 Response: ${url} → ${response.status}`, response.status >= 400 ? 'error' : 'success');
+                        return response;
+                    });
+                };
+                
+                renderEndpoints();
+                setTimeout(testAllEndpoints, 1000);
+                setInterval(testAllEndpoints, 30000);
+            }
+        </script>
+        <script>
+            // Initialize dev panel when page loads
+            document.addEventListener('DOMContentLoaded', () => {
+                initLogging();
+            });
+        </script>
     </head>
     <body>
         <div class="container">

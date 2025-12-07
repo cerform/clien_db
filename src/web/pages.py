@@ -119,6 +119,22 @@ async def masters_page():
                 background: #f9f9f9;
             }
         </style>
+        <script>
+            // Define event handlers BEFORE they are called
+            function addMaster() {
+                alert('Функция добавления мастера будет реализована');
+            }
+            
+            function editMaster(id) {
+                alert('Функция редактирования мастера будет реализована');
+            }
+            
+            function deleteMaster(id) {
+                if (confirm('Вы уверены?')) {
+                    alert('Функция удаления мастера будет реализована');
+                }
+            }
+        </script>
     </head>
     <body>
         <div class="container">
@@ -154,18 +170,14 @@ async def masters_page():
                 try {
                     const response = await fetch('/api/masters');
                     const masters = await response.json();
-                    
                     const tbody = document.getElementById('mastersList');
                     if (masters.length === 0) {
                         tbody.innerHTML = '<tr><td colspan="5" style="text-align:center">Нет мастеров</td></tr>';
                         return;
                     }
-                    
                     tbody.innerHTML = masters.map(m => {
                         return `<tr><td>${m.id || '-'}</td><td>${m.name || '-'}</td><td>${m.specialization || '-'}</td><td>${m.phone || '-'}</td><td><button class="btn-edit" data-id="${m.id}" style="margin-right:5px">✏️ Редактировать</button><button class="btn-delete" data-id="${m.id}" style="background:#e74c3c">🗑️ Удалить</button></td></tr>`;
                     }).join('');
-                    
-                    // Добавить обработчики событий
                     document.querySelectorAll('.btn-edit').forEach(btn => {
                         btn.addEventListener('click', () => editMaster(btn.dataset.id));
                     });
@@ -175,20 +187,6 @@ async def masters_page():
                 } catch (error) {
                     console.error('Error loading masters:', error);
                     document.getElementById('mastersList').innerHTML = '<tr><td colspan="5">Ошибка загрузки</td></tr>';
-                }
-            }
-            
-            function addMaster() {
-                alert('Функция добавления мастера будет реализована');
-            }
-            
-            function editMaster(id) {
-                alert('Функция редактирования мастера будет реализована');
-            }
-            
-            function deleteMaster(id) {
-                if (confirm('Вы уверены?')) {
-                    alert('Функция удаления мастера будет реализована');
                 }
             }
             
@@ -228,6 +226,17 @@ async def services_page():
             th, td { padding: 12px; text-align: left; border-bottom: 1px solid #ddd; }
             th { background: #f5f5f5; font-weight: bold; }
         </style>
+        <script>
+            function editService(id) {
+                alert('Редактирование услуги ' + id);
+            }
+            
+            function deleteService(id) {
+                if (confirm('Удалить услугу?')) {
+                    alert('Функция удаления будет реализована');
+                }
+            }
+        </script>
     </head>
     <body>
         <div class="container">
@@ -258,18 +267,15 @@ async def services_page():
                 try {
                     const response = await fetch('/api/services');
                     const services = await response.json();
-                    
                     const tbody = document.getElementById('servicesList');
                     if (!services || services.length === 0) {
                         tbody.innerHTML = '<tr><td colspan="5" style="text-align:center">Нет услуг</td></tr>';
                         return;
                     }
-                    
                     tbody.innerHTML = services.map(s => {
                         const price = s.price_from && s.price_to ? `${s.price_from} - ${s.price_to}` : (s.price_from || '-');
                         return `<tr><td>${s.id || '-'}</td><td>${s.name || '-'}</td><td>${price}</td><td>${s.duration_min || '-'}</td><td><button class="btn-edit" data-id="${s.id}" style="margin-right:5px">✏️</button><button class="btn-delete" data-id="${s.id}" style="background:#e74c3c">🗑️</button></td></tr>`;
                     }).join('');
-                    
                     document.querySelectorAll('.btn-edit').forEach(btn => {
                         btn.addEventListener('click', () => editService(btn.dataset.id));
                     });
@@ -279,16 +285,6 @@ async def services_page():
                 } catch (error) {
                     console.error('Error loading services:', error);
                     document.getElementById('servicesList').innerHTML = '<tr><td colspan="5">Ошибка загрузки</td></tr>';
-                }
-            }
-            
-            function editService(id) {
-                alert('Редактирование услуги ' + id);
-            }
-            
-            function deleteService(id) {
-                if (confirm('Удалить услугу?')) {
-                    alert('Функция удаления будет реализована');
                 }
             }
             
@@ -328,6 +324,17 @@ async def clients_page():
             th, td { padding: 12px; text-align: left; border-bottom: 1px solid #ddd; }
             th { background: #f5f5f5; font-weight: bold; }
         </style>
+        <script>
+            function deleteClient(id) {
+                if (confirm('Удалить клиента?')) {
+                    alert('Функция удаления будет реализована');
+                }
+            }
+            
+            function viewClient(id) {
+                alert('Просмотр клиента ' + id);
+            }
+        </script>
     </head>
     <body>
         <div class="container">
@@ -357,17 +364,14 @@ async def clients_page():
                 try {
                     const response = await fetch('/api/clients');
                     const clients = await response.json();
-                    
                     const tbody = document.getElementById('clientsList');
                     if (!clients || clients.length === 0) {
                         tbody.innerHTML = '<tr><td colspan="5" style="text-align:center">Нет клиентов</td></tr>';
                         return;
                     }
-                    
                     tbody.innerHTML = clients.map(c => {
                         return `<tr><td>${c.id || '-'}</td><td>${c.name || '-'}</td><td>${c.phone || '-'}</td><td>${c.email || '-'}</td><td><button class="btn-view" data-id="${c.id}" style="margin-right:5px">👁️</button><button class="btn-delete" data-id="${c.id}" style="background:#e74c3c">🗑️</button></td></tr>`;
                     }).join('');
-                    
                     document.querySelectorAll('.btn-view').forEach(btn => {
                         btn.addEventListener('click', () => viewClient(btn.dataset.id));
                     });
@@ -377,16 +381,6 @@ async def clients_page():
                 } catch (error) {
                     console.error('Error loading clients:', error);
                     document.getElementById('clientsList').innerHTML = '<tr><td colspan="5">Ошибка загрузки</td></tr>';
-                }
-            }
-            
-            function viewClient(id) {
-                alert('Просмотр клиента ' + id);
-            }
-            
-            function deleteClient(id) {
-                if (confirm('Удалить клиента?')) {
-                    alert('Функция удаления будет реализована');
                 }
             }
             
@@ -518,6 +512,31 @@ async def inka_training_page():
                        padding: 20px; border-radius: 8px; text-align: center; }
             .stat-value { font-size: 2em; font-weight: bold; }
         </style>
+        <script>
+            async function trainInka() {
+                const text = document.getElementById('trainingText').value;
+                if (!text) {
+                    alert('Введите текст для обучения');
+                    return;
+                }
+                try {
+                    const response = await fetch('/api/inka-training', {
+                        method: 'POST',
+                        headers: {'Content-Type': 'application/json'},
+                        body: JSON.stringify({text})
+                    });
+                    if (response.ok) {
+                        alert('Обучение начато!');
+                        document.getElementById('trainingText').value = '';
+                    } else {
+                        alert('Ошибка при обучении');
+                    }
+                } catch (error) {
+                    console.error('Training error:', error);
+                    alert('Ошибка подключения');
+                }
+            }
+        </script>
     </head>
     <body>
         <div class="container">
@@ -539,31 +558,8 @@ async def inka_training_page():
             async function loadStats() {
                 const response = await fetch('/api/inka-training-stats');
                 const data = await response.json();
-                
                 const statsHTML = `<div class="stat-box"><div class="stat-value">${data.total_sessions || 0}</div><div>Всего сеансов</div></div><div class="stat-box"><div class="stat-value">${data.successful_trainings || 0}</div><div>Успешных</div></div><div class="stat-box"><div class="stat-value">${(data.average_score || 0).toFixed(2)}</div><div>Средний рейтинг</div></div>`;
                 document.getElementById('stats').innerHTML = statsHTML;
-            }
-            
-            async function trainInka() {
-                const text = document.getElementById('trainingText').value;
-                if (!text) {
-                    alert('Введите текст для обучения');
-                    return;
-                }
-                
-                try {
-                    const response = await fetch('/api/inka-training', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ text })
-                    });
-                    const result = await response.json();
-                    alert('Обучение запущено!');
-                    document.getElementById('trainingText').value = '';
-                    loadStats();
-                } catch (error) {
-                    alert('Ошибка: ' + error);
-                }
             }
             
             loadStats();
