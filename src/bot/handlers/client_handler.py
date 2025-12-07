@@ -84,17 +84,22 @@ async def get_calendar_service_cached_async():
 
 
 async def get_inka_cached_async(api_key, assistant_id, sheets_client, calendar_service):
-    """Get cached INKA instance (async)"""
+    """Get cached INKA instance (async) with admin_ids"""
     global _inka_cache
     try:
         logger.info(f"🔴 get_inka_cached_async called")
         if _inka_cache is None:
-            logger.info(f"🟡 Creating new INKA instance...")
+            logger.info(f"🟡 Creating new INKA instance with admin support...")
+            config = get_config()
+            admin_ids = config.admin_ids if config.admin_ids else []
+            logger.info(f"Admin IDs: {admin_ids}")
+            
             _inka_cache = get_advanced_inka(
                 api_key=api_key,
                 assistant_id=assistant_id,
                 sheets_client=sheets_client,
-                calendar_service=calendar_service
+                calendar_service=calendar_service,
+                admin_ids=admin_ids
             )
             logger.info(f"🟢 INKA instance created: {_inka_cache is not None}")
         else:
