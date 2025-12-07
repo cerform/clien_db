@@ -18,11 +18,16 @@ async def get_stats() -> Dict[str, Any]:
             raise HTTPException(status_code=500, detail="Database manager not initialized")
         
         # Get stats from database
+        clients = db_manager.get_all_clients()
+        masters = db_manager.get_all_masters()
+        services = db_manager.get_all_services()
+        bookings = db_manager.get_all_bookings()
+        
         stats = {
-            "clients_count": 0,
-            "masters_count": 0,
-            "services_count": 0,
-            "bookings_count": 0
+            "clients_count": len(clients),
+            "masters_count": len(masters),
+            "services_count": len(services),
+            "bookings_count": len(bookings)
         }
         
         return stats
@@ -39,7 +44,9 @@ async def get_masters() -> List[Dict[str, Any]]:
         if not db_manager:
             raise HTTPException(status_code=500, detail="Database manager not initialized")
         
-        return []
+        # Get all masters from database
+        masters = db_manager.get_all_masters()
+        return masters
     except Exception as e:
         logger.error(f"Error getting masters: {e}")
         raise HTTPException(status_code=500, detail="Error getting masters")
@@ -69,7 +76,9 @@ async def get_services() -> List[Dict[str, Any]]:
         if not db_manager:
             raise HTTPException(status_code=500, detail="Database manager not initialized")
         
-        return []
+        # Get all services from database
+        services = db_manager.get_all_services()
+        return services
     except Exception as e:
         logger.error(f"Error getting services: {e}")
         raise HTTPException(status_code=500, detail="Error getting services")
@@ -99,7 +108,9 @@ async def get_clients() -> List[Dict[str, Any]]:
         if not db_manager:
             raise HTTPException(status_code=500, detail="Database manager not initialized")
         
-        return []
+        # Get all clients from database
+        clients = db_manager.get_all_clients()
+        return clients
     except Exception as e:
         logger.error(f"Error getting clients: {e}")
         raise HTTPException(status_code=500, detail="Error getting clients")
@@ -113,7 +124,9 @@ async def get_bookings() -> List[Dict[str, Any]]:
         if not db_manager:
             raise HTTPException(status_code=500, detail="Database manager not initialized")
         
-        return []
+        # Get all bookings from database
+        bookings = db_manager.get_all_bookings()
+        return bookings
     except Exception as e:
         logger.error(f"Error getting bookings: {e}")
         raise HTTPException(status_code=500, detail="Error getting bookings")
