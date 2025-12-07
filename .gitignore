@@ -1,0 +1,19 @@
+# Python
+*.pyc
+__pycache__/
+venv/
+
+# Environment
+.env
+
+# Google OAuth tokens & credentials
+src/google/token.json
+src/google/credentials.json
+credentials.json
+
+# IDE
+.idea/
+.vscode/
+
+# Cache
+*.log
