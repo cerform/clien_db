@@ -11,7 +11,7 @@ import os
 import sys
 from pathlib import Path
 from typing import Dict
-import threading
+from contextlib import asynccontextmanager
 
 # Добавляем путь к модулям
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'src'))
@@ -48,15 +48,17 @@ from src.web.app import create_app
 # Глобальные объекты
 bot: Bot = None
 dp: Dispatcher = None
-app: FastAPI = None
 webhook_url: str = None
+_webhook_setup_done = False
 
 
-async def setup_webhook_background():
-    """Setup webhook в фоне, чтобы не задерживать стартап"""
-    global bot, dp, webhook_url
+async def setup_webhook():
+    """Setup webhook - вызывается при первом запросе или при старте"""
+    global bot, webhook_url, _webhook_setup_done
     
-    await asyncio.sleep(3)  # Даём серверу время на полную инициализацию
+    if _webhook_setup_done:
+        return
+    
     try:
         await bot.delete_webhook(drop_pending_updates=True)
         await bot.set_webhook(
@@ -72,20 +74,14 @@ async def setup_webhook_background():
             BotCommand(command="help", description="Справка"),
         ])
         logger.info("✅ Бот готов к работе")
+        _webhook_setup_done = True
     except Exception as e:
         logger.error(f"❌ Ошибка установки webhook: {e}")
 
 
-def run_webhook_setup_loop():
-    """Запуск event loop для webhook setup в отдельном потоке"""
-    loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(loop)
-    loop.run_until_complete(setup_webhook_background())
-
-
 def main():
     """Main function"""
-    global bot, dp, app, webhook_url
+    global bot, dp, webhook_url
     
     try:
         # Загружаем конфиг
@@ -121,19 +117,6 @@ def main():
         # Webhook endpoint для Telegram
         webhook_path = os.getenv('WEBHOOK_PATH', '/webhook/telegram')
         
-        @app.post(webhook_path)
-        async def telegram_webhook(update: Dict):
-            """Telegram webhook endpoint"""
-            try:
-                update_obj = Update(**update)
-                await dp.feed_update(bot, update_obj)
-                return {"ok": True}
-            except Exception as e:
-                logger.error(f"Webhook error: {e}")
-                return {"ok": False, "error": str(e)}
-        
-        logger.warning(f"⚠️  Webhook handler registered at {webhook_path}")
-        
         # Запуск сервера
         port = int(os.getenv('PORT', 8080))
         
@@ -149,14 +132,28 @@ def main():
         
         webhook_url = f"{service_url}{webhook_path}"
         
+        @app.on_event("startup")
+        async def on_startup():
+            """Setup webhook при старте приложения"""
+            await setup_webhook()
+        
+        @app.post(webhook_path)
+        async def telegram_webhook(update: Dict):
+            """Telegram webhook endpoint"""
+            try:
+                update_obj = Update(**update)
+                await dp.feed_update(bot=bot, update=update_obj)
+                return {"ok": True}
+            except Exception as e:
+                logger.error(f"Webhook error: {e}", exc_info=True)
+                return {"ok": False, "error": str(e)}
+        
+        logger.warning(f"⚠️  Webhook handler registered at {webhook_path}")
+        
         logger.info(f"🚀 Starting FastAPI server on port {port}")
         logger.info(f"   Webhook URL: {webhook_url}")
         logger.info(f"   Admin Panel: {service_url}")
         logger.info(f"   API Health: {service_url}/api/health")
-        
-        # Запускаем setup webhook в отдельном потоке (не блокируем main)
-        webhook_thread = threading.Thread(target=run_webhook_setup_loop, daemon=True)
-        webhook_thread.start()
         
         # Запуск сервера Uvicorn с FastAPI
         uvicorn.run(

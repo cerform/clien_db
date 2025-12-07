@@ -1,6 +1,7 @@
 """
 INKA - Персональный AI-ассистент тату-мастера Ани
 Архитектура S1 → S2 → S3 с улучшенным диалогом
++ Административные функции через Function Calling
 """
 
 import json
@@ -24,6 +25,10 @@ class INKAProcessor:
         else:
             self.client = None
         
+        # Admin tools
+        self.admin_tools = None
+        self._init_admin_tools()
+        
         # Основной системный промпт для классификации
         self.system_prompt = """Ты — ИНКА, персональный AI-ассистент тату-мастера Ани.
 Ты встроена в Python-бот системы бронирования.
@@ -39,6 +44,28 @@ class INKAProcessor:
 • Соблюдай формат выхода строго
 • Коротко, живо, тепло, уважительно
 • Без давления, без продажного тона"""
+        
+        # Промпт для администратора
+        self.admin_prompt = """Ты — ИНКА, AI-ассистент для управления тату-салоном.
+У тебя есть доступ к административным функциям для управления:
+- Мастерами (добавление, редактирование, удаление)
+- Услугами (добавление, редактирование, удаление)
+- Клиентами (просмотр, добавление, редактирование)
+- Записями (создание, подтверждение, отмена, завершение)
+- Расписанием и календарями
+- Статистикой и аналитикой
+
+Когда администратор просит выполнить действие:
+1. Определи нужную функцию
+2. Извлеки параметры из запроса
+3. Вызови функцию
+4. Сформируй понятный ответ по результату
+
+ВАЖНО:
+- Всегда подтверждай выполнение действия
+- При ошибках объясни что пошло не так
+- Если не хватает данных — спроси уточнение
+- Форматируй ответы красиво с эмодзи"""
         
         # Промпт для человечного общения
         self.conversational_prompt = """Ты — ИНКА, дружелюбный и понимающий AI-ассистент тату-мастера Ани.
@@ -64,6 +91,16 @@ class INKAProcessor:
 • Отвечать шаблонно или формально
 
 Твоя главная цель — создать комфортную атмосферу общения и помочь клиенту."""
+    
+    def _init_admin_tools(self):
+        """Инициализировать админ-инструменты"""
+        try:
+            from src.ai.inka_admin_tools import get_admin_tools
+            self.admin_tools = get_admin_tools()
+            logger.info("✅ INKA Admin Tools initialized")
+        except Exception as e:
+            logger.warning(f"⚠️ Could not initialize admin tools: {e}")
+            self.admin_tools = None
     
     def stage_1_classify(self, user_message: str, context: Dict = None) -> Dict:
         """
@@ -324,6 +361,171 @@ class INKAProcessor:
         )
         
         return response.choices[0].message.content.strip()
+    
+    # ==================== АДМИНИСТРАТИВНЫЕ ФУНКЦИИ ====================
+    
+    def admin_command(self, user_message: str, user_id: int = None) -> str:
+        """
+        Обработка административной команды от администратора
+        Использует Function Calling для выполнения действий
+        
+        Args:
+            user_message: Команда администратора на естественном языке
+            user_id: ID пользователя (для проверки прав)
+            
+        Returns:
+            Ответ с результатом выполнения
+        """
+        if not self.client:
+            return "❌ OpenAI клиент не инициализирован"
+        
+        if not self.admin_tools:
+            return "❌ Инструменты администрирования не доступны"
+        
+        try:
+            from src.ai.inka_admin_tools import ADMIN_FUNCTIONS
+            
+            # Преобразуем функции в формат OpenAI tools
+            tools = [
+                {"type": "function", "function": func}
+                for func in ADMIN_FUNCTIONS
+            ]
+            
+            messages = [
+                {"role": "system", "content": self.admin_prompt},
+                {"role": "user", "content": user_message}
+            ]
+            
+            # Первый вызов - определяем какую функцию вызвать
+            response = self.client.chat.completions.create(
+                model="gpt-4o-mini",
+                messages=messages,
+                tools=tools,
+                tool_choice="auto",
+                temperature=0.3,
+                max_tokens=1000,
+                timeout=30.0
+            )
+            
+            response_message = response.choices[0].message
+            
+            # Если есть вызовы функций
+            if response_message.tool_calls:
+                # Выполняем все запрошенные функции
+                tool_results = []
+                
+                for tool_call in response_message.tool_calls:
+                    function_name = tool_call.function.name
+                    function_args = json.loads(tool_call.function.arguments)
+                    
+                    logger.info(f"🔧 INKA executing: {function_name}({function_args})")
+                    
+                    # Выполняем функцию
+                    result = self.admin_tools.execute_function(function_name, function_args)
+                    
+                    tool_results.append({
+                        "tool_call_id": tool_call.id,
+                        "role": "tool",
+                        "content": json.dumps(result, ensure_ascii=False, default=str)
+                    })
+                
+                # Добавляем результаты в контекст
+                messages.append(response_message)
+                messages.extend(tool_results)
+                
+                # Второй вызов - формируем человечный ответ
+                final_response = self.client.chat.completions.create(
+                    model="gpt-4o-mini",
+                    messages=messages,
+                    temperature=0.7,
+                    max_tokens=1000,
+                    timeout=15.0
+                )
+                
+                return final_response.choices[0].message.content.strip()
+            
+            else:
+                # Если функция не вызвана - возвращаем обычный ответ
+                return response_message.content or "Не понял команду. Попробуй переформулировать."
+        
+        except Exception as e:
+            logger.error(f"Admin command error: {e}")
+            return f"❌ Ошибка выполнения команды: {str(e)}"
+    
+    def get_quick_stats(self) -> str:
+        """Быстрая статистика для администратора"""
+        if not self.admin_tools:
+            return "❌ Инструменты не доступны"
+        
+        try:
+            result = self.admin_tools.execute_function("get_statistics", {"period": "today"})
+            if result["success"]:
+                data = result["data"]
+                return f"""📊 *Статистика на сегодня*
+
+👥 Клиентов: {data['total_clients']}
+👨‍🎨 Мастеров: {data['total_masters']}
+💼 Услуг: {data['total_services']}
+
+📅 Записей сегодня: {data['total_bookings']}
+✅ Завершено: {data['completed_bookings']}
+⏳ Ожидают: {data['pending_bookings']}
+❌ Отменено: {data['cancelled_bookings']}
+
+💰 Выручка: {data['total_revenue']:,.0f} ₽"""
+            else:
+                return f"❌ Ошибка: {result.get('error')}"
+        except Exception as e:
+            return f"❌ Ошибка: {str(e)}"
+    
+    def get_today_schedule(self) -> str:
+        """Расписание на сегодня"""
+        if not self.admin_tools:
+            return "❌ Инструменты не доступны"
+        
+        try:
+            from datetime import datetime
+            today = datetime.now().strftime("%Y-%m-%d")
+            
+            result = self.admin_tools.execute_function("get_all_bookings", {
+                "date_from": today,
+                "date_to": today,
+                "status": "all"
+            })
+            
+            if result["success"]:
+                bookings = result["data"]
+                if not bookings:
+                    return "📅 На сегодня записей нет"
+                
+                # Группируем по мастерам
+                by_master = {}
+                for b in bookings:
+                    master = b.get("master_name", "Неизвестный")
+                    if master not in by_master:
+                        by_master[master] = []
+                    by_master[master].append(b)
+                
+                lines = [f"📅 *Расписание на {today}*\n"]
+                
+                status_emoji = {
+                    "pending": "⏳",
+                    "confirmed": "✅",
+                    "completed": "🎉",
+                    "cancelled": "❌"
+                }
+                
+                for master, master_bookings in by_master.items():
+                    lines.append(f"\n👨‍🎨 *{master}*:")
+                    for b in sorted(master_bookings, key=lambda x: x.get("time", "")):
+                        emoji = status_emoji.get(b.get("status"), "❓")
+                        lines.append(f"  {emoji} {b.get('time', '??:??')} - {b.get('client_name', 'Клиент')} ({b.get('service_name', 'Услуга')})")
+                
+                return "\n".join(lines)
+            else:
+                return f"❌ Ошибка: {result.get('error')}"
+        except Exception as e:
+            return f"❌ Ошибка: {str(e)}"
     
     # ==================== ПРИВАТНЫЕ МЕТОДЫ ====================
     

@@ -213,7 +213,7 @@ class DatabaseManager:
         """Отредактировать мастера"""
         try:
             # Получить текущие данные
-            data = self.sheets.get_sheet_values("Мастера", "A:K")
+            data = self.sheets.get_sheet_values("Masters", "A:K")
             
             row_idx = None
             for i, row in enumerate(data):
@@ -226,10 +226,14 @@ class DatabaseManager:
             
             # Обновить поля
             row = list(data[row_idx])
+            # Ensure row has enough columns
+            while len(row) < 11:
+                row.append("")
+            
             field_map = {
-                "name": 1, "specialization": 2, "experience": 3,
-                "rating": 4, "phone": 5, "instagram": 6,
-                "price": 7, "status": 8, "bio": 9
+                "name": 1, "phone": 2, "telegram_id": 3, "specialization": 4,
+                "rating": 5, "experience": 6, "instagram": 7, "status": 8,
+                "bio": 9, "calendar_id": 10
             }
             
             for field, value in updates.items():
@@ -238,11 +242,38 @@ class DatabaseManager:
                     row[idx] = value
             
             # Сохранить
-            self.sheets.update_range(f"Мастера!A{row_idx+1}:K{row_idx+1}", [row])
+            self.sheets.update_range("Masters", f"A{row_idx+1}:K{row_idx+1}", [row])
             return True, f"✅ Мастер обновлен!"
         
         except Exception as e:
             logger.error(f"Error editing master: {e}")
+            return False, f"❌ Ошибка: {str(e)}"
+    
+    def delete_master(self, master_id: str) -> Tuple[bool, str]:
+        """Удалить мастера (пометить как неактивного)"""
+        try:
+            data = self.sheets.get_sheet_values("Masters", "A:K")
+            
+            row_idx = None
+            for i, row in enumerate(data):
+                if len(row) > 0 and row[0] == master_id:
+                    row_idx = i
+                    break
+            
+            if row_idx is None:
+                return False, "Мастер не найден"
+            
+            # Помечаем как неактивного вместо удаления
+            row = list(data[row_idx])
+            while len(row) < 9:
+                row.append("")
+            row[8] = "inactive"
+            
+            self.sheets.update_range("Masters", f"A{row_idx+1}:K{row_idx+1}", [row])
+            return True, f"✅ Мастер удален!"
+        
+        except Exception as e:
+            logger.error(f"Error deleting master: {e}")
             return False, f"❌ Ошибка: {str(e)}"
     
     # ============ УСЛУГИ ============
@@ -295,16 +326,77 @@ class DatabaseManager:
                 service_data.get("description", ""),
                 service_data.get("duration", "0"),
                 service_data.get("price", "0"),
+                service_data.get("price_to", service_data.get("price", "0")),
                 service_data.get("category", "other"),
-                "active",
-                service_data.get("image_url", ""),
+                "TRUE",  # active
             ]
             
-            self.sheets.append_rows("Услуги", [new_service])
+            self.sheets.append_rows("Services", [new_service])
             return True, f"✅ Услуга {service_data['name']} добавлена!"
         
         except Exception as e:
             logger.error(f"Error adding service: {e}")
+            return False, f"❌ Ошибка: {str(e)}"
+    
+    def edit_service(self, service_id: str, updates: Dict[str, str]) -> Tuple[bool, str]:
+        """Редактировать услугу"""
+        try:
+            data = self.sheets.get_sheet_values("Services", "A:H")
+            
+            row_idx = None
+            for i, row in enumerate(data):
+                if len(row) > 0 and row[0] == service_id:
+                    row_idx = i
+                    break
+            
+            if row_idx is None:
+                return False, "Услуга не найдена"
+            
+            row = list(data[row_idx])
+            while len(row) < 8:
+                row.append("")
+            
+            field_map = {
+                "name": 1, "description": 2, "duration_min": 3, "duration": 3,
+                "price_from": 4, "price": 4, "price_to": 5, "category": 6, "active": 7
+            }
+            
+            for field, value in updates.items():
+                if field in field_map:
+                    idx = field_map[field]
+                    row[idx] = value
+            
+            self.sheets.update_range("Services", f"A{row_idx+1}:H{row_idx+1}", [row])
+            return True, f"✅ Услуга обновлена!"
+        
+        except Exception as e:
+            logger.error(f"Error editing service: {e}")
+            return False, f"❌ Ошибка: {str(e)}"
+    
+    def delete_service(self, service_id: str) -> Tuple[bool, str]:
+        """Удалить услугу (пометить как неактивную)"""
+        try:
+            data = self.sheets.get_sheet_values("Services", "A:H")
+            
+            row_idx = None
+            for i, row in enumerate(data):
+                if len(row) > 0 and row[0] == service_id:
+                    row_idx = i
+                    break
+            
+            if row_idx is None:
+                return False, "Услуга не найдена"
+            
+            row = list(data[row_idx])
+            while len(row) < 8:
+                row.append("")
+            row[7] = "FALSE"  # active = false
+            
+            self.sheets.update_range("Services", f"A{row_idx+1}:H{row_idx+1}", [row])
+            return True, f"✅ Услуга удалена!"
+        
+        except Exception as e:
+            logger.error(f"Error deleting service: {e}")
             return False, f"❌ Ошибка: {str(e)}"
     
     # ============ КЛИЕНТЫ ============
@@ -361,14 +453,251 @@ class DatabaseManager:
                 "",  # last_visit
             ]
             
-            self.sheets.append_rows("Клиенты", [new_client])
+            self.sheets.append_rows("Clients", [new_client])
             return True, f"✅ Клиент {client_data['name']} добавлен!"
         
         except Exception as e:
             logger.error(f"Error adding client: {e}")
             return False, f"❌ Ошибка: {str(e)}"
     
+    def edit_client(self, client_id: str, updates: Dict[str, str]) -> Tuple[bool, str]:
+        """Редактировать клиента"""
+        try:
+            data = self.sheets.get_sheet_values("Clients", "A:H")
+            
+            row_idx = None
+            for i, row in enumerate(data):
+                if len(row) > 0 and row[0] == client_id:
+                    row_idx = i
+                    break
+            
+            if row_idx is None:
+                return False, "Клиент не найден"
+            
+            row = list(data[row_idx])
+            while len(row) < 8:
+                row.append("")
+            
+            field_map = {
+                "telegram_id": 1, "name": 2, "phone": 3,
+                "email": 4, "notes": 5
+            }
+            
+            for field, value in updates.items():
+                if field in field_map:
+                    idx = field_map[field]
+                    row[idx] = value
+            
+            self.sheets.update_range("Clients", f"A{row_idx+1}:H{row_idx+1}", [row])
+            return True, f"✅ Клиент обновлен!"
+        
+        except Exception as e:
+            logger.error(f"Error editing client: {e}")
+            return False, f"❌ Ошибка: {str(e)}"
+    
+    def delete_client(self, client_id: str) -> Tuple[bool, str]:
+        """Удалить клиента"""
+        try:
+            data = self.sheets.get_sheet_values("Clients", "A:H")
+            
+            row_idx = None
+            for i, row in enumerate(data):
+                if len(row) > 0 and row[0] == client_id:
+                    row_idx = i
+                    break
+            
+            if row_idx is None:
+                return False, "Клиент не найден"
+            
+            # Удаляем строку (перезаписываем пустой)
+            # Или помечаем как удаленного добавив статус
+            row = list(data[row_idx])
+            while len(row) < 8:
+                row.append("")
+            row[5] = "[DELETED] " + row[5]  # Помечаем в notes
+            
+            self.sheets.update_range("Clients", f"A{row_idx+1}:H{row_idx+1}", [row])
+            return True, f"✅ Клиент удален!"
+        
+        except Exception as e:
+            logger.error(f"Error deleting client: {e}")
+            return False, f"❌ Ошибка: {str(e)}"
+    
     # ============ РАСПИСАНИЕ ============
+    
+    def add_booking(self, booking_data: Dict[str, str]) -> Tuple[bool, str]:
+        """Добавить новую запись"""
+        try:
+            required_fields = ["client_id", "master_id", "service_id", "date", "time"]
+            for field in required_fields:
+                if not booking_data.get(field):
+                    return False, f"Обязательное поле: {field}"
+            
+            # Валидация времени
+            is_valid, msg = self._validate_time(booking_data.get("time", ""))
+            if not is_valid:
+                return False, msg
+            
+            # Получить информацию об услуге для цены и длительности
+            services = self.get_all_services()
+            service = next((s for s in services if s.get("id") == booking_data.get("service_id")), None)
+            
+            price = booking_data.get("price", "0")
+            duration = booking_data.get("duration_min", "60")
+            if service:
+                price = service.get("price_from", price)
+                duration = service.get("duration_min", duration)
+            
+            new_booking = [
+                str(uuid.uuid4()),
+                booking_data.get("client_id", ""),
+                booking_data.get("master_id", ""),
+                booking_data.get("service_id", ""),
+                booking_data.get("date", ""),
+                booking_data.get("time", ""),
+                duration,
+                price,
+                "pending",  # status
+                booking_data.get("notes", ""),
+                datetime.now().isoformat(),  # created_at
+            ]
+            
+            self.sheets.append_rows("Bookings", [new_booking])
+            return True, f"✅ Запись создана!"
+        
+        except Exception as e:
+            logger.error(f"Error adding booking: {e}")
+            return False, f"❌ Ошибка: {str(e)}"
+    
+    def edit_booking(self, booking_id: str, updates: Dict[str, str]) -> Tuple[bool, str]:
+        """Редактировать запись"""
+        try:
+            data = self.sheets.get_sheet_values("Bookings", "A:K")
+            
+            row_idx = None
+            for i, row in enumerate(data):
+                if len(row) > 0 and row[0] == booking_id:
+                    row_idx = i
+                    break
+            
+            if row_idx is None:
+                return False, "Запись не найдена"
+            
+            row = list(data[row_idx])
+            while len(row) < 11:
+                row.append("")
+            
+            field_map = {
+                "client_id": 1, "master_id": 2, "service_id": 3,
+                "date": 4, "time": 5, "duration_min": 6,
+                "price": 7, "status": 8, "notes": 9
+            }
+            
+            for field, value in updates.items():
+                if field in field_map:
+                    idx = field_map[field]
+                    row[idx] = value
+            
+            self.sheets.update_range("Bookings", f"A{row_idx+1}:K{row_idx+1}", [row])
+            return True, f"✅ Запись обновлена!"
+        
+        except Exception as e:
+            logger.error(f"Error editing booking: {e}")
+            return False, f"❌ Ошибка: {str(e)}"
+    
+    def cancel_booking(self, booking_id: str, reason: str = "") -> Tuple[bool, str]:
+        """Отменить запись"""
+        try:
+            data = self.sheets.get_sheet_values("Bookings", "A:K")
+            
+            row_idx = None
+            for i, row in enumerate(data):
+                if len(row) > 0 and row[0] == booking_id:
+                    row_idx = i
+                    break
+            
+            if row_idx is None:
+                return False, "Запись не найдена"
+            
+            row = list(data[row_idx])
+            while len(row) < 11:
+                row.append("")
+            
+            row[8] = "cancelled"  # status
+            if reason:
+                row[9] = f"[ОТМЕНА: {reason}] " + (row[9] if row[9] else "")
+            
+            self.sheets.update_range("Bookings", f"A{row_idx+1}:K{row_idx+1}", [row])
+            return True, f"✅ Запись отменена!"
+        
+        except Exception as e:
+            logger.error(f"Error canceling booking: {e}")
+            return False, f"❌ Ошибка: {str(e)}"
+    
+    def confirm_booking(self, booking_id: str) -> Tuple[bool, str]:
+        """Подтвердить запись"""
+        try:
+            data = self.sheets.get_sheet_values("Bookings", "A:K")
+            
+            row_idx = None
+            for i, row in enumerate(data):
+                if len(row) > 0 and row[0] == booking_id:
+                    row_idx = i
+                    break
+            
+            if row_idx is None:
+                return False, "Запись не найдена"
+            
+            row = list(data[row_idx])
+            while len(row) < 11:
+                row.append("")
+            
+            row[8] = "confirmed"  # status
+            
+            self.sheets.update_range("Bookings", f"A{row_idx+1}:K{row_idx+1}", [row])
+            return True, f"✅ Запись подтверждена!"
+        
+        except Exception as e:
+            logger.error(f"Error confirming booking: {e}")
+            return False, f"❌ Ошибка: {str(e)}"
+    
+    def complete_booking(self, booking_id: str) -> Tuple[bool, str]:
+        """Отметить запись как выполненную"""
+        try:
+            data = self.sheets.get_sheet_values("Bookings", "A:K")
+            
+            row_idx = None
+            for i, row in enumerate(data):
+                if len(row) > 0 and row[0] == booking_id:
+                    row_idx = i
+                    break
+            
+            if row_idx is None:
+                return False, "Запись не найдена"
+            
+            row = list(data[row_idx])
+            while len(row) < 11:
+                row.append("")
+            
+            row[8] = "completed"  # status
+            
+            self.sheets.update_range("Bookings", f"A{row_idx+1}:K{row_idx+1}", [row])
+            
+            # Обновить last_visit для клиента
+            client_id = row[1]
+            if client_id:
+                try:
+                    self.edit_client(client_id, {"last_visit": datetime.now().isoformat()})
+                except:
+                    pass
+            
+            return True, f"✅ Запись выполнена!"
+        
+        except Exception as e:
+            logger.error(f"Error completing booking: {e}")
+            return False, f"❌ Ошибка: {str(e)}"
+    
+    # ============ РАСПИСАНИЕ МАСТЕРА ============
     
     def get_schedule(self, master_id: str = "") -> Dict[str, Any]:
         """Получить расписание мастера"""
