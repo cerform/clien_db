@@ -1,9 +1,19 @@
 """Admin pages for web interface"""
 
 from fastapi import APIRouter
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, RedirectResponse
 
 admin_router = APIRouter(prefix="/admin", tags=["admin"])
+
+@admin_router.get("")
+async def admin_root():
+    """Redirect to main admin dashboard"""
+    return RedirectResponse(url="/", status_code=302)
+
+@admin_router.get("/")
+async def admin_slash():
+    """Admin root with slash"""
+    return RedirectResponse(url="/", status_code=302)
 
 @admin_router.get("/masters", response_class=HTMLResponse)
 async def masters_page():
