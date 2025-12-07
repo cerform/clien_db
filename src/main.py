@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Telegram Bot для Тату-Салона
-Главный файл с интерактивным меню конфигурации
+Главный файл с интерактивным меню конфигурации + FastAPI веб-интерфейс
 """
 
 import asyncio
@@ -15,13 +15,17 @@ from typing import Optional
 sys.path.insert(0, str(Path(__file__).parent))
 
 from aiogram import Dispatcher, Router
-from aiogram.types import BotCommand
+from aiogram.types import BotCommand, Update
+from fastapi import FastAPI
+from uvicorn import run as run_uvicorn
+
 from src.config.logging_config import setup_logging
 from src.config import get_config, Config, set_config
 from src.bot.loader import init_bot, get_dispatcher
 from src.bot.handlers import start_handler, client_handler, master_handler
 from src.bot.handlers import admin_panel_text, debug_handler
 from src.services.admin_db_manager import DatabaseManager, InkaLearningSystem
+from src.web.app import create_app
 
 logger = logging.getLogger(__name__)
 
@@ -235,7 +239,7 @@ class BotSetup:
             self.show_config(env_vars)
     
     async def run_bot(self) -> bool:
-        """Run bot"""
+        """Run bot with webhook"""
         try:
             # Load configuration
             config = get_config()
@@ -292,17 +296,44 @@ class BotSetup:
             ]
             await bot.set_my_commands(commands)
             
-            # Start polling
-            print("\n✅ Бот запущен! Нажмите Ctrl+C для остановки\n")
-            logger.info("Бот запущен и слушает сообщения...")
+            # Create FastAPI app with bot webhook
+            app = create_app()
             
-            try:
-                await dp.start_polling(bot, allowed_updates=dp.resolve_used_update_types())
-            except KeyboardInterrupt:
-                print("\n🛑 Остановка бота...")
-                logger.info("Бот остановлен пользователем")
-            finally:
-                await bot.session.close()
+            @app.post("/webhook/telegram")
+            async def telegram_webhook(update: dict):
+                """Telegram webhook endpoint"""
+                try:
+                    update_obj = Update(**update)
+                    await dp.feed_update(bot, update_obj)
+                    return {"ok": True}
+                except Exception as e:
+                    logger.error(f"Webhook error: {e}")
+                    return {"ok": False, "error": str(e)}
+            
+            # Set webhook URL
+            webhook_url = os.getenv('WEBHOOK_URL', '')
+            if webhook_url:
+                await bot.set_webhook_url(webhook_url + "/webhook/telegram")
+                logger.info(f"Webhook установлен: {webhook_url}/webhook/telegram")
+            
+            # Start server
+            print("\n✅ Сервер запущен! Нажмите Ctrl+C для остановки\n")
+            print(f"📊 Админ-панель: http://localhost:8000")
+            print(f"🔍 API Docs: http://localhost:8000/docs")
+            print(f"📱 Telegram бот работает на вебхуке\n")
+            logger.info("Сервер запущен успешно")
+            
+            # Determine host and port
+            host = os.getenv('HOST', '0.0.0.0')
+            port = int(os.getenv('PORT', 8080))
+            
+            # Run server
+            run_uvicorn(
+                app,
+                host=host,
+                port=port,
+                log_level=config.log_level.lower()
+            )
             
             return True
         
@@ -311,8 +342,8 @@ class BotSetup:
             print("Пожалуйста, установите конфигурацию")
             return False
         except Exception as e:
-            print(f"\n❌ Ошибка при запуске бота: {e}")
-            logger.error(f"Bot error: {e}", exc_info=True)
+            print(f"\n❌ Ошибка при запуске сервера: {e}")
+            logger.error(f"Server error: {e}", exc_info=True)
             return False
     
     def run(self):

@@ -418,13 +418,17 @@ class InkaLearningSystem:
         try:
             # Попытка получить данные - если ошибка, создать лист
             self.sheets.get_range(self.learning_sheet, "A1")
-        except:
-            # Создать новый лист с заголовками
-            headers = [
-                "id", "timestamp", "category", "user_input", "inka_response",
-                "admin_correction", "improvement", "tags", "status"
-            ]
-            self.sheets.append_rows(self.learning_sheet, [headers])
+        except Exception as e:
+            try:
+                # Создать новый лист с заголовками
+                headers = [
+                    "id", "timestamp", "category", "user_input", "inka_response",
+                    "admin_correction", "improvement", "tags", "status"
+                ]
+                self.sheets.append_rows(self.learning_sheet, [headers])
+            except Exception as init_error:
+                logger.warning(f"Could not ensure INKA_Training sheet exists: {init_error}")
+                # Это не критично - будет создано при первом использовании
     
     def add_training_example(self, category: str, user_input: str,
                             inka_response: str, correction: str = "",
