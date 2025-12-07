@@ -119,6 +119,11 @@ def create_app() -> FastAPI:
             return FileResponse(favicon_path)
         return JSONResponse(status_code=404, content={})
     
+    @app.get("/console", response_class=HTMLResponse)
+    async def web_console():
+        """Веб-консоль для отладки в реал-тайм"""
+        return get_console_html()
+    
     return app
 
 def get_dashboard_html() -> str:
@@ -351,6 +356,12 @@ def get_dashboard_html() -> str:
                         <div class="card-icon">📈</div>
                         <h3>Аналитика</h3>
                         <p>Статистика и отчеты</p>
+                    </div>
+                    
+                    <div class="card" onclick="goTo('/console')">
+                        <div class="card-icon">🔍</div>
+                        <h3>Веб-Консоль</h3>
+                        <p>Мониторинг в реал-тайм</p>
                     </div>
                 </div>
                 
@@ -638,6 +649,410 @@ def get_login_html() -> str:
             if (localStorage.getItem('admin_token')) {
                 window.location.href = '/';
             }
+        </script>
+    </body>
+    </html>
+    """
+
+def get_console_html() -> str:
+    """Get web console HTML for real-time debugging"""
+    return """
+    <!DOCTYPE html>
+    <html lang="ru">
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>🔍 Веб-консоль - Admin Panel</title>
+        <style>
+            * {
+                margin: 0;
+                padding: 0;
+                box-sizing: border-box;
+            }
+
+            body {
+                font-family: 'Courier New', monospace;
+                background: #0d1117;
+                color: #c9d1d9;
+                overflow: hidden;
+                height: 100vh;
+            }
+
+            .container {
+                display: flex;
+                height: 100vh;
+                gap: 1px;
+            }
+
+            .panel {
+                flex: 1;
+                display: flex;
+                flex-direction: column;
+                border-right: 1px solid #30363d;
+                overflow: hidden;
+            }
+
+            .header {
+                background: linear-gradient(135deg, #1f6feb 0%, #388bfd 100%);
+                padding: 15px 20px;
+                color: white;
+                font-weight: bold;
+                font-size: 14px;
+                border-bottom: 2px solid #30363d;
+            }
+
+            .logs {
+                flex: 1;
+                overflow-y: auto;
+                padding: 15px;
+                background: #0d1117;
+            }
+
+            .log-entry {
+                margin-bottom: 8px;
+                padding: 8px;
+                border-radius: 4px;
+                font-size: 12px;
+                line-height: 1.4;
+                border-left: 3px solid #30363d;
+            }
+
+            .log-entry.info {
+                border-left-color: #58a6ff;
+                background: rgba(88, 166, 255, 0.1);
+            }
+
+            .log-entry.success {
+                border-left-color: #3fb950;
+                background: rgba(63, 185, 80, 0.1);
+                color: #3fb950;
+            }
+
+            .log-entry.error {
+                border-left-color: #f85149;
+                background: rgba(248, 81, 73, 0.1);
+                color: #f85149;
+            }
+
+            .log-entry.warning {
+                border-left-color: #d29922;
+                background: rgba(210, 153, 34, 0.1);
+                color: #d29922;
+            }
+
+            .log-entry.request {
+                border-left-color: #79c0ff;
+                background: rgba(121, 192, 255, 0.1);
+            }
+
+            .timestamp {
+                color: #8b949e;
+                margin-right: 8px;
+            }
+
+            .stats {
+                background: #161b22;
+                padding: 15px;
+                border-top: 2px solid #30363d;
+                display: grid;
+                grid-template-columns: 1fr 1fr;
+                gap: 10px;
+            }
+
+            .stat-item {
+                padding: 10px;
+                background: #0d1117;
+                border: 1px solid #30363d;
+                border-radius: 4px;
+                text-align: center;
+                font-size: 11px;
+            }
+
+            .stat-label {
+                color: #8b949e;
+                display: block;
+                margin-bottom: 5px;
+            }
+
+            .stat-value {
+                font-size: 18px;
+                font-weight: bold;
+                color: #58a6ff;
+            }
+
+            .controls {
+                background: #161b22;
+                padding: 10px;
+                border-top: 1px solid #30363d;
+                display: flex;
+                gap: 5px;
+            }
+
+            button {
+                flex: 1;
+                padding: 8px;
+                background: #238636;
+                color: white;
+                border: 1px solid #2ea043;
+                border-radius: 4px;
+                cursor: pointer;
+                font-size: 12px;
+                font-family: monospace;
+            }
+
+            button:hover {
+                background: #2ea043;
+            }
+
+            button.clear {
+                background: #da3633;
+                border-color: #f85149;
+            }
+
+            button.clear:hover {
+                background: #f85149;
+            }
+
+            .status-indicator {
+                display: inline-block;
+                width: 8px;
+                height: 8px;
+                border-radius: 50%;
+                margin-right: 5px;
+                animation: pulse 2s infinite;
+            }
+
+            .status-indicator.online {
+                background: #3fb950;
+            }
+
+            @keyframes pulse {
+                0%, 100% { opacity: 1; }
+                50% { opacity: 0.5; }
+            }
+
+            .endpoints {
+                display: grid;
+                grid-template-columns: 1fr;
+                gap: 5px;
+                padding: 10px;
+                background: #161b22;
+                border-top: 1px solid #30363d;
+                max-height: 200px;
+                overflow-y: auto;
+            }
+
+            .endpoint-btn {
+                padding: 8px;
+                background: #0d3cc4;
+                color: #79c0ff;
+                border: 1px solid #1f6feb;
+                border-radius: 3px;
+                cursor: pointer;
+                font-size: 11px;
+                text-align: left;
+            }
+
+            .endpoint-btn:hover {
+                background: #1f6feb;
+            }
+
+            .endpoint-btn.status-200 {
+                border-left: 4px solid #3fb950;
+            }
+
+            .endpoint-btn.status-404 {
+                border-left: 4px solid #f85149;
+            }
+
+            .endpoint-btn.status-loading {
+                border-left: 4px solid #d29922;
+            }
+        </style>
+    </head>
+    <body>
+        <div class="container">
+            <div class="panel" style="flex: 2;">
+                <div class="header">🔍 ЛОГИ РЕАЛ-ТАЙМ (Browser Console)</div>
+                <div class="logs" id="logs"></div>
+                <div class="stats">
+                    <div class="stat-item">
+                        <span class="stat-label">Всего событий</span>
+                        <span class="stat-value" id="total-events">0</span>
+                    </div>
+                    <div class="stat-item">
+                        <span class="stat-label">Ошибок</span>
+                        <span class="stat-value" id="error-count" style="color: #f85149;">0</span>
+                    </div>
+                    <div class="stat-item">
+                        <span class="stat-label">API запросов</span>
+                        <span class="stat-value" id="api-count" style="color: #79c0ff;">0</span>
+                    </div>
+                    <div class="stat-item">
+                        <span class="stat-label">Статус</span>
+                        <span class="stat-value"><span class="status-indicator online"></span>Online</span>
+                    </div>
+                </div>
+                <div class="controls">
+                    <button onclick="clearLogs()">🗑️ Очистить</button>
+                    <button onclick="testAllEndpoints()">🧪 Тест</button>
+                    <button onclick="location.href='/'">🏠 Назад</button>
+                </div>
+            </div>
+
+            <div class="panel" style="flex: 1;">
+                <div class="header">📊 ЭНДПОИНТЫ</div>
+                <div class="endpoints" id="endpoints"></div>
+                <div style="flex: 1; overflow-y: auto; padding: 15px; background: #0d1117; font-size: 11px;">
+                    <p style="margin-bottom: 10px;"><strong>✅ Статус:</strong></p>
+                    <p style="margin-bottom: 5px;">🟢 Веб: <span id="web-status" style="color: #3fb950;">Online</span></p>
+                    <p style="margin-bottom: 10px;">🟢 API: <span id="api-status" style="color: #3fb950;">OK</span></p>
+                    <p style="margin-bottom: 10px;"><strong>⏱️  Время ответа:</strong></p>
+                    <p id="response-time">-ms</p>
+                    <p style="margin-top: 10px; color: #8b949e; font-size: 10px;">Обновлено: <span id="last-update">-</span></p>
+                </div>
+            </div>
+        </div>
+
+        <script>
+            const logsContainer = document.getElementById('logs');
+            const endpointsContainer = document.getElementById('endpoints');
+            let logs = [];
+            let eventCount = 0;
+            let errorCount = 0;
+            let apiCount = 0;
+
+            const endpoints = [
+                { name: '✅ Health', url: '/api/health' },
+                { name: '📊 Stats', url: '/api/stats' },
+                { name: '👨 Masters', url: '/api/masters' },
+                { name: '✂️ Services', url: '/api/services' },
+                { name: '👤 Clients', url: '/api/clients' },
+                { name: '📅 Bookings', url: '/api/bookings' },
+            ];
+
+            function addLog(message, type = 'info') {
+                const timestamp = new Date().toLocaleTimeString('ru-RU');
+                const entry = { message, type, timestamp };
+                logs.unshift(entry);
+                eventCount++;
+
+                if (type === 'error') errorCount++;
+                if (type === 'request') apiCount++;
+
+                if (logs.length > 100) logs.pop();
+                renderLogs();
+                updateStats();
+            }
+
+            function renderLogs() {
+                logsContainer.innerHTML = logs.map(log => `
+                    <div class="log-entry ${log.type}">
+                        <span class="timestamp">[${log.timestamp}]</span>
+                        ${log.message}
+                    </div>
+                `).join('');
+                logsContainer.scrollTop = 0;
+            }
+
+            function updateStats() {
+                document.getElementById('total-events').textContent = eventCount;
+                document.getElementById('error-count').textContent = errorCount;
+                document.getElementById('api-count').textContent = apiCount;
+                document.getElementById('last-update').textContent = new Date().toLocaleTimeString('ru-RU');
+            }
+
+            function clearLogs() {
+                logs = [];
+                eventCount = 0;
+                errorCount = 0;
+                apiCount = 0;
+                renderLogs();
+                updateStats();
+                addLog('✅ Логи очищены', 'success');
+            }
+
+            async function testEndpoint(endpoint) {
+                try {
+                    const startTime = performance.now();
+                    const response = await fetch(endpoint.url, { signal: AbortSignal.timeout(5000) });
+                    const duration = Math.round(performance.now() - startTime);
+                    const status = response.status;
+                    const statusClass = status === 200 ? 'status-200' : 'status-404';
+                    
+                    addLog(`🌐 ${endpoint.name}: ${endpoint.url} → ${status} (${duration}ms)`, 'request');
+                    return { endpoint, status, duration };
+                } catch (error) {
+                    addLog(`❌ ${endpoint.name}: ${error.message}`, 'error');
+                    return { endpoint, status: 'error', duration: '-' };
+                }
+            }
+
+            async function testAllEndpoints() {
+                addLog('🧪 Начало тестирования...', 'warning');
+                for (const endpoint of endpoints) {
+                    await testEndpoint(endpoint);
+                    await new Promise(r => setTimeout(r, 200));
+                }
+                addLog('✅ Тестирование завершено', 'success');
+            }
+
+            function renderEndpoints() {
+                endpointsContainer.innerHTML = endpoints.map(ep => `
+                    <button class="endpoint-btn status-loading" onclick="testEndpoint({name: '${ep.name}', url: '${ep.url}'})">
+                        ${ep.name} → ${ep.url}
+                    </button>
+                `).join('');
+            }
+
+            const originalLog = console.log;
+            const originalError = console.error;
+            const originalWarn = console.warn;
+
+            console.log = function(...args) {
+                originalLog(...args);
+                addLog(`📝 ${args.join(' ')}`, 'info');
+            };
+
+            console.error = function(...args) {
+                originalError(...args);
+                addLog(`❌ ${args.join(' ')}`, 'error');
+            };
+
+            console.warn = function(...args) {
+                originalWarn(...args);
+                addLog(`⚠️ ${args.join(' ')}`, 'warning');
+            };
+
+            const originalFetch = window.fetch;
+            window.fetch = function(...args) {
+                const url = args[0];
+                addLog(`📤 Fetch: ${url}`, 'request');
+                return originalFetch.apply(this, args)
+                    .then(response => {
+                        addLog(`📥 Response: ${url} → ${response.status}`, 
+                            response.status >= 400 ? 'error' : 'success');
+                        return response;
+                    })
+                    .catch(error => {
+                        addLog(`❌ Fetch Error: ${url} → ${error.message}`, 'error');
+                        throw error;
+                    });
+            };
+
+            window.addEventListener('error', (event) => {
+                addLog(`💥 JS Error: ${event.message}`, 'error');
+            });
+
+            window.addEventListener('unhandledrejection', (event) => {
+                addLog(`💥 Promise Error: ${event.reason}`, 'error');
+            });
+
+            addLog('🚀 Веб-консоль запущена', 'success');
+            renderEndpoints();
+            updateStats();
+            setTimeout(testAllEndpoints, 1000);
+            setInterval(testAllEndpoints, 30000);
         </script>
     </body>
     </html>
