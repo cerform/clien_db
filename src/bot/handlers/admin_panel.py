@@ -576,3 +576,193 @@ async def admin_train_stats(query: types.CallbackQuery, state: FSMContext):
     """Показать статистику обучения"""
     if _admin_handler:
         await _admin_handler.view_training_stats(query, state)
+
+
+# ================== INKA AI КОМАНДЫ ==================
+
+class InkaAdminStates(StatesGroup):
+    """Состояния для общения с ИНКОЙ"""
+    waiting_command = State()
+
+
+_inka_processor = None
+
+
+def get_inka_processor():
+    """Получить или создать INKA процессор"""
+    global _inka_processor
+    if _inka_processor is None:
+        try:
+            from src.ai.inka import get_inka_processor
+            from src.config import get_config
+            config = get_config()
+            _inka_processor = get_inka_processor(
+                api_key=config.openai_api_key,
+                assistant_id=config.openai_assistant_id
+            )
+        except Exception as e:
+            logger.error(f"Failed to init INKA: {e}")
+    return _inka_processor
+
+
+@router.message(Command("inka"))
+async def inka_command(message: types.Message, state: FSMContext):
+    """Команда /inka - общение с ИНКОЙ для администрирования"""
+    user_id = message.from_user.id
+    
+    if user_id not in ADMIN_IDS:
+        await message.reply("❌ Эта команда доступна только администраторам")
+        return
+    
+    # Проверяем есть ли текст после команды
+    command_text = message.text.replace("/inka", "").strip()
+    
+    if command_text:
+        # Если есть текст - сразу выполняем команду
+        await process_inka_command(message, command_text)
+    else:
+        # Если нет - показываем меню
+        keyboard = InlineKeyboardMarkup(inline_keyboard=[
+            [
+                InlineKeyboardButton(text="📊 Статистика", callback_data="inka_stats"),
+                InlineKeyboardButton(text="📅 Расписание", callback_data="inka_schedule")
+            ],
+            [
+                InlineKeyboardButton(text="💬 Свободный запрос", callback_data="inka_free")
+            ]
+        ])
+        
+        await message.reply(
+            "🧠 *ИНКА - Административный ассистент*\n\n"
+            "Я могу помочь с управлением салоном!\n\n"
+            "Примеры команд:\n"
+            "• `/inka покажи всех мастеров`\n"
+            "• `/inka добавь клиента Иван +79991234567`\n"
+            "• `/inka создай запись на завтра 14:00`\n"
+            "• `/inka отмени запись #123`\n"
+            "• `/inka какая выручка за неделю?`\n"
+            "• `/inka свободные слоты у Ани на понедельник`\n\n"
+            "Или выбери быстрое действие:",
+            reply_markup=keyboard,
+            parse_mode="Markdown"
+        )
+
+
+async def process_inka_command(message: types.Message, command_text: str):
+    """Обработать команду для ИНКИ"""
+    inka = get_inka_processor()
+    
+    if not inka:
+        await message.reply("❌ ИНКА временно недоступна")
+        return
+    
+    # Показываем что думаем
+    thinking_msg = await message.reply("🤔 Думаю...")
+    
+    try:
+        # Выполняем админ-команду
+        response = inka.admin_command(command_text, message.from_user.id)
+        
+        # Удаляем сообщение о процессе
+        await thinking_msg.delete()
+        
+        # Отправляем ответ
+        await message.reply(response, parse_mode="Markdown")
+        
+    except Exception as e:
+        logger.error(f"INKA command error: {e}")
+        await thinking_msg.edit_text(f"❌ Ошибка: {str(e)}")
+
+
+@router.callback_query(F.data == "inka_stats")
+async def inka_quick_stats(query: types.CallbackQuery):
+    """Быстрая статистика через ИНКУ"""
+    await query.answer()
+    
+    inka = get_inka_processor()
+    if not inka:
+        await query.message.edit_text("❌ ИНКА недоступна")
+        return
+    
+    stats = inka.get_quick_stats()
+    
+    keyboard = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="🔄 Обновить", callback_data="inka_stats")],
+        [InlineKeyboardButton(text="⬅️ Назад", callback_data="inka_back")]
+    ])
+    
+    await query.message.edit_text(stats, reply_markup=keyboard, parse_mode="Markdown")
+
+
+@router.callback_query(F.data == "inka_schedule")
+async def inka_today_schedule(query: types.CallbackQuery):
+    """Расписание на сегодня через ИНКУ"""
+    await query.answer()
+    
+    inka = get_inka_processor()
+    if not inka:
+        await query.message.edit_text("❌ ИНКА недоступна")
+        return
+    
+    schedule = inka.get_today_schedule()
+    
+    keyboard = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="🔄 Обновить", callback_data="inka_schedule")],
+        [InlineKeyboardButton(text="⬅️ Назад", callback_data="inka_back")]
+    ])
+    
+    await query.message.edit_text(schedule, reply_markup=keyboard, parse_mode="Markdown")
+
+
+@router.callback_query(F.data == "inka_free")
+async def inka_free_command(query: types.CallbackQuery, state: FSMContext):
+    """Режим свободного запроса к ИНКЕ"""
+    await query.answer()
+    await state.set_state(InkaAdminStates.waiting_command)
+    
+    await query.message.edit_text(
+        "💬 *Свободный режим*\n\n"
+        "Напиши любую команду на русском языке.\n"
+        "Например:\n"
+        "• Добавь мастера Анна, специализация тату\n"
+        "• Покажи записи на завтра\n"
+        "• Какой доход за последнюю неделю?\n"
+        "• Отмени запись клиента Иван на 15:00\n\n"
+        "Напиши /cancel для выхода",
+        parse_mode="Markdown"
+    )
+
+
+@router.message(InkaAdminStates.waiting_command)
+async def inka_handle_free_command(message: types.Message, state: FSMContext):
+    """Обработать свободную команду для ИНКИ"""
+    if message.text == "/cancel":
+        await state.clear()
+        await message.reply("Выход из режима ИНКИ")
+        return
+    
+    await process_inka_command(message, message.text)
+
+
+@router.callback_query(F.data == "inka_back")
+async def inka_back(query: types.CallbackQuery, state: FSMContext):
+    """Вернуться в меню ИНКИ"""
+    await query.answer()
+    await state.clear()
+    
+    keyboard = InlineKeyboardMarkup(inline_keyboard=[
+        [
+            InlineKeyboardButton(text="📊 Статистика", callback_data="inka_stats"),
+            InlineKeyboardButton(text="📅 Расписание", callback_data="inka_schedule")
+        ],
+        [
+            InlineKeyboardButton(text="💬 Свободный запрос", callback_data="inka_free")
+        ]
+    ])
+    
+    await query.message.edit_text(
+        "🧠 *ИНКА - Административный ассистент*\n\n"
+        "Выбери действие или напиши `/inka <команда>`",
+        reply_markup=keyboard,
+        parse_mode="Markdown"
+    )

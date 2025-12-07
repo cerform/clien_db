@@ -25,60 +25,71 @@ router = Router()
 _sheet_client_cache = None
 _calendar_service_cache = None
 _inka_cache = None
-_initialization_lock = asyncio.Lock()  # Для потокобезопасности
+_initialization_lock = None  # Инициализируется лениво
+
+
+def get_initialization_lock():
+    """Получить lock для инициализации (lazy создание в правильном event loop)"""
+    global _initialization_lock
+    if _initialization_lock is None:
+        try:
+            _initialization_lock = asyncio.Lock()
+        except RuntimeError:
+            # Если нет event loop, создаём простую заглушку
+            return None
+    return _initialization_lock
 
 
 async def get_sheet_client_cached_async():
     """Get cached Google Sheets client (async, with lazy initialization)"""
-    global _sheet_client_cache, _initialization_lock
+    global _sheet_client_cache
     
     if _sheet_client_cache is not None:
         return _sheet_client_cache
     
-    async with _initialization_lock:
-        # Двойная проверка после получения lock
+    # Простая инициализация без lock (lock вызывает проблемы в FastAPI context)
+    try:
+        # Двойная проверка
         if _sheet_client_cache is not None:
             return _sheet_client_cache
         
-        try:
-            logger.info("⏳ Initializing Google Sheets client...")
-            config = get_config()
-            _sheet_client_cache = GoogleSheetsClient(
-                "", 
-                config.google_spreadsheet_id
-            )
-            logger.info("✅ Google Sheets client initialized (cached)")
-        except Exception as e:
-            logger.error(f"Failed to initialize Sheets client: {e}")
-            return None
+        logger.info("⏳ Initializing Google Sheets client...")
+        config = get_config()
+        _sheet_client_cache = GoogleSheetsClient(
+            "", 
+            config.google_spreadsheet_id
+        )
+        logger.info("✅ Google Sheets client initialized (cached)")
+    except Exception as e:
+        logger.error(f"Failed to initialize Sheets client: {e}")
+        return None
     
     return _sheet_client_cache
 
 
 async def get_calendar_service_cached_async():
     """Get cached Google Calendar service (async, with lazy initialization)"""
-    global _calendar_service_cache, _initialization_lock
+    global _calendar_service_cache
     
     if _calendar_service_cache is not None:
         return _calendar_service_cache
     
-    async with _initialization_lock:
-        # Двойная проверка после получения lock
+    try:
+        # Двойная проверка
         if _calendar_service_cache is not None:
             return _calendar_service_cache
         
-        try:
-            logger.info("⏳ Initializing Google Calendar service...")
-            config = get_config()
-            _calendar_service_cache = get_calendar_service("")
-            
-            if _calendar_service_cache:
-                logger.info("✅ Google Calendar service initialized (cached)")
-            else:
-                logger.warning("⚠️ Google Calendar service unavailable - will use fallback")
-        except Exception as e:
-            logger.error(f"Failed to initialize Calendar service: {e}")
-            # Не возвращаем ошибку, продолжаем работу без календаря
+        logger.info("⏳ Initializing Google Calendar service...")
+        config = get_config()
+        _calendar_service_cache = get_calendar_service("")
+        
+        if _calendar_service_cache:
+            logger.info("✅ Google Calendar service initialized (cached)")
+        else:
+            logger.warning("⚠️ Google Calendar service unavailable - will use fallback")
+    except Exception as e:
+        logger.error(f"Failed to initialize Calendar service: {e}")
+        # Не возвращаем ошибку, продолжаем работу без календаря
     
     return _calendar_service_cache
 
@@ -142,8 +153,13 @@ async def admin_command(message: Message):
         return
     
     logger.info(f"✅ Admin {user_id} вошёл в панель")
+    
+    # URL админ-панели
+    admin_url = "https://tattoo-bot-408800151466.us-central1.run.app"
+    
     await message.answer(
         "👑 <b>Админ панель:</b>\n\n"
+        f"🔗 <b>Веб-панель:</b> {admin_url}\n\n"
         "Доступные команды:\n"
         "/admin - Эта панель\n"
         "/stats - Статистика\n"

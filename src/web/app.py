@@ -394,6 +394,12 @@ def get_dashboard_html() -> str:
                         <p>Статистика и отчеты</p>
                     </div>
                     
+                    <div class="card" onclick="goTo('/admin/schedule')">
+                        <div class="card-icon">📅</div>
+                        <h3>Расписание</h3>
+                        <p>Календарь салона и мастеров</p>
+                    </div>
+                    
                     <div class="card" onclick="goTo('/console')">
                         <div class="card-icon">🔍</div>
                         <h3>Веб-Консоль</h3>
@@ -443,6 +449,45 @@ def get_dashboard_html() -> str:
         </div>
         
         <script>
+            // Функция перехода по страницам
+            function goTo(path) {
+                window.location.href = path;
+            }
+            
+            // Функция выхода
+            function logout() {
+                localStorage.removeItem('admin_token');
+                window.location.href = '/login';
+            }
+            
+            // Функции администратора
+            function adminFunction(funcName) {
+                let message = '';
+                
+                switch(funcName) {
+                    case 'edit_master':
+                        message = 'Напиши ИНКЕ в Telegram: "Обнови мастера [ID]: [параметры]"\\nПримеры: "Обнови мастера 1: имя Анна, ставка 5000"';
+                        break;
+                    case 'edit_service':
+                        message = 'Напиши ИНКЕ в Telegram: "Измени услугу [ID]: [параметры]"\\nПримеры: "Измени услугу 1: цена 3000"';
+                        break;
+                    case 'add_schedule':
+                        message = 'Напиши ИНКЕ в Telegram: "Добавь слот мастеру [ID] на [дату] [время]"\\nПримеры: "Добавь выходной на 2025-12-25 с 10:00 до 18:00"';
+                        break;
+                    case 'cancel_booking':
+                        message = 'Напиши ИНКЕ в Telegram: "Отмени запись [ID] - [причина]"\\nПримеры: "Отмени запись 42 - клиент отменил"';
+                        break;
+                    case 'export_stats':
+                        message = 'Напиши ИНКЕ в Telegram: "Дай статистику по [тип]"\\nТипы: revenue (доход), bookings (записи), masters (мастера), services (услуги)';
+                        break;
+                    case 'broadcast':
+                        message = 'Напиши ИНКЕ в Telegram: "Отправь всем сообщение: [текст]"\\nПримеры: "Отправь всем: новое предложение скидка 20%!"';
+                        break;
+                }
+                
+                alert('👑 Инструмент администратора\\n\\n' + message + '\\n\\nЭто отправляется в ИНКУ через Telegram (только админы!)');
+            }
+            
             // Load stats when page loads
             async function loadStats() {
                 try {
