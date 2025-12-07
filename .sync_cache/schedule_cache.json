@@ -1,0 +1,196 @@
+{
+  "table": "schedule",
+  "timestamp": "2025-12-05T16:36:19.118902",
+  "row_count": 21,
+  "data": [
+    {
+      "id": "sch_anna_mon",
+      "master_id": "m_anna_levi",
+      "day_of_week": "0",
+      "start_time": "10:00",
+      "end_time": "19:00",
+      "is_working": "TRUE",
+      "notes": "Обеденный перерыв 13:00-14:00"
+    },
+    {
+      "id": "sch_anna_tue",
+      "master_id": "m_anna_levi",
+      "day_of_week": "1",
+      "start_time": "10:00",
+      "end_time": "19:00",
+      "is_working": "TRUE",
+      "notes": "Обеденный перерыв 13:00-14:00"
+    },
+    {
+      "id": "sch_anna_wed",
+      "master_id": "m_anna_levi",
+      "day_of_week": "2",
+      "start_time": "10:00",
+      "end_time": "19:00",
+      "is_working": "TRUE",
+      "notes": "Обеденный перерыв 13:00-14:00"
+    },
+    {
+      "id": "sch_anna_thu",
+      "master_id": "m_anna_levi",
+      "day_of_week": "3",
+      "start_time": "10:00",
+      "end_time": "19:00",
+      "is_working": "TRUE",
+      "notes": "Обеденный перерыв 13:00-14:00"
+    },
+    {
+      "id": "sch_anna_fri",
+      "master_id": "m_anna_levi",
+      "day_of_week": "4",
+      "start_time": "10:00",
+      "end_time": "17:00",
+      "is_working": "TRUE",
+      "notes": "Последний слот 16:00"
+    },
+    {
+      "id": "sch_anna_sat",
+      "master_id": "m_anna_levi",
+      "day_of_week": "5",
+      "start_time": "12:00",
+      "end_time": "17:00",
+      "is_working": "TRUE",
+      "notes": "Выходной в понедельник"
+    },
+    {
+      "id": "sch_anna_sun",
+      "master_id": "m_anna_levi",
+      "day_of_week": "6",
+      "start_time": "0:00",
+      "end_time": "0:00",
+      "is_working": "FALSE",
+      "notes": "Выходной"
+    },
+    {
+      "id": "sch_omer_mon",
+      "master_id": "m_omer_cohen",
+      "day_of_week": "0",
+      "start_time": "11:00",
+      "end_time": "20:00",
+      "is_working": "TRUE",
+      "notes": "Обеденный перерыв 14:00-15:00"
+    },
+    {
+      "id": "sch_omer_tue",
+      "master_id": "m_omer_cohen",
+      "day_of_week": "1",
+      "start_time": "11:00",
+      "end_time": "20:00",
+      "is_working": "TRUE",
+      "notes": "Обеденный перерыв 14:00-15:00"
+    },
+    {
+      "id": "sch_omer_wed",
+      "master_id": "m_omer_cohen",
+      "day_of_week": "2",
+      "start_time": "11:00",
+      "end_time": "20:00",
+      "is_working": "TRUE",
+      "notes": "Обеденный перерыв 14:00-15:00"
+    },
+    {
+      "id": "sch_omer_thu",
+      "master_id": "m_omer_cohen",
+      "day_of_week": "3",
+      "start_time": "11:00",
+      "end_time": "20:00",
+      "is_working": "TRUE",
+      "notes": "Обеденный перерыв 14:00-15:00"
+    },
+    {
+      "id": "sch_omer_fri",
+      "master_id": "m_omer_cohen",
+      "day_of_week": "4",
+      "start_time": "11:00",
+      "end_time": "18:00",
+      "is_working": "TRUE",
+      "notes": "Сокращённый день"
+    },
+    {
+      "id": "sch_omer_sat",
+      "master_id": "m_omer_cohen",
+      "day_of_week": "5",
+      "start_time": "0:00",
+      "end_time": "0:00",
+      "is_working": "FALSE",
+      "notes": "Выходной (Суббота)"
+    },
+    {
+      "id": "sch_omer_sun",
+      "master_id": "m_omer_cohen",
+      "day_of_week": "6",
+      "start_time": "0:00",
+      "end_time": "0:00",
+      "is_working": "FALSE",
+      "notes": "Выходной (Воскресенье)"
+    },
+    {
+      "id": "sch_sarah_mon",
+      "master_id": "m_sarah_nir",
+      "day_of_week": "0",
+      "start_time": "10:00",
+      "end_time": "18:00",
+      "is_working": "TRUE",
+      "notes": ""
+    },
+    {
+      "id": "sch_sarah_tue",
+      "master_id": "m_sarah_nir",
+      "day_of_week": "1",
+      "start_time": "10:00",
+      "end_time": "18:00",
+      "is_working": "TRUE",
+      "notes": ""
+    },
+    {
+      "id": "sch_sarah_wed",
+      "master_id": "m_sarah_nir",
+      "day_of_week": "2",
+      "start_time": "10:00",
+      "end_time": "18:00",
+      "is_working": "TRUE",
+      "notes": ""
+    },
+    {
+      "id": "sch_sarah_thu",
+      "master_id": "m_sarah_nir",
+      "day_of_week": "3",
+      "start_time": "10:00",
+      "end_time": "18:00",
+      "is_working": "TRUE",
+      "notes": ""
+    },
+    {
+      "id": "sch_sarah_fri",
+      "master_id": "m_sarah_nir",
+      "day_of_week": "4",
+      "start_time": "10:00",
+      "end_time": "17:00",
+      "is_working": "TRUE",
+      "notes": ""
+    },
+    {
+      "id": "sch_sarah_sat",
+      "master_id": "m_sarah_nir",
+      "day_of_week": "5",
+      "start_time": "10:00",
+      "end_time": "14:00",
+      "is_working": "TRUE",
+      "notes": "Половина дня"
+    },
+    {
+      "id": "sch_sarah_sun",
+      "master_id": "m_sarah_nir",
+      "day_of_week": "6",
+      "start_time": "0:00",
+      "end_time": "0:00",
+      "is_working": "FALSE",
+      "notes": "Выходной"
+    }
+  ]
+}

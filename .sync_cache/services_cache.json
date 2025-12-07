@@ -1,0 +1,87 @@
+{
+  "table": "services",
+  "timestamp": "2025-12-05T16:36:18.199083",
+  "row_count": 8,
+  "data": [
+    {
+      "id": "s_tattoo_small",
+      "name": "Маленькая татуировка",
+      "description": "До 5 см. Простой дизайн, 1-2 часа",
+      "duration_min": "60",
+      "price_from": "250",
+      "price_to": "500",
+      "category": "tattoo",
+      "active": "TRUE"
+    },
+    {
+      "id": "s_tattoo_medium",
+      "name": "Средняя татуировка",
+      "description": "5-15 см. Средняя сложность, 2-4 часа",
+      "duration_min": "120",
+      "price_from": "600",
+      "price_to": "1500",
+      "category": "tattoo",
+      "active": "TRUE"
+    },
+    {
+      "id": "s_tattoo_large",
+      "name": "Большая татуировка",
+      "description": "15+ см. Сложный дизайн, 4+ часа",
+      "duration_min": "240",
+      "price_from": "1800",
+      "price_to": "5000",
+      "category": "tattoo",
+      "active": "TRUE"
+    },
+    {
+      "id": "s_tattoo_text",
+      "name": "Надпись (текст)",
+      "description": "Простая надпись до 10 слов. 30-60 мин",
+      "duration_min": "45",
+      "price_from": "250",
+      "price_to": "400",
+      "category": "tattoo",
+      "active": "TRUE"
+    },
+    {
+      "id": "s_piercing_ear",
+      "name": "Пирсинг уха",
+      "description": "Классический пирсинг уха (мочка, хрящ)",
+      "duration_min": "30",
+      "price_from": "90",
+      "price_to": "150",
+      "category": "piercing",
+      "active": "TRUE"
+    },
+    {
+      "id": "s_piercing_nose",
+      "name": "Пирсинг носа",
+      "description": "Пирсинг носа (крыло, септум)",
+      "duration_min": "30",
+      "price_from": "120",
+      "price_to": "180",
+      "category": "piercing",
+      "active": "TRUE"
+    },
+    {
+      "id": "s_piercing_body",
+      "name": "Пирсинг тела",
+      "description": "Пирсинг пупка, губы, языка, других зон",
+      "duration_min": "30",
+      "price_from": "150",
+      "price_to": "250",
+      "category": "piercing",
+      "active": "TRUE"
+    },
+    {
+      "id": "s_consultation",
+      "name": "Консультация",
+      "description": "Бесплатная первичная консультация с мастером",
+      "duration_min": "30",
+      "price_from": "0",
+      "price_to": "0",
+      "category": "consultation",
+      "active": "TRUE"
+    }
+  ]
+}

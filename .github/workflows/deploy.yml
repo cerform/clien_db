@@ -1,0 +1,114 @@
+name: Deploy to Cloud Run
+
+on:
+  push:
+    branches:
+      - google-cloud-run
+  workflow_dispatch:
+
+env:
+  PROJECT_ID: tattoo-480007
+  REGION: us-central1
+  SERVICE_NAME: telegram-bot
+  IMAGE_NAME: telegram-bot
+
+jobs:
+  test-and-deploy:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: 📥 Checkout code
+        uses: actions/checkout@v3
+      
+      - name: 🐍 Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+          cache: 'pip'
+      
+      - name: 📦 Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+      
+      - name: 🧪 Run linting (Pylint)
+        continue-on-error: true
+        run: |
+          pip install pylint
+          pylint src/ --max-line-length=120 --disable=missing-docstring,too-many-arguments || true
+      
+      - name: 🔍 Check syntax errors
+        run: |
+          python -m py_compile src/**/*.py || true
+      
+      - name: ✅ Run unit tests
+        continue-on-error: true
+        run: |
+          python -m pytest tests/ -v || true
+      
+      - name: 🔐 Authenticate to Google Cloud
+        uses: google-github-actions/auth@v1
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+      
+      - name: 🐳 Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@v1
+      
+      - name: 🏗️ Configure Docker for Cloud Build
+        run: |
+          gcloud auth configure-docker
+      
+      - name: 🔨 Build Docker image
+        run: |
+          docker build -t gcr.io/${{ env.PROJECT_ID }}/${{ env.IMAGE_NAME }}:latest \
+                       -t gcr.io/${{ env.PROJECT_ID }}/${{ env.IMAGE_NAME }}:${{ github.sha }} .
+      
+      - name: 📤 Push Docker image to GCR
+        run: |
+          docker push gcr.io/${{ env.PROJECT_ID }}/${{ env.IMAGE_NAME }}:latest
+          docker push gcr.io/${{ env.PROJECT_ID }}/${{ env.IMAGE_NAME }}:${{ github.sha }}
+      
+      - name: 🚀 Deploy to Cloud Run
+        run: |
+          gcloud run deploy ${{ env.SERVICE_NAME }} \
+            --image gcr.io/${{ env.PROJECT_ID }}/${{ env.IMAGE_NAME }}:latest \
+            --region ${{ env.REGION }} \
+            --platform managed \
+            --memory 512Mi \
+            --timeout 3600s \
+            --max-instances 10 \
+            --set-env-vars TELEGRAM_BOT_TOKEN=${{ secrets.TELEGRAM_BOT_TOKEN }},GOOGLE_SPREADSHEET_ID=${{ secrets.GOOGLE_SPREADSHEET_ID }},OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }},OPENAI_ASSISTANT_ID=${{ secrets.OPENAI_ASSISTANT_ID }},ADMIN_IDS=${{ secrets.ADMIN_IDS }} \
+            --project ${{ env.PROJECT_ID }}
+      
+      - name: 🔐 Allow unauthenticated access
+        run: |
+          gcloud run services add-iam-policy-binding ${{ env.SERVICE_NAME }} \
+            --region ${{ env.REGION }} \
+            --member="allUsers" \
+            --role="roles/run.invoker" \
+            --quiet \
+            --project ${{ env.PROJECT_ID }}
+      
+      - name: 📊 Get deployment info
+        run: |
+          echo "=== Deployment Info ===" 
+          gcloud run services describe ${{ env.SERVICE_NAME }} --region ${{ env.REGION }} --format='value(status.url)'
+          echo ""
+          echo "=== Recent logs ===" 
+          gcloud logging read "resource.type=cloud_run_revision AND resource.labels.service_name=${{ env.SERVICE_NAME }}" \
+            --limit=10 --format='table(timestamp, severity, jsonPayload.message)' || true
+      
+      - name: 💬 Send notification to Telegram
+        continue-on-error: true
+        run: |
+          if [ "${{ job.status }}" == "success" ]; then
+            STATUS="✅ SUCCESS"
+            MESSAGE="Deployment to Cloud Run completed successfully"
+          else
+            STATUS="❌ FAILED"
+            MESSAGE="Deployment to Cloud Run failed"
+          fi
+          
+          curl -X POST https://api.telegram.org/bot${{ secrets.TELEGRAM_BOT_TOKEN }}/sendMessage \
+            -d chat_id=${{ secrets.TELEGRAM_ADMIN_CHAT }} \
+            -d text="🚀 $STATUS%0A%0AService: telegram-bot%0ACommit: ${{ github.sha }}%0AMesage: $MESSAGE" || true

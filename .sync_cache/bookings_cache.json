@@ -1,0 +1,33 @@
+{
+  "table": "bookings",
+  "timestamp": "2025-12-05T16:36:20.025171",
+  "row_count": 2,
+  "data": [
+    {
+      "id": "ee83b43b-b730-411f-bba9-0226d03cf431",
+      "client_id": "c_test_1",
+      "master_id": "m_anna_levi",
+      "service_id": "s_tattoo_small",
+      "date": "2025-12-10",
+      "time": "14:00",
+      "duration_min": "60",
+      "price": "300",
+      "status": "confirmed",
+      "notes": "Надпись на запястье на иврите",
+      "created_at": "2025-12-01 10:00:00"
+    },
+    {
+      "id": "6c3f1ffb-d012-4d15-b9df-a1f4f2c18abc",
+      "client_id": "c_test_1",
+      "master_id": "m_sarah_nir",
+      "service_id": "s_piercing_ear",
+      "date": "2025-12-15",
+      "time": "11:00",
+      "duration_min": "30",
+      "price": "120",
+      "status": "pending",
+      "notes": "Пирсинг хряща уха",
+      "created_at": "2025-12-02 15:30:00"
+    }
+  ]
+}
