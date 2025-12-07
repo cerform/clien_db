@@ -161,18 +161,7 @@ async def masters_page():
                         return;
                     }
                     
-                    tbody.innerHTML = masters.map(m => `
-                        <tr>
-                            <td>${m.id || '-'}</td>
-                            <td>${m.name || '-'}</td>
-                            <td>${m.specialization || '-'}</td>
-                            <td>${m.experience_years || '-'}</td>
-                            <td>
-                                <button onclick="editMaster(${m.id})" style="margin-right:5px">✏️ Редактировать</button>
-                                <button onclick="deleteMaster(${m.id})" style="background:#e74c3c">🗑️ Удалить</button>
-                            </td>
-                        </tr>
-                    `).join('');
+                    tbody.innerHTML = masters.map(m => `<tr><td>${m.id || '-'}</td><td>${m.name || '-'}</td><td>${m.specialization || '-'}</td><td>${m.experience_years || '-'}</td><td><button onclick="editMaster(${m.id})" style="margin-right:5px">✏️ Редактировать</button><button onclick="deleteMaster(${m.id})" style="background:#e74c3c">🗑️ Удалить</button></td></tr>`).join('');
                 } catch (error) {
                     console.error('Error:', error);
                     document.getElementById('mastersList').innerHTML = '<tr><td colspan="5">Ошибка загрузки</td></tr>';
@@ -426,20 +415,8 @@ async def inka_training_page():
                 const response = await fetch('/api/inka-training-stats');
                 const data = await response.json();
                 
-                document.getElementById('stats').innerHTML = `
-                    <div class="stat-box">
-                        <div class="stat-value">${data.total_sessions || 0}</div>
-                        <div>Всего сеансов</div>
-                    </div>
-                    <div class="stat-box">
-                        <div class="stat-value">${data.successful_trainings || 0}</div>
-                        <div>Успешных</div>
-                    </div>
-                    <div class="stat-box">
-                        <div class="stat-value">${(data.average_score || 0).toFixed(2)}</div>
-                        <div>Средний рейтинг</div>
-                    </div>
-                `;
+                const statsHTML = `<div class="stat-box"><div class="stat-value">${data.total_sessions || 0}</div><div>Всего сеансов</div></div><div class="stat-box"><div class="stat-value">${data.successful_trainings || 0}</div><div>Успешных</div></div><div class="stat-box"><div class="stat-value">${(data.average_score || 0).toFixed(2)}</div><div>Средний рейтинг</div></div>`;
+                document.getElementById('stats').innerHTML = statsHTML;
             }
             
             async function trainInka() {
