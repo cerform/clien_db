@@ -162,7 +162,11 @@ class DatabaseManager:
                         "telegram_id": row[3] if len(row) > 3 else "",
                         "specialization": row[4] if len(row) > 4 else "",
                         "rating": row[5] if len(row) > 5 else "0",
-                        "status": row[8] if len(row) > 8 else "active"
+                        "experience": row[6] if len(row) > 6 else "",
+                        "instagram": row[7] if len(row) > 7 else "",
+                        "status": row[8] if len(row) > 8 else "active",
+                        "bio": row[9] if len(row) > 9 else "",
+                        "calendar_id": row[10] if len(row) > 10 else ""
                     })
             
             return {
@@ -202,7 +206,7 @@ class DatabaseManager:
             ]
             
             # Добавить в БД
-            self.sheets.append_rows("Мастера", [new_master])
+            self.sheets.append_rows("Masters", [new_master])
             return True, f"✅ Мастер {master_data['name']} добавлен!"
         
         except Exception as e:

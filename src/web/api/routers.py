@@ -1000,6 +1000,71 @@ async def create_calendar_event(request: Request) -> Dict[str, Any]:
         raise HTTPException(status_code=500, detail=str(e))
 
 
+# ================== SETTINGS ==================
+
+@api_router.get("/settings/salon-calendar")
+async def get_salon_calendar() -> Dict[str, Any]:
+    """Get salon calendar settings"""
+    try:
+        from src.web.app import db_manager
+        
+        if not db_manager:
+            raise HTTPException(status_code=500, detail="Database not initialized")
+        
+        # Try to get from settings sheet
+        try:
+            data = db_manager.sheets.get_sheet_values("Настройки", "A:C")
+            for row in data:
+                if len(row) > 1 and row[0] == "Календарь салона":
+                    return {"calendar_id": row[1]}
+        except:
+            pass
+        
+        return {"calendar_id": ""}
+    except Exception as e:
+        logger.error(f"Error getting salon calendar: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@api_router.post("/settings/salon-calendar")
+async def save_salon_calendar(request: Request) -> Dict[str, Any]:
+    """Save salon calendar settings"""
+    try:
+        from src.web.app import db_manager
+        
+        body = await request.json()
+        calendar_id = body.get("calendar_id", "")
+        
+        if not db_manager:
+            raise HTTPException(status_code=500, detail="Database not initialized")
+        
+        # Try to update settings sheet
+        try:
+            data = db_manager.sheets.get_sheet_values("Настройки", "A:C")
+            row_idx = None
+            
+            for i, row in enumerate(data):
+                if len(row) > 0 and row[0] == "Календарь салона":
+                    row_idx = i
+                    break
+            
+            if row_idx is not None:
+                # Update existing row
+                db_manager.sheets.update_range("Настройки", f"B{row_idx+1}", [[calendar_id]])
+            else:
+                # Add new row
+                db_manager.sheets.append_rows("Настройки", [["Календарь салона", calendar_id, "ID Google Calendar для общего календаря салона"]])
+            
+            return {"success": True, "message": "Настройки сохранены"}
+        except Exception as e:
+            logger.error(f"Error saving settings: {e}")
+            return {"success": False, "detail": str(e)}
+            
+    except Exception as e:
+        logger.error(f"Error saving salon calendar: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @api_router.get("/calendar/availability/{master_id}")
 async def get_master_availability(master_id: str, date: str) -> Dict[str, Any]:
     """Get available time slots for a master on a specific date"""

@@ -1982,6 +1982,7 @@ async def schedule_page():
                     <button class="tab active" onclick="showTab('salon')">🏠 Календарь салона</button>
                     <button class="tab" onclick="showTab('masters')">👨‍🎨 Календари мастеров</button>
                     <button class="tab" onclick="showTab('availability')">⏰ Доступность</button>
+                    <button class="tab" onclick="showTab('settings')">⚙️ Настройки</button>
                 </div>
                 
                 <!-- Salon Calendar -->
@@ -2046,6 +2047,55 @@ async def schedule_page():
                     <h4>Доступные слоты:</h4>
                     <div class="availability-grid" id="availabilityGrid">
                         <p>Выберите мастера и дату</p>
+                    </div>
+                </div>
+                
+                <!-- Settings Tab -->
+                <div id="settingsTab" class="tab-content" style="display:none">
+                    <div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(400px, 1fr));gap:20px">
+                        <!-- Salon Calendar Settings -->
+                        <div style="background:#f8f9fa;padding:20px;border-radius:10px">
+                            <h3>🏠 Календарь салона</h3>
+                            <p style="color:#666;margin:10px 0">Общий календарь для отображения всех записей</p>
+                            <div class="form-group">
+                                <label>Google Calendar ID салона</label>
+                                <input type="text" id="salonCalendarId" placeholder="xxx@group.calendar.google.com">
+                                <small style="color:#888">Оставьте пустым для использования только внутренней системы записей</small>
+                            </div>
+                            <button class="btn btn-primary" onclick="saveSalonCalendar()">💾 Сохранить</button>
+                        </div>
+                        
+                        <!-- Instructions -->
+                        <div style="background:#e8f4fd;padding:20px;border-radius:10px">
+                            <h3>📖 Как добавить календарь мастера</h3>
+                            <ol style="padding-left:20px;line-height:1.8">
+                                <li><strong>Откройте</strong> <a href="https://calendar.google.com" target="_blank">Google Calendar</a></li>
+                                <li><strong>Создайте</strong> новый календарь для мастера (+ → Создать календарь)</li>
+                                <li><strong>Откройте</strong> настройки созданного календаря (⋮ → Настройки)</li>
+                                <li><strong>Найдите</strong> раздел "Интеграция календаря"</li>
+                                <li><strong>Скопируйте</strong> "Идентификатор календаря" (выглядит как xxx@group.calendar.google.com)</li>
+                                <li><strong>Вставьте</strong> ID в поле "Google Calendar ID" при редактировании мастера</li>
+                            </ol>
+                            
+                            <h4 style="margin-top:20px">⚠️ Важно для работы:</h4>
+                            <ul style="padding-left:20px;line-height:1.8">
+                                <li><strong>Откройте доступ</strong> к календарю для сервисного аккаунта:<br>
+                                    <code style="background:#fff;padding:2px 6px;border-radius:3px;font-size:12px">tattoo-480007@appspot.gserviceaccount.com</code></li>
+                                <li>Добавьте этот email в настройках календаря → "Доступ для отдельных пользователей"</li>
+                                <li>Дайте права "Внесение изменений"</li>
+                            </ul>
+                        </div>
+                        
+                        <!-- Masters without calendar -->
+                        <div style="background:#fff3cd;padding:20px;border-radius:10px">
+                            <h3>⚠️ Мастера без календаря</h3>
+                            <div id="mastersWithoutCalendar">
+                                <p>Загрузка...</p>
+                            </div>
+                            <button class="btn" style="margin-top:10px" onclick="window.location.href='/admin/masters'">
+                                ✏️ Редактировать мастеров
+                            </button>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -2123,8 +2173,46 @@ async def schedule_page():
                         masters.filter(m => m.status === 'active')
                             .map(m => `<option value="${m.id}">${m.name}</option>`).join('');
                     
+                    // Update masters without calendar list
+                    updateMastersWithoutCalendar();
+                    
                 } catch (e) {
                     console.error('Error loading masters:', e);
+                }
+            }
+            
+            function updateMastersWithoutCalendar() {
+                const withoutCalendar = masters.filter(m => m.status === 'active' && !m.calendar_id);
+                const container = document.getElementById('mastersWithoutCalendar');
+                
+                if (withoutCalendar.length === 0) {
+                    container.innerHTML = '<p style="color:green">✅ Все мастера имеют настроенные календари!</p>';
+                } else {
+                    container.innerHTML = withoutCalendar.map(m => `
+                        <div style="padding:8px;margin:5px 0;background:#fff;border-radius:5px;display:flex;justify-content:space-between;align-items:center">
+                            <span><strong>${m.name}</strong> - ${m.specialization || 'не указано'}</span>
+                            <a href="/admin/masters" style="color:#667eea">Настроить →</a>
+                        </div>
+                    `).join('');
+                }
+            }
+            
+            async function saveSalonCalendar() {
+                const calendarId = document.getElementById('salonCalendarId').value;
+                try {
+                    const response = await fetch('/api/settings/salon-calendar', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ calendar_id: calendarId })
+                    });
+                    const result = await response.json();
+                    if (result.success) {
+                        alert('✅ Календарь салона сохранён!');
+                    } else {
+                        alert('❌ Ошибка: ' + (result.detail || 'Неизвестная ошибка'));
+                    }
+                } catch (e) {
+                    alert('❌ Ошибка сохранения: ' + e.message);
                 }
             }
             
@@ -2137,6 +2225,7 @@ async def schedule_page():
                 
                 if (tab === 'salon') loadSalonCalendar();
                 if (tab === 'masters' && currentMasterId) loadMasterCalendar();
+                if (tab === 'settings') updateMastersWithoutCalendar();
             }
             
             function formatDate(date) {
