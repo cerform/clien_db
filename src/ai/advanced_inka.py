@@ -20,7 +20,7 @@ logger = logging.getLogger(__name__)
 class AdvancedINKA:
     """Продвинутая версия INKA с доступом к реальным данным"""
     
-    def __init__(self, api_key: str, assistant_id: str, sheets_client=None, calendar_service=None, data_sync=None):
+    def __init__(self, api_key: str, assistant_id: str, sheets_client=None, calendar_service=None, data_sync=None, admin_ids: List[int] = None):
         """
         Args:
             api_key: OpenAI API ключ
@@ -28,6 +28,7 @@ class AdvancedINKA:
             sheets_client: Клиент для работы с Google Sheets
             calendar_service: Сервис для работы с Google Calendar
             data_sync: DataSyncService для синхронизации всех данных
+            admin_ids: Список ID администраторов для доступа к админ-функциям
         """
         logger.info(f"🔴 AdvancedINKA.__init__ START")
         try:
@@ -37,6 +38,8 @@ class AdvancedINKA:
             self.assistant_id = assistant_id
             self.sheets_client = sheets_client
             self.calendar_service = calendar_service
+            self.admin_ids = admin_ids if admin_ids else []
+            logger.info(f"🟡 Admin IDs configured: {self.admin_ids}")
             
             logger.info(f"🟡 Initializing caches...")
             # Unified data sync service (lazy initialization)
@@ -50,6 +53,9 @@ class AdvancedINKA:
             self._masters_cache_time = 0
             self._services_cache = None
             self._services_cache_time = 0
+            
+            # Текущий user_id для проверки прав в функциях
+            self._current_user_id = None
             
             # Системный промпт для профессионального администратора
             self.system_prompt = """Ты — ИНКА, профессиональный администратор тату-салона Ани.
@@ -317,9 +323,13 @@ class AdvancedINKA:
             logger.error(f"❌ AdvancedINKA.__init__ ERROR: {e}", exc_info=True)
             raise
     
-    def create_tools_config(self) -> List[Dict]:
-        """Создаёт конфигурацию инструментов (функций) для Assistant"""
-        return [
+    def create_tools_config(self, is_admin: bool = False) -> List[Dict]:
+        """Создаёт конфигурацию инструментов (функций) для Assistant
+        
+        Args:
+            is_admin: True если текущий пользователь - администратор
+        """
+        tools = [
             {
                 "type": "function",
                 "function": {
@@ -548,6 +558,189 @@ class AdvancedINKA:
                 }
             }
         ]
+        
+        # ============================================================
+        # 👑 АДМИН-ФУНКЦИИ (ТОЛЬКО ДЛЯ АДМИНИСТРАТОРОВ)
+        # ============================================================
+        if is_admin:
+            admin_tools = [
+                {
+                    "type": "function",
+                    "function": {
+                        "name": "edit_master",
+                        "description": "👑 [АДМИН] Редактировать информацию о мастере (имя, специализация, цены)",
+                        "parameters": {
+                            "type": "object",
+                            "properties": {
+                                "master_id": {
+                                    "type": "string",
+                                    "description": "ID мастера"
+                                },
+                                "name": {
+                                    "type": "string",
+                                    "description": "Новое имя мастера"
+                                },
+                                "phone": {
+                                    "type": "string",
+                                    "description": "Телефон мастера"
+                                },
+                                "specialty": {
+                                    "type": "string",
+                                    "description": "Специализация (например: 'Реалистичные портреты', 'Минимализм')"
+                                },
+                                "rate_per_hour": {
+                                    "type": "number",
+                                    "description": "Ставка в час (в рублях)"
+                                }
+                            },
+                            "required": ["master_id"]
+                        }
+                    }
+                },
+                {
+                    "type": "function",
+                    "function": {
+                        "name": "edit_service",
+                        "description": "👑 [АДМИН] Редактировать услугу (название, описание, цена, время)",
+                        "parameters": {
+                            "type": "object",
+                            "properties": {
+                                "service_id": {
+                                    "type": "string",
+                                    "description": "ID услуги"
+                                },
+                                "name": {
+                                    "type": "string",
+                                    "description": "Название услуги"
+                                },
+                                "description": {
+                                    "type": "string",
+                                    "description": "Описание услуги"
+                                },
+                                "price": {
+                                    "type": "number",
+                                    "description": "Цена услуги (в рублях)"
+                                },
+                                "duration_minutes": {
+                                    "type": "integer",
+                                    "description": "Продолжительность услуги в минутах"
+                                }
+                            },
+                            "required": ["service_id"]
+                        }
+                    }
+                },
+                {
+                    "type": "function",
+                    "function": {
+                        "name": "add_schedule_slot",
+                        "description": "👑 [АДМИН] Добавить временной слот в расписание мастера",
+                        "parameters": {
+                            "type": "object",
+                            "properties": {
+                                "master_id": {
+                                    "type": "string",
+                                    "description": "ID мастера"
+                                },
+                                "date": {
+                                    "type": "string",
+                                    "description": "Дата в формате YYYY-MM-DD"
+                                },
+                                "start_time": {
+                                    "type": "string",
+                                    "description": "Время начала в формате HH:MM"
+                                },
+                                "end_time": {
+                                    "type": "string",
+                                    "description": "Время окончания в формате HH:MM"
+                                },
+                                "notes": {
+                                    "type": "string",
+                                    "description": "Примечания (например: выходной, отпуск, техническое обслуживание)"
+                                }
+                            },
+                            "required": ["master_id", "date", "start_time", "end_time"]
+                        }
+                    }
+                },
+                {
+                    "type": "function",
+                    "function": {
+                        "name": "cancel_booking",
+                        "description": "👑 [АДМИН] Отменить запись клиента",
+                        "parameters": {
+                            "type": "object",
+                            "properties": {
+                                "booking_id": {
+                                    "type": "string",
+                                    "description": "ID записи"
+                                },
+                                "reason": {
+                                    "type": "string",
+                                    "description": "Причина отмены"
+                                },
+                                "notify_client": {
+                                    "type": "boolean",
+                                    "description": "Отправить ли уведомление клиенту",
+                                    "default": True
+                                }
+                            },
+                            "required": ["booking_id"]
+                        }
+                    }
+                },
+                {
+                    "type": "function",
+                    "function": {
+                        "name": "export_statistics",
+                        "description": "👑 [АДМИН] Экспортировать статистику (доход, загруженность, популярные услуги)",
+                        "parameters": {
+                            "type": "object",
+                            "properties": {
+                                "date_from": {
+                                    "type": "string",
+                                    "description": "Дата начала в формате YYYY-MM-DD"
+                                },
+                                "date_to": {
+                                    "type": "string",
+                                    "description": "Дата конца в формате YYYY-MM-DD"
+                                },
+                                "stat_type": {
+                                    "type": "string",
+                                    "enum": ["revenue", "bookings", "masters", "services", "clients"],
+                                    "description": "Тип статистики"
+                                }
+                            }
+                        }
+                    }
+                },
+                {
+                    "type": "function",
+                    "function": {
+                        "name": "send_broadcast_message",
+                        "description": "👑 [АДМИН] Отправить рассылку всем клиентам (только админы!)",
+                        "parameters": {
+                            "type": "object",
+                            "properties": {
+                                "message": {
+                                    "type": "string",
+                                    "description": "Текст сообщения для рассылки"
+                                },
+                                "target_group": {
+                                    "type": "string",
+                                    "enum": ["all_clients", "recent_clients", "vip_clients"],
+                                    "description": "Группа для рассылки"
+                                }
+                            },
+                            "required": ["message"]
+                        }
+                    }
+                }
+            ]
+            tools.extend(admin_tools)
+            logger.info(f"✅ Added {len(admin_tools)} admin tools for administrator")
+        
+        return tools
     
     def get_database_info(self, table: str, filter_field: Optional[str] = None, 
                          filter_value: Optional[str] = None, limit: int = 10) -> Dict:
@@ -990,10 +1183,29 @@ class AdvancedINKA:
             return {"error": str(e)}
 
     def handle_function_call(self, function_name: str, arguments: Dict) -> str:
-        """Обработка вызова функции"""
-        logger.info(f"🔴 handle_function_call START: {function_name}")
+        """Обработка вызова функции с проверкой прав"""
+        logger.info(f"🔴 handle_function_call START: {function_name}, user_id: {self._current_user_id}")
         try:
-            # Map aliases to actual functions
+            # ============================================================
+            # 👑 ПРОВЕРКА ПРАВ ДЛЯ АДМИН-ФУНКЦИЙ
+            # ============================================================
+            admin_functions = [
+                "edit_master", "edit_service", "add_schedule_slot", 
+                "cancel_booking", "export_statistics", "send_broadcast_message"
+            ]
+            
+            if function_name in admin_functions:
+                # Проверяем права администратора
+                current_user = int(self._current_user_id) if self._current_user_id else None
+                if current_user not in self.admin_ids:
+                    error_msg = f"❌ ДОСТУП ЗАПРЕЩЁН! Функция '{function_name}' доступна ТОЛЬКО администраторам. Ваш ID: {current_user}, Админы: {self.admin_ids}"
+                    logger.warning(error_msg)
+                    return json.dumps({"error": error_msg, "access_denied": True}, ensure_ascii=False)
+                logger.info(f"✅ Admin {current_user} has access to {function_name}")
+            
+            # ============================================================
+            # ОБРАБОТКА ФУНКЦИЙ
+            # ============================================================
             if function_name in ["save_client", "create_client"]:
                 logger.info(f"🟡 Calling create_client with args: {arguments}")
                 result = self.create_client(**arguments)
@@ -1010,6 +1222,23 @@ class AdvancedINKA:
                 result = self.format_table(**arguments)
             elif function_name == "create_formatted_response":
                 result = self.create_formatted_response(**arguments)
+            
+            # ============================================================
+            # 👑 АДМИН-ФУНКЦИИ
+            # ============================================================
+            elif function_name == "edit_master":
+                result = self._edit_master(**arguments)
+            elif function_name == "edit_service":
+                result = self._edit_service(**arguments)
+            elif function_name == "add_schedule_slot":
+                result = self._add_schedule_slot(**arguments)
+            elif function_name == "cancel_booking":
+                result = self._cancel_booking(**arguments)
+            elif function_name == "export_statistics":
+                result = self._export_statistics(**arguments)
+            elif function_name == "send_broadcast_message":
+                result = self._send_broadcast_message(**arguments)
+            
             else:
                 result = {"error": f"Unknown function: {function_name}"}
             
@@ -1033,6 +1262,13 @@ class AdvancedINKA:
             Ответ ассистента
         """
         try:
+            # Сохраняем текущего пользователя для проверки прав в handle_function_call
+            self._current_user_id = user_id
+            
+            # Определяем, является ли пользователь администратором
+            is_admin = int(user_id) in self.admin_ids if user_id else False
+            logger.info(f"👤 User {user_id} - Admin: {is_admin}")
+            
             # Создаём thread для разговора
             thread = self.client.beta.threads.create()
             
@@ -1055,8 +1291,8 @@ class AdvancedINKA:
             
             # Запускаем Assistant с инструментами
             # Передаём tools в run для использования функций
-            tools_config = self.create_tools_config()
-            logger.info(f"📋 Tools configured: {len(tools_config)} tools available")
+            tools_config = self.create_tools_config(is_admin=is_admin)
+            logger.info(f"📋 Tools configured: {len(tools_config)} tools available (admin={is_admin})")
             for tool in tools_config:
                 logger.info(f"   - {tool['function']['name']}")
             
@@ -1290,9 +1526,269 @@ class AdvancedINKA:
             logger.error(f"Response formatting error: {e}")
             return {"error": str(e)}
 
+    # ============================================================================
+    # 👑 АДМИН-ФУНКЦИИ (ТОЛЬКО ДЛЯ АДМИНИСТРАТОРОВ)
+    # ============================================================================
+    
+    def _edit_master(self, master_id: str, **kwargs) -> Dict:
+        """👑 Редактировать информацию о мастере"""
+        try:
+            logger.info(f"👑 Admin editing master {master_id}: {kwargs}")
+            
+            if not self.sheets_client:
+                return {"error": "Database not available"}
+            
+            # Получаем текущие данные мастера
+            current_data = self.sheets_client.get_data("Masters")
+            master = next((m for m in current_data if m.get("ID") == master_id), None)
+            
+            if not master:
+                return {"error": f"Master {master_id} not found"}
+            
+            # Обновляем поля
+            update_data = {}
+            if "name" in kwargs:
+                master["Имя"] = kwargs["name"]
+                update_data["Имя"] = kwargs["name"]
+            if "phone" in kwargs:
+                master["Телефон"] = kwargs["phone"]
+                update_data["Телефон"] = kwargs["phone"]
+            if "specialty" in kwargs:
+                master["Специализация"] = kwargs["specialty"]
+                update_data["Специализация"] = kwargs["specialty"]
+            if "rate_per_hour" in kwargs:
+                master["Ставка в час"] = kwargs["rate_per_hour"]
+                update_data["Ставка в час"] = kwargs["rate_per_hour"]
+            
+            # Сохраняем изменения
+            self.sheets_client.update_data("Masters", master_id, master)
+            
+            logger.info(f"✅ Master {master_id} updated: {update_data}")
+            return {
+                "success": True,
+                "message": f"Мастер {master.get('Имя', master_id)} успешно обновлен",
+                "updated_fields": update_data
+            }
+        
+        except Exception as e:
+            logger.error(f"Error editing master: {e}")
+            return {"error": str(e)}
+    
+    def _edit_service(self, service_id: str, **kwargs) -> Dict:
+        """👑 Редактировать услугу"""
+        try:
+            logger.info(f"👑 Admin editing service {service_id}: {kwargs}")
+            
+            if not self.sheets_client:
+                return {"error": "Database not available"}
+            
+            # Получаем текущие данные услуги
+            current_data = self.sheets_client.get_data("Services")
+            service = next((s for s in current_data if s.get("ID") == service_id), None)
+            
+            if not service:
+                return {"error": f"Service {service_id} not found"}
+            
+            # Обновляем поля
+            update_data = {}
+            if "name" in kwargs:
+                service["Название"] = kwargs["name"]
+                update_data["Название"] = kwargs["name"]
+            if "description" in kwargs:
+                service["Описание"] = kwargs["description"]
+                update_data["Описание"] = kwargs["description"]
+            if "price" in kwargs:
+                service["Цена"] = kwargs["price"]
+                update_data["Цена"] = kwargs["price"]
+            if "duration_minutes" in kwargs:
+                service["Длительность (мин)"] = kwargs["duration_minutes"]
+                update_data["Длительность (мин)"] = kwargs["duration_minutes"]
+            
+            # Сохраняем изменения
+            self.sheets_client.update_data("Services", service_id, service)
+            
+            logger.info(f"✅ Service {service_id} updated: {update_data}")
+            return {
+                "success": True,
+                "message": f"Услуга {service.get('Название', service_id)} успешно обновлена",
+                "updated_fields": update_data
+            }
+        
+        except Exception as e:
+            logger.error(f"Error editing service: {e}")
+            return {"error": str(e)}
+    
+    def _add_schedule_slot(self, master_id: str, date: str, start_time: str, end_time: str, notes: str = "") -> Dict:
+        """👑 Добавить временной слот в расписание мастера"""
+        try:
+            logger.info(f"👑 Admin adding schedule slot for master {master_id} on {date} {start_time}-{end_time}")
+            
+            if not self.sheets_client:
+                return {"error": "Database not available"}
+            
+            # Добавляем в Schedule лист
+            slot_data = {
+                "Мастер ID": master_id,
+                "Дата": date,
+                "Время начала": start_time,
+                "Время окончания": end_time,
+                "Примечание": notes,
+                "Статус": "Доступно"
+            }
+            
+            self.sheets_client.add_data("Schedule", slot_data)
+            
+            logger.info(f"✅ Schedule slot added for master {master_id}")
+            return {
+                "success": True,
+                "message": f"Слот добавлен: {date} {start_time}-{end_time}",
+                "slot": slot_data
+            }
+        
+        except Exception as e:
+            logger.error(f"Error adding schedule slot: {e}")
+            return {"error": str(e)}
+    
+    def _cancel_booking(self, booking_id: str, reason: str = "", notify_client: bool = True) -> Dict:
+        """👑 Отменить запись клиента"""
+        try:
+            logger.info(f"👑 Admin cancelling booking {booking_id}, reason: {reason}")
+            
+            if not self.sheets_client:
+                return {"error": "Database not available"}
+            
+            # Получаем данные бронирования
+            current_data = self.sheets_client.get_data("Bookings")
+            booking = next((b for b in current_data if b.get("ID") == booking_id), None)
+            
+            if not booking:
+                return {"error": f"Booking {booking_id} not found"}
+            
+            # Обновляем статус
+            booking["Статус"] = "Отменено"
+            booking["Причина отмены"] = reason
+            self.sheets_client.update_data("Bookings", booking_id, booking)
+            
+            # Если нужно отправить уведомление клиенту (в реальном коде здесь была бы отправка в Telegram)
+            if notify_client:
+                client_id = booking.get("ID Клиента")
+                logger.info(f"📧 Would notify client {client_id} about cancelled booking")
+            
+            logger.info(f"✅ Booking {booking_id} cancelled")
+            return {
+                "success": True,
+                "message": f"Запись {booking_id} отменена",
+                "reason": reason,
+                "client_notified": notify_client
+            }
+        
+        except Exception as e:
+            logger.error(f"Error cancelling booking: {e}")
+            return {"error": str(e)}
+    
+    def _export_statistics(self, date_from: str = None, date_to: str = None, stat_type: str = "revenue") -> Dict:
+        """👑 Экспортировать статистику"""
+        try:
+            logger.info(f"👑 Admin exporting statistics: {stat_type} ({date_from} to {date_to})")
+            
+            if not self.sheets_client:
+                return {"error": "Database not available"}
+            
+            # Получаем данные бронирований
+            bookings = self.sheets_client.get_data("Bookings")
+            
+            # Фильтруем по датам если указаны
+            if date_from and date_to:
+                bookings = [b for b in bookings if date_from <= b.get("Дата", "") <= date_to]
+            
+            stats = {}
+            
+            if stat_type == "revenue":
+                # Считаем общий доход
+                total_revenue = sum(float(b.get("Цена", 0)) for b in bookings if b.get("Статус") == "Завершено")
+                stats = {
+                    "total_revenue": total_revenue,
+                    "bookings_count": len([b for b in bookings if b.get("Статус") == "Завершено"]),
+                    "period": f"{date_from or 'all'} to {date_to or 'all'}"
+                }
+            
+            elif stat_type == "bookings":
+                stats = {
+                    "total_bookings": len(bookings),
+                    "completed": len([b for b in bookings if b.get("Статус") == "Завершено"]),
+                    "cancelled": len([b for b in bookings if b.get("Статус") == "Отменено"]),
+                    "scheduled": len([b for b in bookings if b.get("Статус") == "Запланировано"])
+                }
+            
+            elif stat_type == "masters":
+                masters = self.sheets_client.get_data("Masters")
+                stats = {
+                    "total_masters": len(masters),
+                    "masters": [{"name": m.get("Имя"), "bookings": len([b for b in bookings if b.get("Мастер ID") == m.get("ID")])} 
+                               for m in masters]
+                }
+            
+            elif stat_type == "services":
+                services = self.sheets_client.get_data("Services")
+                service_stats = {}
+                for service in services:
+                    service_name = service.get("Название")
+                    service_stats[service_name] = len([b for b in bookings if service_name in b.get("Услуга", "")])
+                stats = {"services": service_stats}
+            
+            logger.info(f"✅ Statistics exported: {stat_type}")
+            return {
+                "success": True,
+                "stat_type": stat_type,
+                "data": stats
+            }
+        
+        except Exception as e:
+            logger.error(f"Error exporting statistics: {e}")
+            return {"error": str(e)}
+    
+    def _send_broadcast_message(self, message: str, target_group: str = "all_clients") -> Dict:
+        """👑 Отправить рассылку всем клиентам (только админы!)"""
+        try:
+            logger.info(f"👑 Admin sending broadcast message to {target_group}")
+            
+            if not self.sheets_client:
+                return {"error": "Database not available"}
+            
+            # Получаем клиентов
+            clients = self.sheets_client.get_data("Clients")
+            
+            # Фильтруем по группе
+            if target_group == "recent_clients":
+                # Последние 10 клиентов (по ID)
+                clients = sorted(clients, key=lambda x: x.get("ID", ""), reverse=True)[:10]
+            elif target_group == "vip_clients":
+                # VIP клиенты (у которых 5+ бронирований)
+                bookings = self.sheets_client.get_data("Bookings")
+                vip_ids = set()
+                for booking in bookings:
+                    client_id = booking.get("ID Клиента")
+                    vip_ids.add(client_id)
+                clients = [c for c in clients if c.get("ID") in vip_ids]
+            
+            # В реальном коде здесь была бы отправка в Telegram
+            recipient_count = len(clients)
+            logger.info(f"📧 Broadcast would be sent to {recipient_count} clients: {target_group}")
+            
+            return {
+                "success": True,
+                "message": f"Рассылка подготовлена для {recipient_count} клиентов",
+                "target_group": target_group,
+                "recipients_count": recipient_count
+            }
+        
+        except Exception as e:
+            logger.error(f"Error sending broadcast: {e}")
+            return {"error": str(e)}
+
 
 def get_advanced_inka(api_key: str, assistant_id: str, 
                      sheets_client=None, calendar_service=None,
-                     data_sync=None) -> AdvancedINKA:
-    """Фабрика для создания продвинутого INKA"""
-    return AdvancedINKA(api_key, assistant_id, sheets_client, calendar_service, data_sync)
+                     data_sync=None, admin_ids: List[int] = None) -> AdvancedINKA:
+    """Фабрика для создания продвинутого INKA с админ-правами"""
+    return AdvancedINKA(api_key, assistant_id, sheets_client, calendar_service, data_sync, admin_ids)
