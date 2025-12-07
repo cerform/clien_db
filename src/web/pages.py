@@ -161,9 +161,19 @@ async def masters_page():
                         return;
                     }
                     
-                    tbody.innerHTML = masters.map(m => `<tr><td>${m.id || '-'}</td><td>${m.name || '-'}</td><td>${m.specialization || '-'}</td><td>${m.experience_years || '-'}</td><td><button onclick="editMaster(${m.id})" style="margin-right:5px">✏️ Редактировать</button><button onclick="deleteMaster(${m.id})" style="background:#e74c3c">🗑️ Удалить</button></td></tr>`).join('');
+                    tbody.innerHTML = masters.map(m => {
+                        return `<tr><td>${m.id || '-'}</td><td>${m.name || '-'}</td><td>${m.specialization || '-'}</td><td>${m.phone || '-'}</td><td><button class="btn-edit" data-id="${m.id}" style="margin-right:5px">✏️ Редактировать</button><button class="btn-delete" data-id="${m.id}" style="background:#e74c3c">🗑️ Удалить</button></td></tr>`;
+                    }).join('');
+                    
+                    // Добавить обработчики событий
+                    document.querySelectorAll('.btn-edit').forEach(btn => {
+                        btn.addEventListener('click', () => editMaster(btn.dataset.id));
+                    });
+                    document.querySelectorAll('.btn-delete').forEach(btn => {
+                        btn.addEventListener('click', () => deleteMaster(btn.dataset.id));
+                    });
                 } catch (error) {
-                    console.error('Error:', error);
+                    console.error('Error loading masters:', error);
                     document.getElementById('mastersList').innerHTML = '<tr><td colspan="5">Ошибка загрузки</td></tr>';
                 }
             }
@@ -237,12 +247,53 @@ async def services_page():
                             <th>Действия</th>
                         </tr>
                     </thead>
-                    <tbody>
+                    <tbody id="servicesList">
                         <tr><td colspan="5" style="text-align:center">Загрузка...</td></tr>
                     </tbody>
                 </table>
             </div>
         </div>
+        <script>
+            async function loadServices() {
+                try {
+                    const response = await fetch('/api/services');
+                    const services = await response.json();
+                    
+                    const tbody = document.getElementById('servicesList');
+                    if (!services || services.length === 0) {
+                        tbody.innerHTML = '<tr><td colspan="5" style="text-align:center">Нет услуг</td></tr>';
+                        return;
+                    }
+                    
+                    tbody.innerHTML = services.map(s => {
+                        const price = s.price_from && s.price_to ? `${s.price_from} - ${s.price_to}` : (s.price_from || '-');
+                        return `<tr><td>${s.id || '-'}</td><td>${s.name || '-'}</td><td>${price}</td><td>${s.duration_min || '-'}</td><td><button class="btn-edit" data-id="${s.id}" style="margin-right:5px">✏️</button><button class="btn-delete" data-id="${s.id}" style="background:#e74c3c">🗑️</button></td></tr>`;
+                    }).join('');
+                    
+                    document.querySelectorAll('.btn-edit').forEach(btn => {
+                        btn.addEventListener('click', () => editService(btn.dataset.id));
+                    });
+                    document.querySelectorAll('.btn-delete').forEach(btn => {
+                        btn.addEventListener('click', () => deleteService(btn.dataset.id));
+                    });
+                } catch (error) {
+                    console.error('Error loading services:', error);
+                    document.getElementById('servicesList').innerHTML = '<tr><td colspan="5">Ошибка загрузки</td></tr>';
+                }
+            }
+            
+            function editService(id) {
+                alert('Редактирование услуги ' + id);
+            }
+            
+            function deleteService(id) {
+                if (confirm('Удалить услугу?')) {
+                    alert('Функция удаления будет реализована');
+                }
+            }
+            
+            loadServices();
+        </script>
     </body>
     </html>
     """
@@ -292,15 +343,55 @@ async def clients_page():
                             <th>Имя</th>
                             <th>Телефон</th>
                             <th>Email</th>
-                            <th>Записей</th>
+                            <th>Действия</th>
                         </tr>
                     </thead>
-                    <tbody>
+                    <tbody id="clientsList">
                         <tr><td colspan="5" style="text-align:center">Загрузка...</td></tr>
                     </tbody>
                 </table>
             </div>
         </div>
+        <script>
+            async function loadClients() {
+                try {
+                    const response = await fetch('/api/clients');
+                    const clients = await response.json();
+                    
+                    const tbody = document.getElementById('clientsList');
+                    if (!clients || clients.length === 0) {
+                        tbody.innerHTML = '<tr><td colspan="5" style="text-align:center">Нет клиентов</td></tr>';
+                        return;
+                    }
+                    
+                    tbody.innerHTML = clients.map(c => {
+                        return `<tr><td>${c.id || '-'}</td><td>${c.name || '-'}</td><td>${c.phone || '-'}</td><td>${c.email || '-'}</td><td><button class="btn-view" data-id="${c.id}" style="margin-right:5px">👁️</button><button class="btn-delete" data-id="${c.id}" style="background:#e74c3c">🗑️</button></td></tr>`;
+                    }).join('');
+                    
+                    document.querySelectorAll('.btn-view').forEach(btn => {
+                        btn.addEventListener('click', () => viewClient(btn.dataset.id));
+                    });
+                    document.querySelectorAll('.btn-delete').forEach(btn => {
+                        btn.addEventListener('click', () => deleteClient(btn.dataset.id));
+                    });
+                } catch (error) {
+                    console.error('Error loading clients:', error);
+                    document.getElementById('clientsList').innerHTML = '<tr><td colspan="5">Ошибка загрузки</td></tr>';
+                }
+            }
+            
+            function viewClient(id) {
+                alert('Просмотр клиента ' + id);
+            }
+            
+            function deleteClient(id) {
+                if (confirm('Удалить клиента?')) {
+                    alert('Функция удаления будет реализована');
+                }
+            }
+            
+            loadClients();
+        </script>
     </body>
     </html>
     """
@@ -349,14 +440,48 @@ async def bookings_page():
                             <th>Услуга</th>
                             <th>Дата и время</th>
                             <th>Статус</th>
+                            <th>Действия</th>
                         </tr>
                     </thead>
-                    <tbody>
-                        <tr><td colspan="6" style="text-align:center">Загрузка...</td></tr>
+                    <tbody id="bookingsList">
+                        <tr><td colspan="7" style="text-align:center">Загрузка...</td></tr>
                     </tbody>
                 </table>
             </div>
         </div>
+        <script>
+            async function loadBookings() {
+                try {
+                    const response = await fetch('/api/bookings');
+                    const bookings = await response.json();
+                    
+                    const tbody = document.getElementById('bookingsList');
+                    if (!bookings || bookings.length === 0) {
+                        tbody.innerHTML = '<tr><td colspan="7" style="text-align:center">Нет записей</td></tr>';
+                        return;
+                    }
+                    
+                    tbody.innerHTML = bookings.map(b => {
+                        return `<tr><td>${b.id || '-'}</td><td>${b.client_id || '-'}</td><td>${b.master_id || '-'}</td><td>${b.service_id || '-'}</td><td>${b.date || '-'} ${b.time || ''}</td><td>${b.status || '-'}</td><td><button class="btn-cancel" data-id="${b.id}" style="background:#e74c3c">❌</button></td></tr>`;
+                    }).join('');
+                    
+                    document.querySelectorAll('.btn-cancel').forEach(btn => {
+                        btn.addEventListener('click', () => cancelBooking(btn.dataset.id));
+                    });
+                } catch (error) {
+                    console.error('Error loading bookings:', error);
+                    document.getElementById('bookingsList').innerHTML = '<tr><td colspan="7">Ошибка загрузки</td></tr>';
+                }
+            }
+            
+            function cancelBooking(id) {
+                if (confirm('Отменить запись?')) {
+                    alert('Функция отмены будет реализована');
+                }
+            }
+            
+            loadBookings();
+        </script>
     </body>
     </html>
     """
