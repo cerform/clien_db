@@ -121,7 +121,7 @@ class DatabaseManager:
     def get_all_bookings(self) -> List[Dict[str, Any]]:
         """Получить ВСЕ записи (для API)"""
         try:
-            data = self.sheets.get_sheet_values("Bookings", "A:H")
+            data = self.sheets.get_sheet_values("Bookings", "A:K")
             if not data:
                 return []
             
@@ -134,7 +134,10 @@ class DatabaseManager:
                     "service_id": row[3] if len(row) > 3 else "",
                     "date": row[4] if len(row) > 4 else "",
                     "time": row[5] if len(row) > 5 else "",
-                    "status": row[6] if len(row) > 6 else "",
+                    "duration_min": row[6] if len(row) > 6 else "",
+                    "price": row[7] if len(row) > 7 else "",
+                    "status": row[8] if len(row) > 8 else "",
+                    "notes": row[9] if len(row) > 9 else "",
                 })
             
             return bookings
@@ -155,8 +158,10 @@ class DatabaseManager:
                     masters.append({
                         "id": row[0] if len(row) > 0 else "",
                         "name": row[1] if len(row) > 1 else "",
-                        "specialization": row[2] if len(row) > 2 else "",
-                        "rating": row[4] if len(row) > 4 else "0",
+                        "phone": row[2] if len(row) > 2 else "",
+                        "telegram_id": row[3] if len(row) > 3 else "",
+                        "specialization": row[4] if len(row) > 4 else "",
+                        "rating": row[5] if len(row) > 5 else "0",
                         "status": row[8] if len(row) > 8 else "active"
                     })
             
@@ -245,7 +250,7 @@ class DatabaseManager:
     def get_services_list(self, search: str = "") -> Dict[str, Any]:
         """Получить список услуг"""
         try:
-            data = self.sheets.get_sheet_values("Услуги", "A:H")
+            data = self.sheets.get_sheet_values("Services", "A:H")
             if not data:
                 return {"error": "Нет услуг в БД"}
             
@@ -255,9 +260,12 @@ class DatabaseManager:
                     services.append({
                         "id": row[0] if len(row) > 0 else "",
                         "name": row[1] if len(row) > 1 else "",
-                        "duration": row[3] if len(row) > 3 else "0",
-                        "price": row[4] if len(row) > 4 else "0",
-                        "status": row[6] if len(row) > 6 else "active"
+                        "description": row[2] if len(row) > 2 else "",
+                        "duration_min": row[3] if len(row) > 3 else "0",
+                        "price_from": row[4] if len(row) > 4 else "0",
+                        "price_to": row[5] if len(row) > 5 else "0",
+                        "category": row[6] if len(row) > 6 else "",
+                        "active": row[7] if len(row) > 7 else "TRUE"
                     })
             
             return {
@@ -304,7 +312,7 @@ class DatabaseManager:
     def get_clients_list(self, search: str = "") -> Dict[str, Any]:
         """Получить список клиентов"""
         try:
-            data = self.sheets.get_sheet_values("Клиенты", "A:H")
+            data = self.sheets.get_sheet_values("Clients", "A:H")
             if not data:
                 return {"error": "Нет клиентов в БД"}
             
@@ -316,7 +324,10 @@ class DatabaseManager:
                         "telegram_id": row[1] if len(row) > 1 else "",
                         "name": row[2] if len(row) > 2 else "",
                         "phone": row[3] if len(row) > 3 else "",
-                        "created_at": row[6] if len(row) > 6 else ""
+                        "email": row[4] if len(row) > 4 else "",
+                        "notes": row[5] if len(row) > 5 else "",
+                        "created_at": row[6] if len(row) > 6 else "",
+                        "last_visit": row[7] if len(row) > 7 else ""
                     })
             
             return {
