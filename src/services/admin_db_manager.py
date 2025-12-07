@@ -121,7 +121,7 @@ class DatabaseManager:
     def get_all_bookings(self) -> List[Dict[str, Any]]:
         """Получить ВСЕ записи (для API)"""
         try:
-            data = self.sheets.get_range("Записи", "A:H")
+            data = self.sheets.get_sheet_values("Bookings", "A:H")
             if not data:
                 return []
             
@@ -145,7 +145,7 @@ class DatabaseManager:
     def get_masters_list(self, search: str = "") -> Dict[str, Any]:
         """Получить список мастеров"""
         try:
-            data = self.sheets.get_range("Мастера", "A:K")
+            data = self.sheets.get_sheet_values("Masters", "A:K")
             if not data:
                 return {"error": "Нет мастеров в БД"}
             
@@ -208,7 +208,7 @@ class DatabaseManager:
         """Отредактировать мастера"""
         try:
             # Получить текущие данные
-            data = self.sheets.get_range("Мастера", "A:K")
+            data = self.sheets.get_sheet_values("Мастера", "A:K")
             
             row_idx = None
             for i, row in enumerate(data):
@@ -245,7 +245,7 @@ class DatabaseManager:
     def get_services_list(self, search: str = "") -> Dict[str, Any]:
         """Получить список услуг"""
         try:
-            data = self.sheets.get_range("Услуги", "A:H")
+            data = self.sheets.get_sheet_values("Услуги", "A:H")
             if not data:
                 return {"error": "Нет услуг в БД"}
             
@@ -304,7 +304,7 @@ class DatabaseManager:
     def get_clients_list(self, search: str = "") -> Dict[str, Any]:
         """Получить список клиентов"""
         try:
-            data = self.sheets.get_range("Клиенты", "A:H")
+            data = self.sheets.get_sheet_values("Клиенты", "A:H")
             if not data:
                 return {"error": "Нет клиентов в БД"}
             
@@ -362,7 +362,7 @@ class DatabaseManager:
     def get_schedule(self, master_id: str = "") -> Dict[str, Any]:
         """Получить расписание мастера"""
         try:
-            data = self.sheets.get_range("Расписание", "A:I")
+            data = self.sheets.get_sheet_values("Расписание", "A:I")
             if not data:
                 return {"error": "Нет расписания в БД"}
             
@@ -424,10 +424,10 @@ class DatabaseManager:
     def get_stats(self) -> Dict[str, Any]:
         """Получить общую статистику"""
         try:
-            masters_data = self.sheets.get_range("Мастера", "A:K")
-            services_data = self.sheets.get_range("Услуги", "A:H")
-            clients_data = self.sheets.get_range("Клиенты", "A:H")
-            bookings_data = self.sheets.get_range("Записи", "A:K")
+            masters_data = self.sheets.get_sheet_values("Мастера", "A:K")
+            services_data = self.sheets.get_sheet_values("Услуги", "A:H")
+            clients_data = self.sheets.get_sheet_values("Клиенты", "A:H")
+            bookings_data = self.sheets.get_sheet_values("Записи", "A:K")
             
             return {
                 "total_masters": len(masters_data) - 1 if masters_data else 0,
@@ -462,7 +462,7 @@ class InkaLearningSystem:
         """Убедиться что лист обучения существует"""
         try:
             # Попытка получить данные - если ошибка, создать лист
-            self.sheets.get_range(self.learning_sheet, "A1")
+            self.sheets.get_sheet_values(self.learning_sheet, "A1")
         except Exception as e:
             try:
                 # Создать новый лист с заголовками
@@ -510,7 +510,7 @@ class InkaLearningSystem:
     def get_training_examples(self, category: str = "", tag: str = "") -> Dict[str, Any]:
         """Получить примеры для обучения"""
         try:
-            data = self.sheets.get_range(self.learning_sheet, "A:I")
+            data = self.sheets.get_sheet_values(self.learning_sheet, "A:I")
             if not data:
                 return {"error": "Нет примеров обучения"}
             
@@ -540,7 +540,7 @@ class InkaLearningSystem:
     def get_improvement_suggestions(self) -> List[Dict[str, Any]]:
         """Получить предложения по улучшению"""
         try:
-            data = self.sheets.get_range(self.learning_sheet, "A:I")
+            data = self.sheets.get_sheet_values(self.learning_sheet, "A:I")
             if not data:
                 return []
             
@@ -563,7 +563,7 @@ class InkaLearningSystem:
     def get_training_stats(self) -> Dict[str, Any]:
         """Получить статистику обучения"""
         try:
-            data = self.sheets.get_range(self.learning_sheet, "A:I")
+            data = self.sheets.get_sheet_values(self.learning_sheet, "A:I")
             if not data:
                 return {"error": "Нет данных обучения"}
             
