@@ -97,6 +97,51 @@ class DatabaseManager:
     
     # ============ МАСТЕРА ============
     
+    def get_all_masters(self) -> List[Dict[str, Any]]:
+        """Получить ВСЕ мастеров (для API)"""
+        result = self.get_masters_list()
+        if "error" in result:
+            return []
+        return result.get("masters", [])
+    
+    def get_all_services(self) -> List[Dict[str, Any]]:
+        """Получить ВСЕ услуги (для API)"""
+        result = self.get_services_list()
+        if "error" in result:
+            return []
+        return result.get("services", [])
+    
+    def get_all_clients(self) -> List[Dict[str, Any]]:
+        """Получить ВСЕХ клиентов (для API)"""
+        result = self.get_clients_list()
+        if "error" in result:
+            return []
+        return result.get("clients", [])
+    
+    def get_all_bookings(self) -> List[Dict[str, Any]]:
+        """Получить ВСЕ записи (для API)"""
+        try:
+            data = self.sheets.get_range("Записи", "A:H")
+            if not data:
+                return []
+            
+            bookings = []
+            for row in data[1:]:  # Пропустить заголовок
+                bookings.append({
+                    "id": row[0] if len(row) > 0 else "",
+                    "client_id": row[1] if len(row) > 1 else "",
+                    "master_id": row[2] if len(row) > 2 else "",
+                    "service_id": row[3] if len(row) > 3 else "",
+                    "date": row[4] if len(row) > 4 else "",
+                    "time": row[5] if len(row) > 5 else "",
+                    "status": row[6] if len(row) > 6 else "",
+                })
+            
+            return bookings
+        except Exception as e:
+            logger.error(f"Error getting bookings: {e}")
+            return []
+    
     def get_masters_list(self, search: str = "") -> Dict[str, Any]:
         """Получить список мастеров"""
         try:
