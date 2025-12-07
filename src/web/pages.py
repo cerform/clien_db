@@ -2080,7 +2080,7 @@ async def schedule_page():
                             <h4 style="margin-top:20px">⚠️ Важно для работы:</h4>
                             <ul style="padding-left:20px;line-height:1.8">
                                 <li><strong>Откройте доступ</strong> к календарю для сервисного аккаунта:<br>
-                                    <code style="background:#fff;padding:2px 6px;border-radius:3px;font-size:12px">tattoo-480007@appspot.gserviceaccount.com</code></li>
+                                    <code style="background:#fff;padding:2px 6px;border-radius:3px;font-size:12px">telegram-bot-sheets-sa@tattoo-480007.iam.gserviceaccount.com</code></li>
                                 <li>Добавьте этот email в настройках календаря → "Доступ для отдельных пользователей"</li>
                                 <li>Дайте права "Внесение изменений"</li>
                             </ul>
