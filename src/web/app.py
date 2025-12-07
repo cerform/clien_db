@@ -206,6 +206,16 @@ def get_dashboard_html() -> str:
                 font-size: 0.9em;
             }
             
+            .card.admin-card {
+                border: 2px solid #ff6b6b;
+                background: #fff5f5;
+            }
+            
+            .card.admin-card:hover {
+                border-color: #ff6b6b;
+                background: #ffe0e0;
+            }
+            
             .stats {
                 display: grid;
                 grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
@@ -343,6 +353,45 @@ def get_dashboard_html() -> str:
                         <p>Статистика и отчеты</p>
                     </div>
                 </div>
+                
+                <h2 style="margin-top: 40px;">👑 Инструменты Администратора</h2>
+                <div class="grid" id="admin_menu">
+                    <div class="card admin-card" onclick="adminFunction('edit_master')">
+                        <div class="card-icon">✏️</div>
+                        <h3>Редактировать Мастера</h3>
+                        <p>Обновить информацию о мастере через ИНКУ</p>
+                    </div>
+                    
+                    <div class="card admin-card" onclick="adminFunction('edit_service')">
+                        <div class="card-icon">🔧</div>
+                        <h3>Редактировать Услугу</h3>
+                        <p>Изменить цену и описание услуги</p>
+                    </div>
+                    
+                    <div class="card admin-card" onclick="adminFunction('add_schedule')">
+                        <div class="card-icon">📆</div>
+                        <h3>Добавить Слот</h3>
+                        <p>Добавить выходной или отпуск</p>
+                    </div>
+                    
+                    <div class="card admin-card" onclick="adminFunction('cancel_booking')">
+                        <div class="card-icon">❌</div>
+                        <h3>Отменить Запись</h3>
+                        <p>Отменить запись клиента</p>
+                    </div>
+                    
+                    <div class="card admin-card" onclick="adminFunction('export_stats')">
+                        <div class="card-icon">📊</div>
+                        <h3>Экспорт Статистики</h3>
+                        <p>Получить статистику по доходам и записям</p>
+                    </div>
+                    
+                    <div class="card admin-card" onclick="adminFunction('broadcast')">
+                        <div class="card-icon">📢</div>
+                        <h3>Рассылка</h3>
+                        <p>Отправить сообщение клиентам</p>
+                    </div>
+                </div>
             </div>
         </div>
         
@@ -379,6 +428,33 @@ def get_dashboard_html() -> str:
             
             function goTo(path) {
                 window.location.href = path;
+            }
+            
+            function adminFunction(funcName) {
+                let message = '';
+                
+                switch(funcName) {
+                    case 'edit_master':
+                        message = 'Напиши ИНКЕ в Telegram: "Обнови мастера [ID]: [параметры]"\nПримеры: "Обнови мастера 1: имя Анна, ставка 5000"';
+                        break;
+                    case 'edit_service':
+                        message = 'Напиши ИНКЕ в Telegram: "Измени услугу [ID]: [параметры]"\nПримеры: "Измени услугу 1: цена 3000"';
+                        break;
+                    case 'add_schedule':
+                        message = 'Напиши ИНКЕ в Telegram: "Добавь слот мастеру [ID] на [дату] [время]"\nПримеры: "Добавь выходной на 2025-12-25 с 10:00 до 18:00"';
+                        break;
+                    case 'cancel_booking':
+                        message = 'Напиши ИНКЕ в Telegram: "Отмени запись [ID] - [причина]"\nПримеры: "Отмени запись 42 - клиент отменил"';
+                        break;
+                    case 'export_stats':
+                        message = 'Напиши ИНКЕ в Telegram: "Дай статистику по [тип]"\nТипы: revenue (доход), bookings (записи), masters (мастера), services (услуги)';
+                        break;
+                    case 'broadcast':
+                        message = 'Напиши ИНКЕ в Telegram: "Отправь всем сообщение: [текст]"\nПримеры: "Отправь всем: новое предложение скидка 20%!"';
+                        break;
+                }
+                
+                alert(`👑 Инструмент администратора\n\n${message}\n\nЭто отправляется в ИНКУ через Telegram (только админы!)`);
             }
             
             function logout() {

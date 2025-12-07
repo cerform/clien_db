@@ -6,7 +6,7 @@ Client message handler - все текстовые сообщения идят �
 """
 
 from aiogram import Router, F
-from aiogram.types import Message, ReplyKeyboardRemove
+from aiogram.types import Message
 from aiogram.fsm.context import FSMContext
 from aiogram.filters import Command
 import logging
@@ -221,7 +221,7 @@ async def handle_text_message(message: Message, state: FSMContext):
         
         if sheets is None:
             logger.error("Sheets client is not available")
-            await message.answer("❌ Ошибка подключения к базе данных", reply_markup=ReplyKeyboardRemove())
+            await message.answer("❌ Ошибка подключения к базе данных")
             return
         
         logger.info(f"🔴 Getting INKA...")
@@ -253,12 +253,12 @@ async def handle_text_message(message: Message, state: FSMContext):
         
         await state.update_data(conversation_history=conversation_history)
         
-        # Отправляем ответ БЕЗ МЕНЮ
-        await message.answer(response, reply_markup=ReplyKeyboardRemove())
+        # Отправляем ответ БЕЗ МЕНЮ И КНОПОК
+        await message.answer(response)
         
         logger.info(f"User {user_id}: {user_text[:50]}... -> {response[:50]}...")
     
     except Exception as e:
         logger.error(f"Advanced INKA error: {e}", exc_info=True)
-        await message.answer("Ой, что-то пошло не так! Попробуй ещё раз? 😊", reply_markup=ReplyKeyboardRemove())
+        await message.answer("Ой, что-то пошло не так! Попробуй ещё раз? 😊")
 
