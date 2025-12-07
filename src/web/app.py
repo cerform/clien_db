@@ -403,24 +403,8 @@ def get_dashboard_html() -> str:
                     const data = await response.json();
                     
                     const statsDiv = document.getElementById('stats');
-                    statsDiv.innerHTML = `
-                        <div class="stat-box">
-                            <div class="stat-value">${data.clients_count}</div>
-                            <div class="stat-label">Клиентов</div>
-                        </div>
-                        <div class="stat-box">
-                            <div class="stat-value">${data.masters_count}</div>
-                            <div class="stat-label">Мастеров</div>
-                        </div>
-                        <div class="stat-box">
-                            <div class="stat-value">${data.services_count}</div>
-                            <div class="stat-label">Услуг</div>
-                        </div>
-                        <div class="stat-box">
-                            <div class="stat-value">${data.bookings_count}</div>
-                            <div class="stat-label">Записей</div>
-                        </div>
-                    `;
+                    const statsHTML = `<div class="stat-box"><div class="stat-value">${data.clients_count}</div><div class="stat-label">Клиентов</div></div><div class="stat-box"><div class="stat-value">${data.masters_count}</div><div class="stat-label">Мастеров</div></div><div class="stat-box"><div class="stat-value">${data.services_count}</div><div class="stat-label">Услуг</div></div><div class="stat-box"><div class="stat-value">${data.bookings_count}</div><div class="stat-label">Записей</div></div>`;
+                    statsDiv.innerHTML = statsHTML;
                 } catch (error) {
                     console.error('Error loading stats:', error);
                 }
