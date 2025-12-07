@@ -2,19 +2,26 @@
 """
 Production Telegram Bot для Cloud Run с WEBHOOK
 Полная интеграция: INKA AI + Google Sheets + Advanced функции
+Использует FastAPI для веб-интерфейса + Aiogram для Telegram webhook
 """
 
 import asyncio
 import logging
 import os
 import sys
-from aiohttp import web
 from pathlib import Path
+from typing import Dict
+import threading
 
 # Добавляем путь к модулям
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'src'))
 
 from dotenv import load_dotenv
+from fastapi import FastAPI
+from aiogram import Bot, Dispatcher
+from aiogram.fsm.storage.memory import MemoryStorage
+from aiogram.types import Update, BotCommand
+import uvicorn
 
 # Явно загружаем .env только если запущено локально (не в Cloud Run)
 # Cloud Run использует environment variables из service configuration
@@ -33,76 +40,52 @@ logger.info(f"🔧 Загружаю переменные окружения")
 logger.info(f"🔧 ADMIN_IDS: {os.getenv('ADMIN_IDS', 'не установлено')}")
 logger.info(f"🔧 OPENAI_API_KEY: {'установлен' if os.getenv('OPENAI_API_KEY') else 'не установлен'}")
 
-# Aiogram 3.x
-from aiogram import Bot, Dispatcher
-from aiogram.fsm.storage.memory import MemoryStorage
-from aiogram.webhook.aiohttp_server import SimpleRequestHandler, setup_application
-from aiogram.types import BotCommand
-
 # Наши модули
 from src.config import get_config
 from src.bot.handlers import start_handler, client_handler
+from src.web.app import create_app
 
 # Глобальные объекты
-bot = None
-dp = None
+bot: Bot = None
+dp: Dispatcher = None
+app: FastAPI = None
+webhook_url: str = None
 
 
-async def run_app(app, port, webhook_url):
-    """Запуск приложения с использованием AppRunner"""
-    global bot
+async def setup_webhook_background():
+    """Setup webhook в фоне, чтобы не задерживать стартап"""
+    global bot, dp, webhook_url
     
-    runner = web.AppRunner(app)
-    await runner.setup()
-    site = web.TCPSite(runner, '0.0.0.0', port)
-    await site.start()
-    
-    logger.info(f"✅ Server is listening on 0.0.0.0:{port}")
-    logger.info("✅ Server is ready to receive messages (webhook setup is background task)")
-    
-    # Устанавливаем webhook в фоне (не блокируем стартап)
-    async def setup_webhook_background():
-        """Setup webhook в фоне, чтобы не задерживать стартап"""
-        await asyncio.sleep(2)  # Даём серверу время на полную инициализацию
-        try:
-            await bot.delete_webhook(drop_pending_updates=True)
-            await bot.set_webhook(
-                url=webhook_url,
-                drop_pending_updates=True,
-                allowed_updates=["message", "callback_query", "my_chat_member"]
-            )
-            logger.info(f"✅ Webhook установлен: {webhook_url}")
-            
-            # Установка команд
-            from aiogram.types import BotCommand
-            await bot.set_my_commands([
-                BotCommand(command="start", description="Главное меню"),
-                BotCommand(command="help", description="Справка"),
-            ])
-            logger.info("✅ Бот готов к работе")
-        except Exception as e:
-            logger.error(f"❌ Ошибка установки webhook: {e}")
-    
-    # Запускаем setup в фоне
-    asyncio.create_task(setup_webhook_background())
-    
-    # Держим сервер запущенным
+    await asyncio.sleep(3)  # Даём серверу время на полную инициализацию
     try:
-        await asyncio.Event().wait()
-    except (KeyboardInterrupt, SystemExit):
-        pass
-    finally:
-        try:
-            await bot.delete_webhook(drop_pending_updates=True)
-        except:
-            pass
-        await bot.session.close()
-        await runner.cleanup()
+        await bot.delete_webhook(drop_pending_updates=True)
+        await bot.set_webhook(
+            url=webhook_url,
+            drop_pending_updates=True,
+            allowed_updates=["message", "callback_query", "my_chat_member"]
+        )
+        logger.info(f"✅ Webhook установлен: {webhook_url}")
+        
+        # Установка команд
+        await bot.set_my_commands([
+            BotCommand(command="start", description="Главное меню"),
+            BotCommand(command="help", description="Справка"),
+        ])
+        logger.info("✅ Бот готов к работе")
+    except Exception as e:
+        logger.error(f"❌ Ошибка установки webhook: {e}")
+
+
+def run_webhook_setup_loop():
+    """Запуск event loop для webhook setup в отдельном потоке"""
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+    loop.run_until_complete(setup_webhook_background())
 
 
 def main():
     """Main function"""
-    global bot, dp
+    global bot, dp, app, webhook_url
     
     try:
         # Загружаем конфиг
@@ -132,37 +115,24 @@ def main():
         
         logger.info("✅ Обработчики зарегистрированы")
         
-        # Создание веб-приложения
-        app = web.Application()
+        # Создание FastAPI приложения с админ панелью
+        app = create_app()
         
-        # Health check endpoint
-        async def health(request):
-            return web.Response(text='Bot OK', status=200)
+        # Webhook endpoint для Telegram
+        webhook_path = os.getenv('WEBHOOK_PATH', '/webhook/telegram')
         
-        app.router.add_get('/health', health)
-        app.router.add_get('/', health)
-        
-        # Webhook endpoint
-        webhook_path = os.getenv('WEBHOOK_PATH', '/webhook')
-        
-        # Добавляем middleware для логирования всех webhook запросов
-        original_handler = SimpleRequestHandler(dispatcher=dp, bot=bot)
-        
-        async def webhook_middleware(request):
-            logger.warning(f"⚠️  WEBHOOK REQUEST: {request.method} {request.path}")
-            logger.warning(f"    Content-Type: {request.content_type}")
+        @app.post(webhook_path)
+        async def telegram_webhook(update: Dict):
+            """Telegram webhook endpoint"""
             try:
-                body = await request.text()
-                logger.warning(f"    Body: {body[:200]}")
-            except:
-                pass
-            return await original_handler.handle(request)
+                update_obj = Update(**update)
+                await dp.feed_update(bot, update_obj)
+                return {"ok": True}
+            except Exception as e:
+                logger.error(f"Webhook error: {e}")
+                return {"ok": False, "error": str(e)}
         
-        original_handler.register(app, path=webhook_path)
         logger.warning(f"⚠️  Webhook handler registered at {webhook_path}")
-        
-        # Setup application
-        setup_application(app, dp, bot=bot)
         
         # Запуск сервера
         port = int(os.getenv('PORT', 8080))
@@ -171,19 +141,30 @@ def main():
         if os.getenv('K_SERVICE'):  # Мы в Cloud Run
             # Cloud Run автоматически устанавливает эти переменные
             service_name = os.getenv('K_SERVICE', 'tattoo-bot')
-            region = os.getenv('CLOUD_RUN_REGION', 'europe-west6')
+            region = os.getenv('CLOUD_RUN_REGION', 'us-central1')
             project = os.getenv('GCLOUD_PROJECT', 'tattoo-480007')
             service_url = f"https://{service_name}-408800151466.{region}.run.app"
         else:
-            service_url = os.getenv('SERVICE_URL', 'https://tattoo-bot-408800151466.europe-west6.run.app')
+            service_url = os.getenv('SERVICE_URL', 'https://localhost:8080')
         
         webhook_url = f"{service_url}{webhook_path}"
         
-        logger.info(f"🚀 Starting webhook server on port {port}")
+        logger.info(f"🚀 Starting FastAPI server on port {port}")
         logger.info(f"   Webhook URL: {webhook_url}")
+        logger.info(f"   Admin Panel: {service_url}")
+        logger.info(f"   API Health: {service_url}/api/health")
         
-        # Используем AppRunner для корректного запуска
-        asyncio.run(run_app(app, port, webhook_url))
+        # Запускаем setup webhook в отдельном потоке (не блокируем main)
+        webhook_thread = threading.Thread(target=run_webhook_setup_loop, daemon=True)
+        webhook_thread.start()
+        
+        # Запуск сервера Uvicorn с FastAPI
+        uvicorn.run(
+            app,
+            host="0.0.0.0",
+            port=port,
+            log_level="info"
+        )
         
     except Exception as e:
         logger.error(f"❌ Ошибка запуска: {e}", exc_info=True)
