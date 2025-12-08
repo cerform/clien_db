@@ -11,8 +11,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 COPY requirements.txt .
 RUN pip install --user --no-cache-dir -r requirements.txt
 
+
 # Финальный образ
 FROM python:3.10-slim
+# Добавить симлинк python -> python3 для совместимости
+RUN ln -s /usr/local/bin/python3 /usr/local/bin/python
 
 # Создание пользователя для безопасности
 RUN useradd -m -u 1000 botuser && \
