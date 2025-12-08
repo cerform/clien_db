@@ -256,6 +256,7 @@
                     <p style="margin-bottom: 5px;">🟢 Веб-интерфейс: <span id="web-status" style="color: #3fb950;">Online</span></p>
                     <p style="margin-bottom: 5px;">🟢 API: <span id="api-status" style="color: #3fb950;">Доступен</span></p>
                     <p style="margin-bottom: 10px;">🟢 БД: <span id="db-status" style="color: #3fb950;">Готова</span></p>
+                    <p style="margin-bottom: 5px;">🔎 Мониторинг: <span id="monitor-status" style="color: #3fb950;">-</span></p>
                     
                     <p style="margin-bottom: 10px;"><strong>📈 Метрики:</strong></p>
                     <p>Время ответа: <span id="response-time">-</span>ms</p>
@@ -264,6 +265,7 @@
             </div>
             <div class="controls">
                 <button onclick="testAllEndpoints()" style="background: #0d3cc4; border-color: #1f6feb;">🧪 Тест эндпоинтов</button>
+                <button onclick="runMonitoringChecks()" style="background: #ff9f1a; border-color: #ffb86b;">🔎 Run Monitoring</button>
                 <button onclick="location.reload()" style="background: #238636; border-color: #2ea043;">🔄 Обновить</button>
             </div>
         </div>
@@ -288,6 +290,7 @@
             { name: 'Bookings', url: '/api/bookings' },
             { name: 'Admin Dashboard', url: '/admin' },
             { name: 'Masters Page', url: '/admin/masters' },
+            { name: 'Monitoring Checks', url: '/api/monitoring/checks' },
         ];
 
         function addLog(message, type = 'info') {
@@ -364,6 +367,24 @@
             }
         }
 
+        async function runMonitoringChecks() {
+            addLog('🧪 Запуск проверок мониторинга...', 'warning');
+            try {
+                const resp = await fetch('/api/monitoring/checks');
+                const data = await resp.json();
+                const ok = data.ok;
+                addLog(`✅ Мониторинг: ok=${ok}`, ok ? 'success' : 'error');
+                const monitorStatusText = ok ? 'OK' : 'FAIL';
+                const monitorElem = document.getElementById('monitor-status');
+                if (monitorElem) monitorElem.textContent = monitorStatusText;
+                Object.entries(data.results || {}).forEach(([name, info]) => {
+                    addLog(`🔍 ${name}: ${info.status} ${info.ok ? 'OK' : 'FAIL'}`, info.ok ? 'success' : 'error');
+                });
+            } catch (e) {
+                addLog(`❌ Ошибка мониторинга: ${e.message}`, 'error');
+            }
+        }
+
         async function testAllEndpoints() {
             addLog('🧪 Начинаю тестирование всех эндпоинтов...', 'warning');
             for (const endpoint of endpoints) {
@@ -410,6 +431,9 @@
         
         // Первый тест сразу
         setTimeout(testAllEndpoints, 2000);
+        // Automatic monitoring checks every 60 seconds
+        setInterval(runMonitoringChecks, 60000);
+        setTimeout(runMonitoringChecks, 5000);
 
         // Перехватываем fetch запросы
         const originalFetch = window.fetch;

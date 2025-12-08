@@ -443,11 +443,21 @@ def get_dashboard_html() -> str:
                         <h3>Админы</h3>
                         <p>Управление администраторами и паролями</p>
                     </div>
+                    <div class="card" onclick="goTo('/admin/db-manager')">
+                        <div class="card-icon">🗄️</div>
+                        <h3>DB Manager</h3>
+                        <p>Экспорт/импорт и полная работа с листами</p>
+                    </div>
                     
                     <div class="card" onclick="goTo('/console')">
                         <div class="card-icon">🔍</div>
                         <h3>Веб-Консоль</h3>
                         <p>Мониторинг в реал-тайм</p>
+                    </div>
+                    <div class="card" onclick="fetchMonitoringStatus()">
+                        <div class="card-icon">🔎</div>
+                        <h3>Мониторинг</h3>
+                        <p>Состояние: <span id="dashboard-monitor-status">-</span></p>
                     </div>
                 </div>
                 
@@ -490,6 +500,23 @@ def get_dashboard_html() -> str:
                     </div>
                 </div>
             </div>
+            <script>
+                async function fetchMonitoringStatus() {
+                    try {
+                        const res = await fetch('/api/monitoring/checks');
+                        const data = await res.json();
+                        const status = data.ok ? 'OK' : 'FAIL';
+                        const el = document.getElementById('dashboard-monitor-status');
+                        if (el) { el.textContent = status; el.style.color = data.ok ? '#3fb950' : '#f85149'; }
+                    } catch (e) {
+                        const el = document.getElementById('dashboard-monitor-status');
+                        if (el) { el.textContent = 'ERROR'; el.style.color = '#f85149'; }
+                    }
+                }
+                // Run on load
+                setTimeout(fetchMonitoringStatus, 1000);
+                setInterval(fetchMonitoringStatus, 60000);
+            </script>
         </div>
         
         <script>

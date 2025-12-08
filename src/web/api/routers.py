@@ -10,6 +10,31 @@ logger = logging.getLogger(__name__)
 
 api_router = APIRouter(prefix="/api", tags=["api"])
 
+
+@api_router.get('/monitoring/checks')
+async def monitoring_checks() -> Dict[str, Any]:
+    """Run quick health checks for important endpoints and return the summary"""
+    from fastapi.testclient import TestClient
+    from src.web.app import create_app
+
+    app = create_app()
+    client = TestClient(app)
+    endpoints = [
+        ('health', '/api/health'),
+        ('stats', '/api/stats'),
+        ('masters', '/api/masters'),
+        ('clients', '/api/clients'),
+        ('inka_stats', '/api/inka-training/stats')
+    ]
+    results = {}
+    for name, url in endpoints:
+        try:
+            r = client.get(url)
+            results[name] = { 'status': r.status_code, 'ok': r.status_code == 200 }
+        except Exception as e:
+            results[name] = { 'status': 'error', 'error': str(e) }
+    return { 'ok': all(v.get('ok', False) for v in results.values()), 'results': results }
+
 # ================== CLIENTS ==================
 
 @api_router.get("/clients")
@@ -240,6 +265,132 @@ async def get_stats() -> Dict[str, Any]:
         }
     except Exception as e:
         logger.error(e)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ================== SHEETS / DB MANAGEMENT ==================
+
+
+@api_router.get("/sheets")
+async def list_sheets() -> List[str]:
+    from src.web.app import db_manager
+    if db_manager is None:
+        raise HTTPException(status_code=500, detail="Database not initialized")
+    try:
+        return db_manager.list_sheets()
+    except Exception as e:
+        logger.error(f"Error listing sheets: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@api_router.get("/sheets/{sheet_name}")
+async def export_sheet(sheet_name: str) -> Dict[str, Any]:
+    from src.web.app import db_manager
+    if db_manager is None:
+        raise HTTPException(status_code=500, detail="Database not initialized")
+    try:
+        return db_manager.export_sheet(sheet_name)
+    except Exception as e:
+        logger.error(f"Error exporting sheet {sheet_name}: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@api_router.post("/sheets/{sheet_name}/import")
+async def import_sheet(sheet_name: str, request: Request) -> Dict[str, Any]:
+    from src.web.app import db_manager
+    if db_manager is None:
+        raise HTTPException(status_code=500, detail="Database not initialized")
+    try:
+        body = await request.json()
+        rows = body.get('rows', [])
+        mode = body.get('mode', 'append')
+        success, msg = db_manager.import_sheet(sheet_name, rows, mode=mode)
+        if success:
+            # audit
+            admin_id = body.get('admin_id')
+            try:
+                if admin_id:
+                    db_manager.add_audit_log(admin_id, 'import_sheet', sheet_name, f'imported:{len(rows)} mode={mode}')
+            except:
+                pass
+            return {"success": True, "message": msg}
+        raise HTTPException(status_code=400, detail=msg)
+    except Exception as e:
+        logger.error(f"Error importing sheet {sheet_name}: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@api_router.get("/db/backup")
+async def backup_db() -> Dict[str, Any]:
+    from src.web.app import db_manager
+    if db_manager is None:
+        raise HTTPException(status_code=500, detail="Database not initialized")
+    try:
+        data = db_manager.backup_db()
+        # We don't get admin info here, but still store a brief log
+        try:
+            db_manager.add_audit_log('web', 'backup_db', 'ALL', 'backup created')
+        except:
+            pass
+        return data
+    except Exception as e:
+        logger.error(f"Error backing up DB: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@api_router.post("/db/restore")
+async def restore_db(request: Request) -> Dict[str, Any]:
+    from src.web.app import db_manager
+    if db_manager is None:
+        raise HTTPException(status_code=500, detail="Database not initialized")
+    try:
+        body = await request.json()
+        data = body.get('backup', {})
+        mode = body.get('mode', 'replace')
+        success, msg = db_manager.restore_db(data, mode=mode)
+        if success:
+            admin_id = body.get('admin_id')
+            try:
+                if admin_id:
+                    db_manager.add_audit_log(admin_id, 'restore_db', 'ALL', f'restore mode={mode}')
+            except:
+                pass
+            return {"success": True, "message": msg}
+        raise HTTPException(status_code=400, detail=msg)
+    except Exception as e:
+        logger.error(f"Error restoring DB: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@api_router.get('/audit/logs')
+async def get_audit_logs(limit: int = 100) -> List[Dict[str, Any]]:
+    from src.web.app import db_manager
+    if db_manager is None:
+        raise HTTPException(status_code=500, detail="Database not initialized")
+    try:
+        return db_manager.get_audit_logs(limit=limit)
+    except Exception as e:
+        logger.error(f"Error getting audit logs: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@api_router.post('/audit/logs')
+async def add_audit_log(request: Request) -> Dict[str, Any]:
+    from src.web.app import db_manager
+    if db_manager is None:
+        raise HTTPException(status_code=500, detail="Database not initialized")
+    try:
+        body = await request.json()
+        admin_id = body.get('admin_id')
+        action = body.get('action', '')
+        sheet = body.get('sheet', '')
+        details = body.get('details', '')
+        success = db_manager.add_audit_log(admin_id or 'web', action, sheet, details)
+        if success:
+            return {"success": True}
+        raise HTTPException(status_code=500, detail='Failed to add audit log')
+    except Exception as e:
+        logger.error(f"Error adding audit log: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 

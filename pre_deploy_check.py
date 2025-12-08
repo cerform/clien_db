@@ -240,6 +240,95 @@ def check_linting():
     
     return True
 
+
+def check_admin_ids_env():
+    """Validate ADMIN_IDS parseable to list of ints"""
+    print_section("Admin IDs Config Check")
+    import os
+    admin_ids = os.getenv('ADMIN_IDS')
+    if not admin_ids:
+        print(f"{Colors.YELLOW}⚠️  ADMIN_IDS not set{Colors.ENDC}")
+        return True
+    try:
+        ids = [int(i.strip()) for i in admin_ids.split(',') if i.strip()]
+        print(f"{Colors.GREEN}✅ ADMIN_IDS parsed ({len(ids)} ids){Colors.ENDC}")
+        return True
+    except Exception as e:
+        print(f"{Colors.RED}❌ ADMIN_IDS invalid: {e}{Colors.ENDC}")
+        return False
+
+
+def validate_credentials_json():
+    """Check credentials.json is valid JSON with expected keys"""
+    print_section("Google Credentials Check")
+    import json
+    try:
+        p = Path('credentials.json')
+        if not p.exists():
+            print(f"{Colors.YELLOW}⚠️  credentials.json not found{Colors.ENDC}")
+            return True
+        data = json.loads(p.read_text())
+        if 'type' in data and 'client_email' in data:
+            print(f"{Colors.GREEN}✅ credentials.json looks valid{Colors.ENDC}")
+            return True
+        else:
+            print(f"{Colors.YELLOW}⚠️  credentials.json seems incomplete{Colors.ENDC}")
+            return True
+    except Exception as e:
+        print(f"{Colors.RED}❌ Invalid credentials.json: {e}{Colors.ENDC}")
+        return False
+
+
+def check_api_endpoints():
+    """Call important API endpoints via TestClient (fast, internal checks)"""
+    try:
+        from src.web.app import create_app
+        from fastapi.testclient import TestClient
+    except Exception as e:
+        print(f"{Colors.YELLOW}⚠️  API endpoint check skipped: {e}{Colors.ENDC}")
+        return True
+
+    print_section("API Endpoint Check")
+    try:
+        app = create_app()
+        client = TestClient(app)
+    except Exception as e:
+        print(f"{Colors.YELLOW}⚠️  API endpoint check skipped: {e}{Colors.ENDC}")
+        return True
+    endpoints = [
+        '/api/health',
+        '/api/stats',
+        '/api/masters',
+        '/api/clients',
+        '/api/bookings',
+        '/api/inka-training/stats',
+    ]
+    failed = False
+    for ep in endpoints:
+        try:
+            r = client.get(ep)
+            if r.status_code != 200:
+                print(f"{Colors.YELLOW}⚠️  {ep} -> {r.status_code}{Colors.ENDC}")
+                failed = True
+            else:
+                print(f"{Colors.GREEN}✅ {ep} -> {r.status_code}{Colors.ENDC}")
+        except Exception as e:
+            print(f"{Colors.RED}❌ {ep} -> {e}{Colors.ENDC}")
+            failed = True
+
+    return not failed
+
+
+def check_tests():
+    """Run pytest suite and report status; return boolean"""
+    print_section("Unit Tests")
+    try:
+        result = subprocess.run('pytest -q', shell=True)
+        return result.returncode == 0
+    except Exception as e:
+        print(f"{Colors.RED}❌ Error running pytest: {e}{Colors.ENDC}")
+        return False
+
 def main():
     """Главная функция"""
     print(f"\n{Colors.BOLD}{Colors.HEADER}")
@@ -259,7 +348,11 @@ def main():
         ("Docker Configuration", check_docker),
         ("Configuration", check_config),
         ("Database Connection", check_database),
+        ("Google Credentials", validate_credentials_json),
         ("OpenAI API", check_openai),
+        ("Admin IDs", check_admin_ids_env),
+        ("API Endpoints", check_api_endpoints),
+        ("Unit Tests", check_tests),
         ("Code Quality", check_linting),
     ]
     
