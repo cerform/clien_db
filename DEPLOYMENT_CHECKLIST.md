@@ -76,6 +76,20 @@ gcloud run services describe tattoo-bot --region us-central1 --format='value(sta
 SERVICE_URL=$(gcloud run services describe tattoo-bot --region us-central1 --format='value(status.url)')
 curl -X GET "$SERVICE_URL/health"
 # Expected: 200 OK or similar response
+
+#### 2e. Check Admin DB Manager and Sheets API
+```bash
+# Check admin page (may be protected by auth)
+curl -I "$SERVICE_URL/admin" | head -n 1
+# Check DB Manager page
+curl -I "$SERVICE_URL/admin/db-manager" | head -n 1
+# Check API sheets
+curl -I "$SERVICE_URL/api/sheets" | head -n 1
+```
+Expected responses:
+- `200 OK` for `/admin` if not blocked by auth
+- `200 OK` or `302` to login for `/admin/db-manager` depending on setup
+- `200 OK` for `/api/sheets` if spreadsheet and credentials exist, otherwise a `500` may indicate missing credentials
 ```
 
 #### 2c. Check Recent Logs

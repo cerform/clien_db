@@ -45,6 +45,17 @@ class DatabaseManager:
         self._services_cache = None
         self._cache_time = 0
         self._cache_ttl = 60  # секунд
+        # Audit sheet name
+        self.audit_sheet = "Admin_Audit_Log"
+        # Ensure audit sheet exists with headers
+        try:
+            values = self.sheets.get_sheet_values(self.audit_sheet)
+            if not values or len(values) == 0:
+                headers = ["timestamp", "admin_id", "action", "sheet", "details"]
+                self.sheets.append_rows(self.audit_sheet, [headers])
+        except Exception:
+            # Not critical if the sheet can't be initialized; will attempt on first log
+            pass
     
     # ============ HELPER ФУНКЦИИ ДЛЯ ID ============
     
@@ -941,6 +952,136 @@ class DatabaseManager:
         except Exception as e:
             logger.error(f"Error getting stats: {e}")
             return {"error": str(e)}
+
+    # ============ SHEET MANAGEMENT (EXPORT/IMPORT/BACKUP) ============
+
+    def list_sheets(self) -> List[str]:
+        """Return list of sheet names in the spreadsheet"""
+        try:
+            # GoogleSheetsClient.get_sheets_list if available
+            if hasattr(self.sheets, 'get_sheets_list'):
+                return self.sheets.get_sheets_list()
+            # fallback: return commonly used sheet names
+            return ["Masters", "Services", "Clients", "Bookings", "Расписание", "INKA_Training"]
+        except Exception as e:
+            logger.error(f"Error listing sheets: {e}")
+            return []
+
+    def export_sheet(self, sheet_name: str) -> Dict[str, Any]:
+        """Export sheet content as JSON-friendly structure (headers + rows)"""
+        try:
+            values = self.sheets.get_sheet_values(sheet_name)
+            if not values:
+                return {"headers": [], "rows": []}
+            headers = values[0]
+            rows = [dict(zip(headers, row + [""] * (len(headers) - len(row)))) for row in values[1:]]
+            return {"headers": headers, "rows": rows}
+        except Exception as e:
+            logger.error(f"Error exporting sheet {sheet_name}: {e}")
+            return {"error": str(e)}
+
+    def import_sheet(self, sheet_name: str, rows: List[Dict[str, Any]], mode: str = "append") -> Tuple[bool, str]:
+        """Import rows to a sheet. mode: append|replace
+        rows: list of dicts mapping header -> value
+        """
+        try:
+            if not rows:
+                return False, "Нет данных для импорта"
+
+            # Get current headers if exist
+            current = self.sheets.get_sheet_values(sheet_name)
+            if current and len(current) > 0:
+                headers = current[0]
+            else:
+                headers = list(rows[0].keys())
+
+            # Convert dict rows to list rows following headers
+            list_rows = []
+            for r in rows:
+                list_rows.append([r.get(h, "") for h in headers])
+
+            if mode == 'append':
+                self.sheets.append_rows(sheet_name, list_rows)
+                return True, f"✅ Импортировано {len(list_rows)} строк (append)"
+            else:
+                # Replace: overwrite sheet data by writing headers + rows starting A1
+                data = [headers] + list_rows
+                # Attempt to write by replacing a big range
+                # Assuming update_range works for large ranges
+                end_col = 'Z'
+                end_row = len(data)
+                range_spec = f"A1:{end_col}{end_row}"
+                self.sheets.update_range(sheet_name, range_spec, data)
+                return True, f"✅ Импортировано {len(list_rows)} строк (replace)"
+        except Exception as e:
+            logger.error(f"Error importing sheet {sheet_name}: {e}")
+            return False, str(e)
+
+    def backup_db(self) -> Dict[str, Any]:
+        """Return backup data for all sheets as JSON (dict sheet_name -> headers + rows)"""
+        try:
+            sheets = self.list_sheets()
+            backup = {}
+            for s in sheets:
+                export = self.export_sheet(s)
+                if 'error' in export:
+                    backup[s] = {"error": export['error']}
+                else:
+                    backup[s] = export
+            return backup
+        except Exception as e:
+            logger.error(f"Error creating DB backup: {e}")
+            return {"error": str(e)}
+
+    def restore_db(self, backup_data: Dict[str, Any], mode: str = 'replace') -> Tuple[bool, str]:
+        """Restore DB from backup_data structure. mode: replace|merge
+           backup_data should be {sheet_name: {headers:[], rows:[{...}]}}
+        """
+        try:
+            for sname, sheet in backup_data.items():
+                if 'headers' not in sheet or 'rows' not in sheet:
+                    continue
+                rows = sheet['rows']
+                headers = sheet['headers']
+                # Convert rows of dicts back to list rows
+                list_rows = [[r.get(h, '') for h in headers] for r in rows]
+                data = [headers] + list_rows
+                end_col = 'Z'
+                end_row = len(data)
+                range_spec = f"A1:{end_col}{end_row}"
+                if mode == 'replace':
+                    self.sheets.update_range(sname, range_spec, data)
+                else:
+                    # Append merging
+                    self.sheets.append_rows(sname, list_rows)
+            return True, "✅ DB restored"
+        except Exception as e:
+            logger.error(f"Error restoring DB: {e}")
+            return False, str(e)
+
+    def add_audit_log(self, admin_id: int, action: str, sheet: str, details: str = "") -> bool:
+        """Append an audit log row to Admin_Audit_Log sheet"""
+        try:
+            from datetime import datetime
+            row = [datetime.now().isoformat(), str(admin_id), action, sheet, details]
+            self.sheets.append_rows(self.audit_sheet, [row])
+            return True
+        except Exception as e:
+            logger.error(f"Error adding audit log: {e}")
+            return False
+
+    def get_audit_logs(self, limit: int = 100) -> List[Dict[str, Any]]:
+        """Return audit logs as list of dicts"""
+        try:
+            data = self.sheets.get_sheet_values(self.audit_sheet)
+            if not data or len(data) <= 1:
+                return []
+            headers = data[0]
+            rows = data[1:limit+1]
+            return [dict(zip(headers, r + [""] * (len(headers) - len(r)))) for r in rows]
+        except Exception as e:
+            logger.error(f"Error getting audit logs: {e}")
+            return []
 
 
 class InkaLearningSystem:

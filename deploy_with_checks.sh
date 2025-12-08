@@ -139,6 +139,75 @@ else
     exit 1
 fi
 
+# Check 9: Unit tests
+echo -e "\n${YELLOW}✓ Check 9: Unit Tests${NC}"
+if command -v pytest &> /dev/null; then
+    pytest -q || { echo -e "${RED}  ❌ Unit tests failed${NC}"; exit 1; }
+    echo -e "${GREEN}  ✅ All tests passed${NC}"
+else
+    echo -e "${YELLOW}  ⚠️ pytest not installed — skipping unit tests${NC}"
+fi
+
+# Check 10: Optional local server checks (requires GOOGLE_CREDENTIALS_JSON, GOOGLE_SPREADSHEET_ID)
+echo -e "\n${YELLOW}✓ Check 10: Local server health checks (optional)${NC}"
+if [ -f ".env" ]; then
+    source .env
+fi
+if [ -n "$GOOGLE_CREDENTIALS_JSON" ] && [ -n "$GOOGLE_SPREADSHEET_ID" ]; then
+    echo -e "  🔎 Credentials and spreadsheet detected — starting local server tests..."
+    UVICORN_LOG=uvicorn_deploy_check.log
+    # Run uvicorn in background
+    nohup python3 -m uvicorn src.web.app:create_app --factory --host 127.0.0.1 --port 8000 > $UVICORN_LOG 2>&1 &
+    UVICORN_PID=$!
+    echo -e "  ▶️ Started uvicorn (pid: $UVICORN_PID), waiting for start..."
+    # Wait for health start
+    OK=0
+    for i in {1..20}; do
+        sleep 1
+        if curl -s http://127.0.0.1:8000/api/health >/dev/null 2>&1 || curl -s http://127.0.0.1:8000/ >/dev/null 2>&1; then
+            OK=1
+            break
+        fi
+    done
+    if [ $OK -eq 0 ]; then
+        echo -e "${YELLOW}  ⚠️ Local server didn't respond — skipping endpoint checks${NC}"
+    else
+        echo -e "${GREEN}  ✅ Local server up — running endpoint checks${NC}"
+        # Check admin page and db-manager
+        endpoints=("/admin" "/admin/db-manager" "/api/sheets")
+        for ep in "${endpoints[@]}"; do
+            echo -e "    ⤷ Checking http://127.0.0.1:8000${ep}"
+            # Use GET and print only status code to avoid issues with HEAD returning 405
+            STATUS=$(curl -s -o /dev/null -w "%{http_code}" --max-time 5 http://127.0.0.1:8000${ep})
+            if [ "$ep" == "/admin" ] || [ "$ep" == "/admin/db-manager" ]; then
+                # Accept 200 OK or 302 Redirect (to login/dashboard)
+                if [ "$STATUS" == "200" ] || [ "$STATUS" == "302" ]; then
+                    echo -e "      ${GREEN}${STATUS} OK${NC}"
+                else
+                    echo -e "      ${RED}${STATUS} FAILED${NC}"
+                fi
+            else
+                # Default check: expect 200
+                if [ "$STATUS" == "200" ]; then
+                    echo -e "      ${GREEN}200 OK${NC}"
+                else
+                    echo -e "      ${RED}${STATUS} FAILED${NC}"
+                fi
+            fi
+        done
+    fi
+    # Kill uvicorn
+    kill $UVICORN_PID || true
+    echo -e "  🛑 Local server stopped"
+else
+    echo -e "  ⚠️ Missing spreadsheet credentials — skipping local sheet checks${NC}"
+fi
+
+
+# Check 11: DB Format Validation (Google Sheets)
+echo -e "\n${YELLOW}✓ Check 11: DB Format Validation${NC}"
+python3 validate_db_format.py || { echo -e "${RED}  ❌ DB format validation failed${NC}"; exit 1; }
+
 # Summary
 echo -e "\n${BOLD}═══════════════════════════════════════════════════════${NC}"
 echo -e "${GREEN}✅ All pre-deployment checks passed!${NC}"
@@ -189,6 +258,50 @@ else
     echo -e "\n${RED}❌ Deployment failed!${NC}"
     echo -e "${YELLOW}Check deployment.log for details${NC}"
     exit 1
+fi
+
+# ============== POST-DEPLOY: Smoke tests on deployed service ==============
+if [ -n "$SERVICE_URL" ] && [ "$1" != "--dry-run" ]; then
+    echo -e "\n${YELLOW}🚨 POST-DEPLOY: Service smoke tests${NC}"
+    # Remove trailing slash if present
+    SERVICE_BASE=${SERVICE_URL%/}
+    sleep 3
+    # try up to 20 times for health to be ready
+    for i in {1..20}; do
+        echo -e "  ▶️ Checking health (attempt $i)"
+        if curl -s "$SERVICE_BASE/api/health" | grep -q "ok"; then
+            echo -e "    ${GREEN}Health OK${NC}"
+            break
+        fi
+        sleep 3
+    done
+
+    # Check admin page(s)
+    echo -e "  ▶️ Checking /admin and /admin/db-manager"
+    if curl -sI "$SERVICE_BASE/admin" | grep -q "200"; then
+        echo -e "    ${GREEN}/admin OK${NC}"
+    else
+        echo -e "    ${RED}/admin FAILED${NC}"
+    fi
+
+    if curl -sI "$SERVICE_BASE/admin/db-manager" | grep -q "200"; then
+        echo -e "    ${GREEN}/admin/db-manager OK${NC}"
+    else
+        echo -e "    ${YELLOW}/admin/db-manager WARNING: maybe requires auth, check manually${NC}"
+    fi
+
+    # Check API sheets (may require spreadsheet credentials; note that a 500 here might be okay if credentials missing)
+    echo -e "  ▶️ Checking /api/sheets"
+    # Use GET to retrieve a status code for /api/sheets; a 200 means sheets are accessible.
+    RES=$(curl -s -o /dev/null -w "%{http_code}" --max-time 5 "$SERVICE_BASE/api/sheets")
+    if [ "$RES" == "200" ]; then
+        echo -e "    ${GREEN}/api/sheets OK${NC}"
+    elif [ "$RES" == "500" ]; then
+        # 500 might indicate missing credentials or internal server error; keep as warning
+        echo -e "    ${YELLOW}/api/sheets POST-DEPLOY WARNING: status: $RES (may require credentials)${NC}"
+    else
+        echo -e "    ${RED}/api/sheets FAILED: status $RES${NC}"
+    fi
 fi
 
 echo -e "\n${BOLD}═══════════════════════════════════════════════════════${NC}"

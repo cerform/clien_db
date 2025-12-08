@@ -108,3 +108,27 @@ def test_monitoring_endpoint_ok_or_warn():
     assert hres.status_code == 200
     hdata = hres.json()
     assert 'history' in hdata and isinstance(hdata['history'], list)
+
+
+def test_clients_bookings_return_500_when_db_missing(monkeypatch):
+    if client is None:
+        pytest.skip("fastapi dependencies not installed")
+    import src.web.app as app_mod
+    original_db = getattr(app_mod, 'db_manager', None)
+    app_mod.db_manager = None
+    res1 = client.get('/api/clients')
+    res2 = client.get('/api/bookings')
+    assert res1.status_code == 500
+    assert res2.status_code == 500
+    app_mod.db_manager = original_db
+
+
+def test_train_inka_missing_text_raises_400():
+    if client is None:
+        pytest.skip("fastapi dependencies not installed")
+    import src.web.app as app_mod
+    # ensure learning_system present
+    class DummyLearning: pass
+    app_mod.learning_system = DummyLearning()
+    res = client.post('/api/inka-training', json={})
+    assert res.status_code == 400

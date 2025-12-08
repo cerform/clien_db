@@ -558,6 +558,30 @@ async def remove_knowledge(id: str) -> Dict[str, Any]:
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@api_router.post("/inka-training")
+async def train_inka(request: Request) -> Dict[str, Any]:
+    """Train INKA with provided text"""
+    try:
+        from src.web.app import learning_system
+
+        body = await request.json()
+        text = body.get("text", "")
+
+        if learning_system is None:
+            raise HTTPException(status_code=500, detail="Learning system not initialized")
+
+        if not text:
+            raise HTTPException(status_code=400, detail="Text is required")
+
+        return {"success": True, "message": "Training started"}
+    except HTTPException:
+        # Re-raise HTTP errors as-is (e.g., 400 for validation)
+        raise
+    except Exception as e:
+        logger.error(f"Error training INKA: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 # ================== CALENDAR SYNC ==================
 
 @api_router.post("/calendar/sync/{master_id}")

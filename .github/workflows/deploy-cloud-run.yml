@@ -1,0 +1,60 @@
+name: Deploy to Google Cloud Run (with checks)
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - clean-main
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+      - name: Install deps
+        run: |
+          python -m pip install --upgrade pip
+          pip install --upgrade -r requirements.txt
+      - name: Run unit tests
+        run: |
+          pytest -q
+
+  deploy:
+    needs: test
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+      - name: Authenticate to GCP
+        env:
+          GCP_PROJECT: ${{ secrets.GCP_PROJECT }}
+          GCP_SA_KEY: ${{ secrets.GCP_SA_KEY }}
+        run: |
+          echo "$GCP_SA_KEY" > /tmp/gcp_key.json
+          gcloud auth activate-service-account --key-file=/tmp/gcp_key.json
+          gcloud config set project $GCP_PROJECT
+      - name: Configure gcloud
+        run: |
+          gcloud components update --quiet || true
+      - name: Deploy to Cloud Run
+        env:
+          SERVICE_NAME: tattoo-bot
+          REGION: us-central1
+          MEMORY: 512Mi
+        run: |
+          gcloud run deploy $SERVICE_NAME --source . --region $REGION --memory $MEMORY --platform managed --quiet
+      - name: Check deployed service health
+        run: |
+          SERVICE_URL=$(gcloud run services describe tattoo-bot --region $REGION --format='value(status.url)')
+          echo "Service URL: $SERVICE_URL"
+          sleep 5
+          for i in {1..20}; do
+            if curl -s "$SERVICE_URL/api/health" | grep -q "ok"; then
+              echo "Health OK"; break
+            fi
+            sleep 5
+          done

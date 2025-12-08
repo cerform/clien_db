@@ -110,6 +110,19 @@ class GoogleSheetsClient:
             List of rows with values
         """
         return self.get_sheet_values(sheet_name)
+
+    def get_sheets_list(self) -> List[str]:
+        """
+        Return list of sheet/tab names in the spreadsheet
+        """
+        try:
+            spreadsheet = self.service.spreadsheets().get(spreadsheetId=self.spreadsheet_id).execute()
+            sheets = spreadsheet.get('sheets', [])
+            names = [s.get('properties', {}).get('title', '') for s in sheets]
+            return names
+        except Exception as e:
+            logger.error(f"❌ Failed to get sheets list: {e}")
+            return []
     
     def append_row(self, sheet_name: str, values: List[Any]) -> bool:
         """

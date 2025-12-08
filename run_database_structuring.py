@@ -29,6 +29,7 @@ def main():
         # Импорт модулей
         from src.config.config import Config
         from src.utils.database_unifier import DatabaseUnifier
+        from src.db.db_initializer import DatabaseInitializer
         from src.db.sheets_client import GoogleSheetsClient
         
         # Загрузка конфигурации
@@ -49,6 +50,21 @@ def main():
         print("🔄 Инициализация унификатора...")
         unifier = DatabaseUnifier(sheets_client)
         print("   ✅ Унификатор готов")
+
+        # Ensure the spreadsheet has the expected structure before unifying
+        print("🔧 Проверка и создание структуры листов (если необходимо)...")
+        db_initializer = DatabaseInitializer(
+            credentials_file=str(credentials_file),
+            spreadsheet_id=config.google_spreadsheet_id
+        )
+        if args.dry_run:
+            print("   ℹ️ Dry run: структура таблиц не будет изменена (показаны бы действия)")
+        else:
+            created = db_initializer.initialize_database()
+            if not created:
+                print("   ⚠️ Не удалось создать/обновить структуру таблиц")
+            else:
+                print("   ✅ Структура листов проверена/создана")
         
         # Запуск унификации
         print("\n" + "=" * 50)

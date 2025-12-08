@@ -401,6 +401,157 @@ async def masters_page():
     </html>
     """
 
+
+@admin_router.get("/db-manager", response_class=HTMLResponse)
+async def db_manager_page():
+    """Database Manager page for admin panel"""
+    return """
+    <!DOCTYPE html>
+    <html lang="ru">
+    <head>
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <title>DB Manager - Admin Panel</title>
+        <style>
+            body { font-family: Arial, Helvetica, sans-serif; padding: 20px; }
+            .card { padding: 10px; border: 1px solid #ddd; border-radius: 6px; margin-bottom: 10px; }
+            .btn { padding: 8px 12px; border-radius: 4px; background: #2ea043; color: white; border: none; cursor: pointer; }
+            .btn-danger { background: #d9534f; }
+            .btn-grey { background: #95a5a6; }
+            pre { background: #f5f5f5; padding: 10px; border-radius: 5px; overflow-x: auto; }
+        </style>
+    </head>
+    <body>
+        <h1>DB Manager</h1>
+        <div class="card">
+            <button class="btn" onclick="loadSheets()">🔃 Load Sheets</button>
+            <button class="btn btn-grey" onclick="backupDB()">💾 Backup DB</button>
+            <button class="btn btn-danger" onclick="restoreDB()">♻️ Restore DB (replace)</button>
+            <input type="file" id="uploadBackup" style="display:none" accept="application/json" onchange="uploadBackup(event)" />
+        </div>
+        <div class="card" id="sheetsList">
+            Loading sheets...
+        </div>
+        <div class="card">
+            <h3>Audit Logs</h3>
+            <button class="btn" onclick="loadAuditLogs()">Load Audit Logs</button>
+            <pre id="auditLogs">No logs</pre>
+        </div>
+
+        <script>
+            async function loadSheets() {
+                try {
+                    const res = await fetch('/api/sheets');
+                    const sheets = await res.json();
+                    const el = document.getElementById('sheetsList');
+                    if (!sheets || sheets.length == 0) {
+                        el.innerHTML = '<div>No sheets found</div>';
+                        return;
+                    }
+                    el.innerHTML = sheets.map(s => `
+                        <div style='display:flex;gap:8px;align-items:center;margin-bottom:8px'>
+                            <strong style='flex:1'>${s}</strong>
+                            <button class='btn btn-grey' onclick="viewSheet('${s}')">View</button>
+                            <button class='btn' onclick="exportSheet('${s}')">Export JSON</button>
+                            <button class='btn' onclick="document.getElementById('upload_${encodeURIComponent(s)}').click()">Import (append)</button>
+                            <input id='upload_${encodeURIComponent(s)}' type='file' data-sheet='${s}' style='display:none' accept='application/json' onchange='uploadSheet(event)' />
+                        </div>
+                    `).join('');
+                } catch (e) {
+                    console.error(e);
+                }
+            }
+
+            async function viewSheet(name) {
+                const res = await fetch(`/api/sheets/${encodeURIComponent(name)}`);
+                const data = await res.json();
+                alert(JSON.stringify(data, null, 2));
+            }
+
+            async function exportSheet(name) {
+                const res = await fetch(`/api/sheets/${encodeURIComponent(name)}`);
+                const data = await res.json();
+                const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `${name.replace(/\s+/g,'_')}.json`;
+                a.click();
+            }
+
+            async function uploadSheet(e) {
+                const file = e.target.files[0];
+                const sheetName = e.target.getAttribute('data-sheet');
+                if (!file) return;
+                const text = await file.text();
+                let json = [];
+                try { json = JSON.parse(text); } catch (err) { alert('Invalid JSON'); return; }
+                if (!Array.isArray(json.rows) && !Array.isArray(json)) {
+                    // Accept format: {headers: [...], rows: [{...}]}
+                }
+                // If data has headers+rows
+                if (json.rows && Array.isArray(json.rows)) {
+                    const rows = json.rows;
+                    await fetch(`/api/sheets/${encodeURIComponent(sheetName)}/import`, {
+                        method: 'POST', headers: {'Content-Type': 'application/json'},
+                        body: JSON.stringify({rows: rows, mode: 'append', admin_id: getAdminId()})
+                    });
+                    alert('Import complete');
+                } else if (Array.isArray(json)) {
+                    // If array of objects
+                    await fetch(`/api/sheets/${encodeURIComponent(sheetName)}/import`, {
+                        method: 'POST', headers: {'Content-Type': 'application/json'},
+                        body: JSON.stringify({rows: json, mode: 'append', admin_id: getAdminId()})
+                    });
+                    alert('Import complete');
+                } else {
+                    alert('Unknown JSON format');
+                }
+            }
+
+            async function backupDB() {
+                const res = await fetch('/api/db/backup');
+                const data = await res.json();
+                const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `db-backup-${new Date().toISOString().slice(0,10)}.json`;
+                a.click();
+            }
+
+            async function restoreDB() {
+                document.getElementById('uploadBackup').click();
+            }
+
+            async function uploadBackup(event) {
+                const file = event.target.files[0];
+                if (!file) return;
+                if (!confirm('Restore DB from this file? This will replace sheets (use with caution).')) return;
+                const text = await file.text();
+                const data = JSON.parse(text);
+                await fetch('/api/db/restore', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({backup: data, mode: 'replace', admin_id: getAdminId()})});
+                alert('Restore request sent');
+            }
+
+            async function loadAuditLogs() {
+                const res = await fetch('/api/audit/logs?limit=100');
+                const data = await res.json();
+                document.getElementById('auditLogs').textContent = JSON.stringify(data, null, 2);
+            }
+        </script>
+        <script>
+            function getAdminId() {
+                const token = localStorage.getItem('admin_token');
+                if (!token) return null;
+                const parts = token.split('_');
+                return parts.length > 2 ? parts.slice(2).join('_') : (parts.length === 2 ? parts[1] : null);
+            }
+        </script>
+    </body>
+    </html>
+    """
+
 @admin_router.get("/services", response_class=HTMLResponse)
 async def services_page():
     """Services management page"""
@@ -3451,8 +3602,17 @@ async def schedule_page():
                             day.setDate(day.getDate() + i);
                             const dateStr = formatDate(day);
                             
-                            const eventsArr = (data.calendar_events || data.events || []);
-                            const slotEvents = eventsArr.filter(e => {
+                            // Ensure we always have an array here. Some endpoints may return
+                            // calendar_events as a number or null; make a safe conversion.
+                            const eventsArr = Array.isArray(data.calendar_events)
+                                ? data.calendar_events
+                                : Array.isArray(data.events)
+                                    ? data.events
+                                    : [];
+                            if (!(Array.isArray(data.calendar_events) || Array.isArray(data.events))) {
+                                console.warn('Warning: calendar events returned with unexpected type', typeof data.calendar_events, typeof data.events, data.calendar_events, data.events);
+                            }
+                            const slotEvents = Array.isArray(eventsArr) ? eventsArr.filter(e => {
                                 // support start formats: string | { dateTime: '...', date: 'YYYY-MM-DD' }
                                 let startRaw = '';
                                 if (typeof e.start === 'string') {
@@ -3504,8 +3664,9 @@ async def schedule_page():
                     
                     const allSlots = ['10:00', '11:00', '12:00', '13:00', '14:00', '15:00', '16:00', '17:00', '18:00', '19:00'];
                     
+                    const availableSlots = Array.isArray(data.available_slots) ? data.available_slots : [];
                     document.getElementById('availabilityGrid').innerHTML = allSlots.map(slot => {
-                        const isAvailable = data.available_slots.includes(slot);
+                        const isAvailable = availableSlots.includes(slot);
                         return `
                             <div class="time-slot-btn ${isAvailable ? 'available' : 'busy'}"
                                  ${isAvailable ? `onclick="bookSlot('${masterId}', '${date}', '${slot}')"` : ''}>

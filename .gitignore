@@ -25,4 +25,14 @@ src/web/api/__pycache__/
 
 # Backups
 backups/*.json
-!backups/.gitkeep
+!backups/.gitkeep# Local virtual environments
+.venv/
+venv/
+.env
+# Local virtual environments and caches
+.venv/
+venv/
+.deploy_venv/
+.env
+.pytest_cache/
+__pycache__/
