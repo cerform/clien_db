@@ -56,5 +56,5 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
 # Порт для Cloud Run
 EXPOSE 8080
 
-# Запуск production бота с полной интеграцией
-CMD ["python", "-u", "run_production.py"]
+# Запуск Cloud Run entrypoint
+CMD ["python", "-u", "run_cloud.py"]
