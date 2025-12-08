@@ -29,7 +29,7 @@ try:
     
     # Initialize sheets client with credentials.json
     logger.info("📋 Initializing GoogleSheetsClient...")
-    sheets_client = GoogleSheetsClient(credentials_path="credentials.json", spreadsheet_id=SPREADSHEET_ID)
+    sheets_client = GoogleSheetsClient(credentials_file="credentials.json", spreadsheet_id=SPREADSHEET_ID)
     
     logger.info("✅ GoogleSheetsClient initialized successfully")
     

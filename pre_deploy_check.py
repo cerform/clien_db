@@ -55,11 +55,12 @@ def check_file_exists(filepath, description):
 def check_python_syntax():
     """Проверить синтаксис Python файлов"""
     print_section("Python Syntax Check")
-    
+    import sys
+    python_exec = sys.executable or "python3"
     errors_found = False
     for py_file in Path("src").rglob("*.py"):
         result = subprocess.run(
-            f"python -m py_compile {py_file}",
+            f"{python_exec} -m py_compile {py_file}",
             shell=True,
             capture_output=True,
             text=True
