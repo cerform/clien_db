@@ -465,11 +465,20 @@ async def get_sync_status(master_id: str) -> Dict[str, Any]:
                 logger.error(f"Error getting calendar events: {e}")
                 calendar_events = 0
         
+        # Get bookings for this master
+        bookings = db_manager.get_all_bookings()
+        master_bookings = [b for b in bookings if b.get("master_id") == master_id]
+        
         return {
             "status": "synced",
             "master_id": master_id,
+            "calendar_id": calendar_id,
+            "calendar_connected": bool(calendar_id),
             "calendar_events": calendar_events,
+            "db_schedule_entries": len(schedule),
+            "db_bookings": len(master_bookings),
             "scheduled_events": len(schedule),
+            "schedule": schedule,
             "last_sync": datetime.now().isoformat()
         }
     except Exception as e:

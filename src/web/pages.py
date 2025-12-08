@@ -301,7 +301,15 @@ async def masters_page():
                 
                 const id = document.getElementById('masterId').value;
                 const originalId = document.getElementById('originalMasterId').value;
-                const newMasterId = document.getElementById('newMasterId').value;
+                let newMasterId = document.getElementById('newMasterId').value;
+                
+                // Для новых мастеров - убедиться, что ID установлен
+                if (!id && !newMasterId) {
+                    const name = document.getElementById('name').value;
+                    if (name) {
+                        newMasterId = 'm_' + transliterate(name);
+                    }
+                }
                 
                 const data = {
                     name: document.getElementById('name').value,
@@ -321,7 +329,7 @@ async def masters_page():
                     data.new_id = newMasterId;
                 }
                 
-                // Для нового мастера - используем предложенный ID
+                // Для нового мастера - используем ID (либо предложенный, либо сгенерированный)
                 if (!id && newMasterId) {
                     data.id = newMasterId;
                 }
@@ -3040,24 +3048,27 @@ async def schedule_page():
                 
                 try {
                     const res = await fetch(`/api/calendar/sync/${masterId}`);
+                    if (!res.ok) throw new Error(`HTTP ${res.status}`);
                     const data = await res.json();
                     
                     // Update Calendar Status
-                    document.getElementById('calendarStatus').innerHTML = data.calendar_connected
+                    document.getElementById('calendarStatus').innerHTML = (data.calendar_connected && data.calendar_id)
                         ? `<p style="color:green">✅ Подключен</p>
                            <p style="font-size:12px;color:#666">ID: ${data.calendar_id?.substring(0, 30)}...</p>
-                           <p>📅 События (7 дней): <strong>${data.calendar_events}</strong></p>`
+                           <p>📅 События (7 дней): <strong>${data.calendar_events || 0}</strong></p>`
                         : `<p style="color:red">❌ Не подключен</p>
                            <p style="font-size:12px">Настройте Calendar ID в профиле мастера</p>`;
                     
                     // Update DB Schedule Status
+                    const scheduleCount = data.db_schedule_entries || 0;
                     document.getElementById('dbScheduleStatus').innerHTML = 
-                        `<p>Записей расписания: <strong>${data.db_schedule_entries}</strong></p>
-                         ${data.db_schedule_entries === 0 ? '<p style="color:orange">⚠️ Нет расписания</p>' : '<p style="color:green">✅ Расписание есть</p>'}`;
+                        `<p>Записей расписания: <strong>${scheduleCount}</strong></p>
+                         ${scheduleCount === 0 ? '<p style="color:orange">⚠️ Нет расписания</p>' : '<p style="color:green">✅ Расписание есть</p>'}`;
                     
                     // Update Bookings Status
+                    const bookingCount = data.db_bookings || 0;
                     document.getElementById('bookingsStatus').innerHTML = 
-                        `<p>Активных записей: <strong>${data.db_bookings}</strong></p>`;
+                        `<p>Активных записей: <strong>${bookingCount}</strong></p>`;
                     
                     // Update Schedule Table
                     renderScheduleTable(data.schedule || []);
