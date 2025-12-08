@@ -1,0 +1,24 @@
+name: 'Check banned files (PR / Push)'
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  banned-files:
+    name: Check for banned files
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+
+      - name: Run banned files check script
+        run: |
+          bash scripts/check_banned_files.sh

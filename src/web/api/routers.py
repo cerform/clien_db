@@ -12,6 +12,7 @@ api_router = APIRouter(prefix="/api", tags=["api"])
 from collections import deque
 
 _monitor_history = deque(maxlen=50)
+_telemetry_history = deque(maxlen=500)
 
 
 @api_router.get('/monitoring/checks')
@@ -46,6 +47,35 @@ async def monitoring_checks() -> Dict[str, Any]:
 async def monitoring_history() -> Dict[str, Any]:
     """Return the last monitoring results (in-memory history)"""
     return { 'history': list(_monitor_history) }
+
+
+@api_router.post('/telemetry/events')
+async def telemetry_event(request: Request) -> Dict[str, Any]:
+    """Accepts small frontend telemetry events (ui warnings, errors).
+    These events are logged and kept in in-memory history for debugging/triage.
+    """
+    try:
+        data = await request.json()
+    except Exception:
+        raise HTTPException(status_code=400, detail='Invalid JSON payload')
+    try:
+        # Minimal validation — avoid storing sensitive values
+        event_type = data.get('event_type') or data.get('type') or 'ui_event'
+        message = data.get('message') or ''
+        meta = data.get('meta') or {}
+        payload = {'ts': __import__('time').time(), 'type': event_type, 'message': message, 'meta': meta}
+        # Log low-volume telemetry
+        logger.info(f"Telemetry event: {event_type} {message} {meta}")
+        _telemetry_history.append(payload)
+        return {'success': True}
+    except Exception as e:
+        logger.error(f"Failed to process telemetry event: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@api_router.get('/telemetry/history')
+async def telemetry_history() -> Dict[str, Any]:
+    return {'history': list(_telemetry_history)}
 
 # ================== CLIENTS ==================
 

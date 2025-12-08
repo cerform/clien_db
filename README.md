@@ -257,6 +257,24 @@ clien_db/
 
 ---
 
+## 🔧 Local Development
+
+### 🛠️ Environment variables (local)
+
+Use the provided `env.example.yaml` as a starting point for local development. This file contains placeholders for configuration keys used during development and testing.
+
+- Copy `env.example.yaml` to `env.yaml` or create a local `.env` from it. Never commit `env.yaml` or any file containing real keys.
+- The repository intentionally ignores env files and venv directories (`.venv/`, `venv/`, `.deploy_venv/`) via `.gitignore` to avoid committing secrets.
+
+Example:
+```bash
+cp env.example.yaml env.yaml
+# edit env.yaml and set your API keys and IDs locally; e.g.:
+# OPENAI_API_KEY=sk-... (local only)
+```
+
+For CI/CD and production, add secrets to your cloud provider's secret store (e.g. GCP Secret Manager, GitHub Secrets) rather than committing them to the repository.
+
 ## 🤝 Контакт
 
 - **Owner**: @cerform

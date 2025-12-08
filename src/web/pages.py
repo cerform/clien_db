@@ -195,6 +195,17 @@ async def masters_page():
         
         <script>
             let allMasters = [];
+            async function sendTelemetry(payload) {
+                try {
+                    await fetch('/api/telemetry/events', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(payload)
+                    });
+                } catch (e) {
+                    console.warn('Telemetry send failed', e);
+                }
+            }
             
             async function loadMasters() {
                 try {
@@ -3611,6 +3622,12 @@ async def schedule_page():
                                     : [];
                             if (!(Array.isArray(data.calendar_events) || Array.isArray(data.events))) {
                                 console.warn('Warning: calendar events returned with unexpected type', typeof data.calendar_events, typeof data.events, data.calendar_events, data.events);
+                                // Fire a lightweight telemetry event (non blocking)
+                                sendTelemetry({
+                                    event_type: 'ui_warning',
+                                    message: 'calendar_events unexpected type',
+                                    meta: { master_id: currentMasterId, types: { calendar_events: typeof data.calendar_events, events: typeof data.events }, start_date: startDate, end_date: endDate }
+                                });
                             }
                             const slotEvents = Array.isArray(eventsArr) ? eventsArr.filter(e => {
                                 // support start formats: string | { dateTime: '...', date: 'YYYY-MM-DD' }
@@ -3665,6 +3682,14 @@ async def schedule_page():
                     const allSlots = ['10:00', '11:00', '12:00', '13:00', '14:00', '15:00', '16:00', '17:00', '18:00', '19:00'];
                     
                     const availableSlots = Array.isArray(data.available_slots) ? data.available_slots : [];
+                    if (!Array.isArray(data.available_slots)) {
+                        // Report unexpected type in availability response
+                        sendTelemetry({
+                            event_type: 'ui_warning',
+                            message: 'availability returned with unexpected type',
+                            meta: { master_id: masterId, date: date, returned_type: typeof data.available_slots }
+                        });
+                    }
                     document.getElementById('availabilityGrid').innerHTML = allSlots.map(slot => {
                         const isAvailable = availableSlots.includes(slot);
                         return `
