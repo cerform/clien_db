@@ -270,12 +270,14 @@
     </div>
 
     <script>
-        const logsContainer = document.getElementById('logs');
-        const endpointsContainer = document.getElementById('endpoints');
-        let logs = [];
-        let eventCount = 0;
-        let errorCount = 0;
-        let apiCount = 0;
+        var logsContainer = window.logsContainer || document.getElementById('logs');
+        window.logsContainer = logsContainer;
+        var endpointsContainer = window.endpointsContainer || document.getElementById('endpoints');
+        window.endpointsContainer = endpointsContainer;
+        var logs = window.logs || [];
+        var eventCount = window.eventCount || 0;
+        var errorCount = window.errorCount || 0;
+        var apiCount = window.apiCount || 0;
 
         const endpoints = [
             { name: 'Health', url: '/api/health' },
@@ -302,6 +304,7 @@
 
             renderLogs();
             updateStats();
+            window.logs = logs; window.eventCount = eventCount; window.errorCount = errorCount; window.apiCount = apiCount;
         }
 
         function renderLogs() {
@@ -328,6 +331,7 @@
             apiCount = 0;
             renderLogs();
             updateStats();
+            window.logs = logs; window.eventCount = eventCount; window.errorCount = errorCount; window.apiCount = apiCount;
             addLog('✅ Логи очищены', 'success');
         }
 

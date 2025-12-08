@@ -148,7 +148,14 @@ def create_app() -> FastAPI:
         favicon_path = Path(__file__).parent / "static" / "favicon.ico"
         if favicon_path.exists():
             return FileResponse(favicon_path)
-        return JSONResponse(status_code=404, content={})
+        # Fallback: return a tiny SVG favicon so browsers don't get 404
+        svg = """
+<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'>
+  <rect width='64' height='64' rx='10' ry='10' fill='#1f6feb'/>
+  <text x='32' y='38' font-size='28' text-anchor='middle' fill='white' font-family='Arial' font-weight='bold'>T</text>
+</svg>
+"""
+        return HTMLResponse(content=svg, media_type='image/svg+xml')
     
     @app.get("/console", response_class=HTMLResponse)
     async def web_console():
@@ -985,11 +992,11 @@ def get_console_html() -> str:
         </style>
         <script>
             // ===== Variables & State =====
-            let logs = [];
-            let eventCount = 0;
-            let errorCount = 0;
-            let apiCount = 0;
-            let logsContainer = null;
+            var logs = window.logs || [];
+            var eventCount = window.eventCount || 0;
+            var errorCount = window.errorCount || 0;
+            var apiCount = window.apiCount || 0;
+            var logsContainer = window.logsContainer || null;
             
             const endpoints = [
                 {name: 'Stats', url: '/api/stats'},
@@ -1011,6 +1018,7 @@ def get_console_html() -> str:
                 if (logs.length > 100) logs.pop();
                 renderLogs();
                 updateStats();
+                window.logs = logs; window.eventCount = eventCount; window.errorCount = errorCount; window.apiCount = apiCount;
             }
             
             function renderLogs() {
@@ -1038,6 +1046,7 @@ def get_console_html() -> str:
                 apiCount = 0;
                 renderLogs();
                 updateStats();
+                window.logs = logs; window.eventCount = eventCount; window.errorCount = errorCount; window.apiCount = apiCount;
                 addLog('✅ Логи очищены', 'success');
             }
             
@@ -1159,12 +1168,14 @@ def get_console_html() -> str:
         </div>
 
         <script>
-            const logsContainer = document.getElementById('logs');
-            const endpointsContainer = document.getElementById('endpoints');
-            let logs = [];
-            let eventCount = 0;
-            let errorCount = 0;
-            let apiCount = 0;
+            var logsContainer = window.logsContainer || document.getElementById('logs');
+            var endpointsContainer = window.endpointsContainer || document.getElementById('endpoints');
+            window.logsContainer = logsContainer;
+            window.endpointsContainer = endpointsContainer;
+            var logs = window.logs || [];
+            var eventCount = window.eventCount || 0;
+            var errorCount = window.errorCount || 0;
+            var apiCount = window.apiCount || 0;
 
             const endpoints = [
                 { name: '✅ Health', url: '/api/health' },
