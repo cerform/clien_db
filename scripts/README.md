@@ -2,7 +2,29 @@
 
 Вспомогательные скрипты для управления данными.
 
-## 📋 Скрипты
+## ⭐ НОВОЕ: Unified Database Creator
+
+**🗄️ unified_database_creator.py** - Универсальный скрипт для создания и унификации БД
+
+**Быстрый старт:**
+```bash
+# Интерактивное меню
+./scripts/quick_setup_db.sh
+
+# Или прямые команды
+python3 scripts/unified_database_creator.py --schema    # Показать схему
+python3 scripts/unified_database_creator.py --create    # Создать БД
+python3 scripts/unified_database_creator.py --validate  # Проверить данные
+```
+
+📚 **Документация:**
+- `QUICK_START.txt` - Быстрые команды
+- `README_DATABASE_UNIFIER.md` - Подробная документация
+- `../UNIFIED_DATABASE_GUIDE.md` - Полное руководство
+
+---
+
+## 📋 Другие скрипты
 
 ### `add_data.py`
 **Цель**: Добавить новые мастера или услуги

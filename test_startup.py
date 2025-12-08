@@ -19,6 +19,9 @@ logger = logging.getLogger(__name__)
 # Add src to path
 sys.path.insert(0, str(Path(__file__).parent / "src"))
 
+import pytest
+
+@pytest.mark.asyncio
 async def test_startup():
     """Test that basic components load without hanging"""
     

@@ -166,6 +166,10 @@ async def masters_page():
                         <input type="text" id="instagram" placeholder="@username">
                     </div>
                     <div class="form-group">
+                        <label for="rating">Рейтинг (0-5)</label>
+                        <input type="number" id="rating" min="0" max="5" step="0.1" placeholder="4.5">
+                    </div>
+                    <div class="form-group">
                         <label for="bio">Описание</label>
                         <textarea id="bio" rows="3" placeholder="Краткое описание мастера..."></textarea>
                     </div>
@@ -262,6 +266,7 @@ async def masters_page():
                 document.getElementById('specialization').value = master.specialization || '';
                 document.getElementById('telegram_id').value = master.telegram_id || '';
                 document.getElementById('experience').value = master.experience || '';
+                document.getElementById('rating').value = master.rating || '';
                 document.getElementById('instagram').value = master.instagram || '';
                 document.getElementById('bio').value = master.bio || '';
                 document.getElementById('calendar_id').value = master.calendar_id || '';
@@ -304,6 +309,7 @@ async def masters_page():
                     specialization: document.getElementById('specialization').value,
                     telegram_id: document.getElementById('telegram_id').value,
                     experience: document.getElementById('experience').value,
+                    rating: document.getElementById('rating').value || '0',
                     instagram: document.getElementById('instagram').value,
                     bio: document.getElementById('bio').value,
                     calendar_id: document.getElementById('calendar_id').value,

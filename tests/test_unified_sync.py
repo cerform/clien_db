@@ -110,13 +110,13 @@ def test_unified_system():
         print("✅ ALL TESTS PASSED!")
         print("="*80 + "\n")
         
-        return True
+        assert True, "Test completed successfully"
         
     except Exception as e:
         print(f"\n❌ ERROR: {e}")
         import traceback
         traceback.print_exc()
-        return False
+        assert False, f"Test failed: {e}"
 
 
 if __name__ == "__main__":

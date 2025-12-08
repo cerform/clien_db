@@ -5,10 +5,13 @@ import sys
 from datetime import datetime, timedelta
 from src.ai.advanced_inka import get_advanced_inka
 
+import pytest
+
+@pytest.mark.asyncio
 async def test_empty_calendar():
     """Test getting slots from empty calendar"""
     try:
-        inka = await get_advanced_inka()
+        inka = get_advanced_inka()
         
         # Даты для проверки
         start_date = datetime.now().strftime("%Y-%m-%d")
@@ -45,7 +48,7 @@ async def test_empty_calendar():
         print(f"❌ Test failed: {e}")
         import traceback
         traceback.print_exc()
-        sys.exit(1)
+        pytest.fail(f"Test failed: {e}")
 
 if __name__ == "__main__":
     asyncio.run(test_empty_calendar())

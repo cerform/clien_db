@@ -271,19 +271,21 @@ class DatabaseManager:
             if not is_valid:
                 return False, msg
             
-            # Подготовка данных
+            # Подготовка данных - ПРАВИЛЬНЫЙ ПОРЯДОК СТОЛБЦОВ:
+            # A: id, B: name, C: phone, D: telegram_id, E: specialization, 
+            # F: rating, G: experience, H: instagram, I: status, J: bio, K: calendar_id
             new_master = [
-                str(uuid.uuid4()),  # id
-                master_data.get("name", ""),
-                master_data.get("specialization", ""),
-                master_data.get("experience", "0"),
-                master_data.get("rating", "0"),
-                master_data.get("phone", ""),
-                master_data.get("instagram", ""),
-                master_data.get("price", "0"),
-                "active",  # status
-                master_data.get("bio", ""),
-                master_data.get("calendar_id", ""),
+                str(uuid.uuid4()),              # A: id
+                master_data.get("name", ""),   # B: name
+                master_data.get("phone", ""),  # C: phone
+                master_data.get("telegram_id", ""),  # D: telegram_id
+                master_data.get("specialization", ""),  # E: specialization
+                master_data.get("rating", "0"),  # F: rating
+                master_data.get("experience", "0"),  # G: experience
+                master_data.get("instagram", ""),  # H: instagram
+                "active",  # I: status
+                master_data.get("bio", ""),  # J: bio
+                master_data.get("calendar_id", ""),  # K: calendar_id
             ]
             
             # Добавить в БД

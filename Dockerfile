@@ -54,5 +54,5 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
 # Порт для Cloud Run
 EXPOSE 8080
 
-# Запуск Cloud Run entrypoint
-CMD ["python", "-u", "run_cloud.py"]
+# Запуск Cloud Run entrypoint (webhook/FastAPI, uvicorn)
+CMD ["python", "-u", "run_webhook_uvicorn.py"]

@@ -883,19 +883,23 @@ class AdvancedINKA:
             if not self.sheets_client:
                 return {"error": "Database connection not available"}
             
+            # Нормализуем названия таблиц (преобразуем английский/lowercase в русский)
+            table = self._normalize_table_name(table)
+            logger.debug(f"Table name normalized to: {table}")
+            
             # Используем кэш для часто используемых таблиц (обновляется каждые 5 минут)
             current_time = time.time()
             cache_ttl = 300  # 5 минут (было 1 час)
             
-            if table == "schedule":
+            if table == "Расписание":
                 if self._schedule_cache is not None and (current_time - self._schedule_cache_time) < cache_ttl:
                     logger.info("📅 Using cached schedule data")
                     return self._schedule_cache
-            elif table == "masters":
+            elif table == "Мастера":
                 if self._masters_cache is not None and (current_time - self._masters_cache_time) < cache_ttl:
                     logger.info("👨‍💼 Using cached masters data")
                     return self._masters_cache
-            elif table == "services":
+            elif table == "Услуги":
                 if self._services_cache is not None and (current_time - self._services_cache_time) < cache_ttl:
                     logger.info("💼 Using cached services data")
                     return self._services_cache
@@ -954,13 +958,13 @@ class AdvancedINKA:
             }
             
             # Кэшируем часто используемые таблицы (1 час TTL)
-            if table == "schedule":
+            if table == "Расписание":
                 self._schedule_cache = response
                 self._schedule_cache_time = time.time()
-            elif table == "masters":
+            elif table == "Мастера":
                 self._masters_cache = response
                 self._masters_cache_time = time.time()
-            elif table == "services":
+            elif table == "Услуги":
                 self._services_cache = response
                 self._services_cache_time = time.time()
             
@@ -1309,7 +1313,7 @@ class AdvancedINKA:
             logger.info(f"📝 Creating new client with row: {client_row}")
             
             # Добавляем в таблицу
-            success = self.sheets_client.append_row("clients", client_row)
+            success = self.sheets_client.append_row("Клиенты", client_row)
             
             if success:
                 logger.info(f"✅ Client created: {client_id}, name={name}, telegram_id={telegram_id_str}")
@@ -1492,7 +1496,7 @@ class AdvancedINKA:
             ]
             
             # Добавляем запись в таблицу
-            success = self.sheets_client.append_row("bookings", booking_row)
+            success = self.sheets_client.append_row("Записи", booking_row)
             
             if success:
                 logger.info(f"Booking created: {booking_id}, client={client_id}, master={master_id}, date={date}, time={time}")
@@ -2298,10 +2302,42 @@ class AdvancedINKA:
         except Exception as e:
             logger.error(f"Error loading training context: {e}")
             return ""
+    
+    def _normalize_table_name(self, table: str) -> str:
+        """Нормализовать название таблицы (преобразовать в русский формат)"""
+        table_mapping = {
+            "masters": "Мастера",
+            "master": "Мастера",
+            "clients": "Клиенты",
+            "client": "Клиенты",
+            "bookings": "Записи",
+            "booking": "Записи",
+            "services": "Услуги",
+            "service": "Услуги",
+            "schedule": "Расписание",
+            "reviews": "Отзывы",
+            "pricing": "Прайс-лист"
+        }
+        return table_mapping.get(table.lower(), table)
 
 
-def get_advanced_inka(api_key: str, assistant_id: str, 
-                     sheets_client=None, calendar_service=None,
-                     data_sync=None, admin_ids: List[int] = None) -> AdvancedINKA:
+from src.config import get_config
+
+def get_advanced_inka(
+    api_key: str = None, 
+    assistant_id: str = None, 
+    sheets_client=None, 
+    calendar_service=None,
+    data_sync=None, 
+    admin_ids: List[int] = None
+) -> AdvancedINKA:
     """Фабрика для создания продвинутого INKA с админ-правами"""
+    config = get_config()
+    
+    if api_key is None:
+        api_key = config.openai_api_key
+    
+    if assistant_id is None:
+        assistant_id = config.openai_assistant_id
+    
     return AdvancedINKA(api_key, assistant_id, sheets_client, calendar_service, data_sync, admin_ids)

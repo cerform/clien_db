@@ -158,12 +158,11 @@ def test_admin_functions():
         print("✅ ALL TESTS COMPLETED SUCCESSFULLY!")
         print("="*60 + "\n")
         
-        return True
+        assert admin_exclusive == expected_admin_tools, f"Missing tools: {expected_admin_tools - admin_exclusive}"
         
     except Exception as e:
         logger.error(f"❌ Test failed: {e}", exc_info=True)
-        return False
+        raise
 
 if __name__ == "__main__":
-    success = test_admin_functions()
-    sys.exit(0 if success else 1)
+    test_admin_functions()

@@ -5,6 +5,9 @@ from datetime import datetime, timedelta
 from src.ai.advanced_inka import get_advanced_inka
 from src.config.config import get_config
 
+import pytest
+
+@pytest.mark.asyncio
 async def test_inka():
     """Test INKA with empty calendar"""
     try:

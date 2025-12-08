@@ -10,6 +10,203 @@ logger = logging.getLogger(__name__)
 
 api_router = APIRouter(prefix="/api", tags=["api"])
 
+# ================== CLIENTS ==================
+
+@api_router.get("/clients")
+async def get_clients() -> List[dict]:
+    from src.web.app import db_manager
+    if db_manager is None:
+        logger.error("Database manager not initialized")
+        raise HTTPException(status_code=500, detail="Database not initialized")
+    try:
+        return db_manager.get_all_clients()
+    except Exception as e:
+        logger.error(f"Error getting clients: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@api_router.post("/clients")
+async def create_client(request: Request) -> Dict[str, Any]:
+    from src.web.app import db_manager
+    if db_manager is None:
+        raise HTTPException(status_code=500, detail="Database not initialized")
+    try:
+        data = await request.json()
+        success, message = db_manager.add_client(data)
+        if success:
+            return {"success": True, "message": message}
+        else:
+            raise HTTPException(status_code=400, detail=message)
+    except Exception as e:
+        logger.error(f"Error creating client: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@api_router.put("/clients/{client_id}")
+async def update_client(client_id: str, request: Request) -> Dict[str, Any]:
+    from src.web.app import db_manager
+    if db_manager is None:
+        raise HTTPException(status_code=500, detail="Database not initialized")
+    try:
+        data = await request.json()
+        success, message = db_manager.edit_client(client_id, data)
+        if success:
+            return {"success": True, "message": message}
+        else:
+            raise HTTPException(status_code=400, detail=message)
+    except Exception as e:
+        logger.error(f"Error updating client: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@api_router.delete("/clients/{client_id}")
+async def delete_client(client_id: str) -> Dict[str, Any]:
+    from src.web.app import db_manager
+    if db_manager is None:
+        raise HTTPException(status_code=500, detail="Database not initialized")
+    try:
+        success, message = db_manager.delete_client(client_id)
+        if success:
+            return {"success": True, "message": message}
+        else:
+            raise HTTPException(status_code=400, detail=message)
+    except Exception as e:
+        logger.error(f"Error deleting client: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+# ================== MASTERS ==================
+
+@api_router.get("/masters")
+async def get_masters() -> List[dict]:
+    from src.web.app import db_manager
+    if db_manager is None:
+        logger.error("Database manager not initialized")
+        raise HTTPException(status_code=500, detail="Database not initialized")
+    try:
+        return db_manager.get_all_masters()
+    except Exception as e:
+        logger.error(f"Error getting masters: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@api_router.post("/masters")
+async def create_master(request: Request) -> Dict[str, Any]:
+    from src.web.app import db_manager
+    if db_manager is None:
+        raise HTTPException(status_code=500, detail="Database not initialized")
+    try:
+        data = await request.json()
+        success, message = db_manager.add_master(data)
+        if success:
+            return {"success": True, "message": message}
+        else:
+            raise HTTPException(status_code=400, detail=message)
+    except Exception as e:
+        logger.error(f"Error creating master: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@api_router.put("/masters/{master_id}")
+async def update_master(master_id: str, request: Request) -> Dict[str, Any]:
+    from src.web.app import db_manager
+    if db_manager is None:
+        raise HTTPException(status_code=500, detail="Database not initialized")
+    try:
+        data = await request.json()
+        success, message = db_manager.edit_master(master_id, data)
+        if success:
+            return {"success": True, "message": message}
+        else:
+            raise HTTPException(status_code=400, detail=message)
+    except Exception as e:
+        logger.error(f"Error updating master: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@api_router.delete("/masters/{master_id}")
+async def delete_master(master_id: str) -> Dict[str, Any]:
+    from src.web.app import db_manager
+    if db_manager is None:
+        raise HTTPException(status_code=500, detail="Database not initialized")
+    try:
+        success, message = db_manager.delete_master(master_id)
+        if success:
+            return {"success": True, "message": message}
+        else:
+            raise HTTPException(status_code=400, detail=message)
+    except Exception as e:
+        logger.error(f"Error deleting master: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+# ================== SERVICES ==================
+
+@api_router.get("/services")
+async def get_services() -> List[dict]:
+    from src.web.app import db_manager
+    if db_manager is None:
+        logger.error("Database manager not initialized")
+        raise HTTPException(status_code=500, detail="Database not initialized")
+    try:
+        return db_manager.get_all_services()
+    except Exception as e:
+        logger.error(f"Error getting services: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@api_router.post("/services")
+async def create_service(request: Request) -> Dict[str, Any]:
+    from src.web.app import db_manager
+    if db_manager is None:
+        raise HTTPException(status_code=500, detail="Database not initialized")
+    try:
+        data = await request.json()
+        success, message = db_manager.add_service(data)
+        if success:
+            return {"success": True, "message": message}
+        else:
+            raise HTTPException(status_code=400, detail=message)
+    except Exception as e:
+        logger.error(f"Error creating service: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@api_router.put("/services/{service_id}")
+async def update_service(service_id: str, request: Request) -> Dict[str, Any]:
+    from src.web.app import db_manager
+    if db_manager is None:
+        raise HTTPException(status_code=500, detail="Database not initialized")
+    try:
+        data = await request.json()
+        success, message = db_manager.edit_service(service_id, data)
+        if success:
+            return {"success": True, "message": message}
+        else:
+            raise HTTPException(status_code=400, detail=message)
+    except Exception as e:
+        logger.error(f"Error updating service: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@api_router.delete("/services/{service_id}")
+async def delete_service(service_id: str) -> Dict[str, Any]:
+    from src.web.app import db_manager
+    if db_manager is None:
+        raise HTTPException(status_code=500, detail="Database not initialized")
+    try:
+        success, message = db_manager.delete_service(service_id)
+        if success:
+            return {"success": True, "message": message}
+        else:
+            raise HTTPException(status_code=400, detail=message)
+    except Exception as e:
+        logger.error(f"Error deleting service: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+# ================== BOOKINGS ==================
+
+@api_router.get("/bookings")
+async def get_bookings() -> List[dict]:
+    from src.web.app import db_manager
+    if db_manager is None:
+        logger.error("Database manager not initialized")
+        raise HTTPException(status_code=500, detail="Database not initialized")
+    try:
+        return db_manager.get_all_bookings()
+    except Exception as e:
+        logger.error(f"Error getting bookings: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
 
 # ================== STATISTICS ==================
 
@@ -17,6 +214,9 @@ api_router = APIRouter(prefix="/api", tags=["api"])
 async def get_stats() -> Dict[str, Any]:
     try:
         from src.web.app import db_manager
+        
+        if db_manager is None:
+            raise HTTPException(status_code=500, detail="Database not initialized")
         
         clients = db_manager.get_all_clients()
         masters = db_manager.get_all_masters()
@@ -51,6 +251,9 @@ async def sync_calendar_to_schedule(master_id: str, request: Request) -> Dict[st
         from src.web.app import db_manager
         from src.config import config
         from src.calendars.google_calendar_sync import GoogleCalendarSync
+        
+        if db_manager is None:
+            raise HTTPException(status_code=500, detail="Database not initialized")
         
         body = await request.json()
         action = body.get("action", "preview")
@@ -147,6 +350,13 @@ async def get_master_availability(master_id: str, date: str) -> Dict[str, Any]:
     try:
         from src.web.app import db_manager
         
+        if db_manager is None:
+            raise HTTPException(status_code=500, detail="Database not initialized")
+        
+        # Define all available time slots
+        all_slots = [f"{h:02d}:{m:02d}" for h in range(9, 18) for m in range(0, 60, 30)]
+        busy_slots = set()
+        
         bookings = db_manager.get_all_bookings()
         for booking in bookings:
             if booking.get("master_id") == master_id and booking.get("date") == date:
@@ -158,8 +368,110 @@ async def get_master_availability(master_id: str, date: str) -> Dict[str, Any]:
         available_slots = [slot for slot in all_slots if slot not in busy_slots]
         
         return {
-            "available_slots": available,
-            "busy_slots": busy
+            "available_slots": available_slots,
+            "busy_slots": list(busy_slots)
         }
     except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+# ================== MASTER CALENDAR VIEW ==================
+
+@api_router.get("/calendar/master/{master_id}")
+async def get_master_calendar(master_id: str, start_date: str, end_date: str) -> Dict[str, Any]:
+    """Get master's calendar with events and free slots"""
+    try:
+        from src.web.app import db_manager
+        from src.calendars.google_calendar_sync import GoogleCalendarSync
+        from src.config import config
+        
+        if db_manager is None:
+            raise HTTPException(status_code=500, detail="Database not initialized")
+        
+        masters = db_manager.get_all_masters()
+        master = next((m for m in masters if m.get("id") == master_id), None)
+        if not master:
+            raise HTTPException(status_code=404, detail="Master not found")
+        
+        # Get schedule for the week
+        schedule = db_manager.get_schedule(master_id).get("schedule", [])
+        
+        # Get bookings for the date range
+        bookings = db_manager.get_all_bookings()
+        master_bookings = [b for b in bookings if b.get("master_id") == master_id 
+                          and start_date <= b.get("date", "") <= end_date]
+        
+        # Get calendar events if calendar_id exists
+        calendar_events = []
+        if master.get("calendar_id"):
+            try:
+                calendar = GoogleCalendarSync(
+                    getattr(config, 'google_credentials_file', 'credentials.json'),
+                    master.get("calendar_id")
+                )
+                calendar_events = calendar.get_events(start_date, end_date) or []
+            except Exception as e:
+                logger.warning(f"Failed to load calendar events: {e}")
+        
+        return {
+            "success": True,
+            "master_id": master_id,
+            "master_name": master.get("name", ""),
+            "calendar_id": master.get("calendar_id", ""),
+            "schedule": schedule,
+            "bookings": master_bookings,
+            "calendar_events": calendar_events
+        }
+    except Exception as e:
+        logger.error(f"Error getting master calendar: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@api_router.get("/calendar/sync/{master_id}")
+async def get_sync_status(master_id: str) -> Dict[str, Any]:
+    """Get synchronization status for a master"""
+    try:
+        from src.web.app import db_manager
+        
+        if db_manager is None:
+            raise HTTPException(status_code=500, detail="Database not initialized")
+        
+        masters = db_manager.get_all_masters()
+        master = next((m for m in masters if m.get("id") == master_id), None)
+        if not master:
+            raise HTTPException(status_code=404, detail="Master not found")
+        
+        calendar_id = master.get("calendar_id", "")
+        schedule = db_manager.get_schedule(master_id).get("schedule", [])
+        
+        # Count calendar events from last 7 days
+        from datetime import datetime, timedelta
+        today = datetime.now()
+        past_week = (today - timedelta(days=7)).strftime("%Y-%m-%d")
+        today_str = today.strftime("%Y-%m-%d")
+        
+        calendar_events = 0
+        if calendar_id:
+            try:
+                from src.calendars.google_calendar_sync import GoogleCalendarSync
+                from src.config import config
+                
+                calendar = GoogleCalendarSync(
+                    getattr(config, 'google_credentials_file', 'credentials.json'),
+                    calendar_id
+                )
+                events = calendar.get_events(past_week, today_str) or []
+                calendar_events = len(events)
+            except Exception as e:
+                logger.error(f"Error getting calendar events: {e}")
+                calendar_events = 0
+        
+        return {
+            "status": "synced",
+            "master_id": master_id,
+            "calendar_events": calendar_events,
+            "scheduled_events": len(schedule),
+            "last_sync": datetime.now().isoformat()
+        }
+    except Exception as e:
+        logger.error(f"Error getting sync status: {e}")
         raise HTTPException(status_code=500, detail=str(e))

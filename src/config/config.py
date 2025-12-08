@@ -25,6 +25,7 @@ class Config:
     # Google API
     google_spreadsheet_id: str
     google_calendar_id: Optional[str] = None  # Google Calendar ID for scheduling
+    google_credentials_json: Optional[str] = None  # Path to Google Credentials JSON
     
     # OpenAI API
     openai_api_key: Optional[str] = None
@@ -59,11 +60,13 @@ class Config:
         openai_assistant = os.getenv("OPENAI_ASSISTANT_ID", "asst_NPqHLNqQeTi7rgyaZR0iL5kE")
         
         google_calendar_id = os.getenv("GOOGLE_CALENDAR_ID")
+        google_credentials_path = os.getenv("GOOGLE_CREDENTIALS_JSON", "credentials.json")
         
         return cls(
             telegram_bot_token=token,
             google_spreadsheet_id=spreadsheet_id,
             google_calendar_id=google_calendar_id,
+            google_credentials_json=google_credentials_path,
             openai_api_key=openai_key,
             openai_assistant_id=openai_assistant,
             timezone=os.getenv("TIMEZONE", "Europe/Moscow"),

@@ -7,6 +7,7 @@ import sys
 sys.path.insert(0, '.')
 
 import logging
+import asyncio
 from src.config import get_config
 from src.db.sheets_client import GoogleSheetsClient
 from src.services.admin_db_manager import DatabaseManager, InkaLearningSystem
@@ -33,6 +34,7 @@ def test_sheets_operations():
         print("\n1️⃣ Reading masters...")
         masters = sheets.get_sheet_values("masters")
         print(f"   ✅ Found {len(masters)} rows in masters sheet")
+        assert len(masters) > 0, "No masters found"
         
         # Test 2: Read clients
         print("\n2️⃣ Reading clients...")
@@ -48,6 +50,9 @@ def test_sheets_operations():
         print("\n4️⃣ Reading bookings...")
         bookings = sheets.get_sheet_values("bookings")
         print(f"   ✅ Found {len(bookings)} rows in bookings sheet")
+    except Exception as e:
+        print(f"❌ Error: {e}")
+        raise
         
         print("\n✅ Google Sheets operations: OK")
         return True
@@ -103,13 +108,15 @@ def test_database_manager():
         print(f"   ✅ Stats: {stats}")
         
         print("\n✅ Database Manager: OK")
-        return True
+        assert len(masters) > 0, "No masters found"
+        assert len(clients) >= 0, "Clients query failed"
+        assert len(services) > 0, "No services found"
         
     except Exception as e:
         print(f"\n❌ Database Manager FAILED: {e}")
         import traceback
         traceback.print_exc()
-        return False
+        raise
 
 def test_calendar_operations():
     """Test Google Calendar operations"""
@@ -126,23 +133,26 @@ def test_calendar_operations():
         
         # Test 1: Get events
         print("\n1️⃣ Getting calendar events...")
-        events = calendar.get_calendar_events(days=30)
-        print(f"   ✅ Found {len(events)} events in next 30 days")
+        from datetime import date, timedelta
+        start_date = date.today().isoformat()
+        end_date = (date.today() + timedelta(days=30)).isoformat()
+        events = calendar.get_events(start_date, end_date)
+        print(f"   ✅ Found {len(events)} events between {start_date} and {end_date}")
         
         # Test 2: Get free slots
         print("\n2️⃣ Getting free slots...")
-        import datetime
-        date = datetime.date.today()
-        slots = calendar.find_free_slots_for_date(date, duration_minutes=60)
-        print(f"   ✅ Found {len(slots)} free slots for {date}")
+        from datetime import date as dtdate
+        date_obj = dtdate.today()
+        date_str = date_obj.isoformat()
+        slots = calendar.get_free_slots(date_str, duration=60)
+        print(f"   ✅ Found {len(slots)} free slots for {date_str}")
         
         print("\n✅ Google Calendar: OK")
-        return True
+        assert isinstance(events, list), "Events must be a list"
         
     except Exception as e:
-        print(f"\n⚠️ Google Calendar WARNING (non-critical): {e}")
-        # This is non-critical for the system
-        return True
+        print(f"\n⚠️ Google Calendar WARNING: {e}")
+        raise
 
 def test_inka_access():
     """Test INKA Assistant access"""
@@ -155,7 +165,7 @@ def test_inka_access():
         
         if not config.openai_api_key:
             print("\n⚠️ OpenAI API key not set - INKA tests skipped")
-            return True
+            pytest.skip("No API key")
         
         inka = AdvancedINKA(
             api_key=config.openai_api_key,
@@ -164,16 +174,15 @@ def test_inka_access():
         
         # Test 1: Send test message
         print("\n1️⃣ Sending test message to INKA...")
-        response = inka.process_message("Привет, кто ты?")
+        response = asyncio.run(inka.chat("Привет, кто ты?", user_id="0"))
         print(f"   ✅ INKA Response: {response[:80]}...")
         
         print("\n✅ INKA Assistant: OK")
-        return True
+        assert response is not None, "Empty INKA response"
         
     except Exception as e:
         print(f"\n⚠️ INKA Assistant WARNING: {e}")
-        # This might be a non-critical error depending on setup
-        return True
+        raise
 
 def test_inka_training():
     """Test INKA training system"""
@@ -204,12 +213,11 @@ def test_inka_training():
         print(f"   {'✅' if success else '❌'} {msg}")
         
         print("\n✅ INKA Training System: OK")
-        return True
+        assert success, f"Training example addition failed: {msg}"
         
     except Exception as e:
         print(f"\n⚠️ INKA Training System warning: {e}")
-        # This is non-critical
-        return True
+        raise
 
 def main():
     """Run all tests"""
@@ -218,32 +226,13 @@ def main():
     print("="*70)
     print(f"Date: {__import__('datetime').datetime.now().isoformat()}")
     
-    results = {
-        "Google Sheets": test_sheets_operations(),
-        "Database Manager": test_database_manager(),
-        "Google Calendar": test_calendar_operations(),
-        "INKA Assistant": test_inka_access(),
-        "INKA Training": test_inka_training(),
-    }
+    test_sheets_operations()
+    test_database_manager()
+    test_calendar_operations()
+    test_inka_access()
+    test_inka_training()
     
-    print("\n" + "="*70)
-    print("📊 FINAL REPORT")
-    print("="*70)
-    
-    for component, status in results.items():
-        print(f"{'✅' if status else '❌'} {component}")
-    
-    total_passed = sum(1 for v in results.values() if v)
-    total_tests = len(results)
-    
-    print(f"\n🎯 Overall: {total_passed}/{total_tests} tests passed")
-    
-    if all(results.values()):
-        print("\n🚀 SYSTEM IS PRODUCTION READY!")
-        return 0
-    else:
-        print("\n⚠️ Some components need attention")
-        return 1
+    print("\n🚀 SYSTEM IS PRODUCTION READY!")
 
 if __name__ == "__main__":
     sys.exit(main())

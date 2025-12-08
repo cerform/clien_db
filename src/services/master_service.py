@@ -13,7 +13,7 @@ class MasterService:
     SHEET_NAME = "Мастера"
     HEADERS = [
         "ID", "Имя", "Специальность", "Опыт (лет)", "Рейтинг",
-        "Телефон", "Instagram", "Цена за сеанс (руб)", "Статус", "Описание"
+        "Телефон", "Instagram", "Цена за сеанс (шекелей)", "Статус", "Описание"
     ]
     
     def __init__(self, sheets_client: GoogleSheetsClient):

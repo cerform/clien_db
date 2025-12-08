@@ -24,6 +24,9 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+import pytest
+
+@pytest.mark.asyncio
 async def test_create_client():
     """Test creating a client directly"""
     

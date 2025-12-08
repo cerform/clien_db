@@ -1,0 +1,73 @@
+╔════════════════════════════════════════════════════════════════╗
+║  🗄️ UNIFIED DATABASE CREATOR - БЫСТРЫЙ СТАРТ                   ║
+╚════════════════════════════════════════════════════════════════╝
+
+📌 ЧТО ЭТО?
+───────────
+Скрипт для создания унифицированной БД, которая работает с:
+  ✅ Админ-панелью
+  ✅ INKA Assistant
+  ✅ API
+  ✅ Telegram ботом
+
+📋 БЫСТРЫЕ КОМАНДЫ:
+───────────────────
+
+1️⃣ Интерактивное меню (рекомендуется):
+   $ ./scripts/quick_setup_db.sh
+
+2️⃣ Показать схему БД:
+   $ python3 scripts/unified_database_creator.py --schema
+
+3️⃣ Создать новую БД:
+   $ python3 scripts/unified_database_creator.py --create
+
+4️⃣ Заполнить тестовыми данными:
+   $ python3 scripts/unified_database_creator.py --test-data
+
+5️⃣ Проверить данные:
+   $ python3 scripts/unified_database_creator.py --validate
+
+6️⃣ Создать backup:
+   $ python3 scripts/unified_database_creator.py --backup
+
+7️⃣ Миграция существующих данных:
+   $ python3 scripts/unified_database_creator.py --migrate --apply
+
+8️⃣ Полный цикл (backup + migrate + validate):
+   $ python3 scripts/unified_database_creator.py --full
+
+🔑 КЛЮЧЕВЫЕ МОМЕНТЫ:
+───────────────────
+  ⚠️ У каждого мастера ДОЛЖЕН быть calendar_id (для INKA!)
+  ⚠️ Расписание должно быть в формате день_недели (monday, tuesday...)
+  ⚠️ ВСЕГДА создавайте backup перед изменениями
+  ⚠️ Телефоны в формате: +972501234567
+  ⚠️ Время в формате: HH:MM (например, 14:30)
+
+📁 СТРУКТУРА БД:
+───────────────
+  1. Masters    - Мастера
+  2. Clients    - Клиенты
+  3. Services   - Услуги
+  4. Bookings   - Записи
+  5. Schedule   - Расписание (важно для INKA!)
+  6. Reviews    - Отзывы
+  7. Pricing    - Прайс-лист
+  8. InkaTraining - Обучение INKA
+
+📚 ДОКУМЕНТАЦИЯ:
+───────────────
+  • UNIFIED_DATABASE_GUIDE.md - Полное руководство
+  • scripts/README_DATABASE_UNIFIER.md - API документация
+  • Используйте --help для справки
+
+💡 ТИПИЧНЫЙ СЦЕНАРИЙ:
+────────────────────
+  1. Backup:    python3 scripts/unified_database_creator.py --backup
+  2. Migrate:   python3 scripts/unified_database_creator.py --migrate
+  3. Apply:     python3 scripts/unified_database_creator.py --migrate --apply
+  4. Validate:  python3 scripts/unified_database_creator.py --validate
+  5. Test:      Запустить бота и проверить работу
+
+✅ ГОТОВО! Удачи! 🚀
