@@ -31,6 +31,7 @@ Checks being performed include:
 - API endpoints (internal checks run via `TestClient`) — skipped if FastAPI not present
 - Unit test run via `pytest`
 - Pylint code quality check
+ - pre-deploy report: the script writes `pre_deploy_report.json` with a summary of checks and their timestamps.
 
 If everything is OK, the script prints `ALL CHECKS PASSED` and exit code 0.
 
@@ -51,6 +52,8 @@ The Admin Panel dashboard and Web Console include a dedicated monitoring card an
 
 - Web Console: `GET /console` – real-time logs and the endpoint tests widget
 - Dashboard: `GET /` – monitoring card that polls the monitoring endpoint every minute
+ - Monitoring endpoint: `GET /api/monitoring/checks` - runs internal checks and returns a quick summary.
+ - Monitoring history: `GET /api/monitoring/history` - returns last N monitoring checks and can be displayed in the admin dashboard.
 
 ## CI Integration
 
