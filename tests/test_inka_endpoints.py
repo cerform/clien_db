@@ -103,3 +103,8 @@ def test_monitoring_endpoint_ok_or_warn():
     assert res.status_code == 200
     data = res.json()
     assert 'ok' in data and 'results' in data
+    # history returns a list
+    hres = client.get('/api/monitoring/history')
+    assert hres.status_code == 200
+    hdata = hres.json()
+    assert 'history' in hdata and isinstance(hdata['history'], list)

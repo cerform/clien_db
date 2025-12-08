@@ -9,6 +9,9 @@ import uuid
 logger = logging.getLogger(__name__)
 
 api_router = APIRouter(prefix="/api", tags=["api"])
+from collections import deque
+
+_monitor_history = deque(maxlen=50)
 
 
 @api_router.get('/monitoring/checks')
@@ -33,7 +36,16 @@ async def monitoring_checks() -> Dict[str, Any]:
             results[name] = { 'status': r.status_code, 'ok': r.status_code == 200 }
         except Exception as e:
             results[name] = { 'status': 'error', 'error': str(e) }
-    return { 'ok': all(v.get('ok', False) for v in results.values()), 'results': results }
+    result_summary = { 'ok': all(v.get('ok', False) for v in results.values()), 'results': results }
+    # Push to in-memory history
+    _monitor_history.append({ 'ts': __import__('time').time(), 'summary': result_summary })
+    return result_summary
+
+
+@api_router.get('/monitoring/history')
+async def monitoring_history() -> Dict[str, Any]:
+    """Return the last monitoring results (in-memory history)"""
+    return { 'history': list(_monitor_history) }
 
 # ================== CLIENTS ==================
 

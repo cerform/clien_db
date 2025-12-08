@@ -459,6 +459,13 @@ def get_dashboard_html() -> str:
                         <h3>Мониторинг</h3>
                         <p>Состояние: <span id="dashboard-monitor-status">-</span></p>
                     </div>
+                    <div class="card">
+                        <div class="card-icon">🕘</div>
+                        <h3>История мониторинга</h3>
+                        <p>Последние проверки: <span id="dashboard-monitor-history-count">0</span></p>
+                        <button class="btn" onclick="showMonitoringHistory()">Показать историю</button>
+                        <div id="monitor-history-table" style="display:none;margin-top:10px;"></div>
+                    </div>
                 </div>
                 
                 <h2 style="margin-top: 40px;">👑 Инструменты Администратора</h2>
@@ -501,6 +508,18 @@ def get_dashboard_html() -> str:
                 </div>
             </div>
             <script>
+                async function showMonitoringHistory() {
+                    try {
+                        const res = await fetch('/api/monitoring/history');
+                        const data = await res.json();
+                        const tableDiv = document.getElementById('monitor-history-table');
+                        tableDiv.style.display = 'block';
+                        const rows = data.history.slice(-5).reverse();
+                        tableDiv.innerHTML = '<table style="width:100%;border-collapse:collapse"><thead><tr><th>Time</th><th>OK</th></tr></thead><tbody>' + rows.map(r => `<tr><td>${new Date(r.ts*1000).toLocaleString()}</td><td>${r.summary.ok}</td></tr>`).join('') + '</tbody></table>';
+                    } catch (e) {
+                        console.error('Error fetching monitoring history', e);
+                    }
+                }
                 async function fetchMonitoringStatus() {
                     try {
                         const res = await fetch('/api/monitoring/checks');
