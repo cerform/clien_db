@@ -34,6 +34,15 @@ def create_app() -> FastAPI:
         description="Веб-интерфейс для управления БД тату-салона",
         version="1.0.0"
     )
+
+    # Disallow caching on admin web pages so clients always fetch latest JS/HTML
+    @app.middleware("http")
+    async def add_no_cache_header(request: Request, call_next):
+        response = await call_next(request)
+        response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
+        response.headers["Pragma"] = "no-cache"
+        response.headers["Expires"] = "0"
+        return response
     
     # Initialize managers
     try:
