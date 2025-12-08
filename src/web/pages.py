@@ -3453,8 +3453,15 @@ async def schedule_page():
                             
                             const eventsArr = (data.calendar_events || data.events || []);
                             const slotEvents = eventsArr.filter(e => {
-                                const eventDate = e.start?.substring(0, 10);
-                                const eventHour = e.start?.substring(11, 16);
+                                // support start formats: string | { dateTime: '...', date: 'YYYY-MM-DD' }
+                                let startRaw = '';
+                                if (typeof e.start === 'string') {
+                                    startRaw = e.start;
+                                } else if (e.start && typeof e.start === 'object') {
+                                    startRaw = e.start.dateTime || e.start.date || '';
+                                }
+                                const eventDate = startRaw ? startRaw.substring(0, 10) : '';
+                                const eventHour = (startRaw && startRaw.length >= 16) ? startRaw.substring(11, 16) : '';
                                 return eventDate === dateStr && eventHour === hour;
                             });
                             
