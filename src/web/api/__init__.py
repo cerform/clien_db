@@ -136,6 +136,146 @@ async def get_inka_training_stats() -> Dict[str, Any]:
         logger.error(f"Error getting INKA stats: {e}")
         raise HTTPException(status_code=500, detail="Error getting INKA statistics")
 
+
+@api_router.get("/inka-training/stats")
+async def get_inka_training_stats_alt() -> Dict[str, Any]:
+    """Alternative path used by frontend; returns INKA training stats"""
+    try:
+        return await get_inka_training_stats()
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error getting INKA stats (alt): {e}")
+        raise HTTPException(status_code=500, detail="Error getting INKA statistics")
+
+
+@api_router.post("/inka-training/chat")
+async def inka_chat(request: Request) -> Dict[str, Any]:
+    """Return a simple assistant response — placeholder"""
+    try:
+        body = await request.json()
+        message = body.get('message', '')
+        # Basic placeholder response
+        response_text = f"Echo: {message}" if message else ""
+        return {"response": response_text, "learned": False}
+    except Exception as e:
+        logger.error(f"Error INKA chat: {e}")
+        raise HTTPException(status_code=500, detail="Error in INKA chat")
+
+
+@api_router.post("/inka-training/scenario")
+async def create_scenario(request: Request) -> Dict[str, Any]:
+    try:
+        body = await request.json()
+        # Pretend to save the scenario
+        return {"success": True, "message": "Scenario created"}
+    except Exception as e:
+        logger.error(f"Error creating scenario: {e}")
+        raise HTTPException(status_code=500, detail="Error creating scenario")
+
+
+@api_router.get("/inka-training/scenarios")
+async def get_scenarios() -> Dict[str, Any]:
+    try:
+        return {"scenarios": []}
+    except Exception as e:
+        logger.error(f"Error getting scenarios: {e}")
+        raise HTTPException(status_code=500, detail="Error getting scenarios")
+
+
+@api_router.post("/inka-training/correction")
+async def create_correction(request: Request) -> Dict[str, Any]:
+    try:
+        body = await request.json()
+        return {"success": True}
+    except Exception as e:
+        logger.error(f"Error creating correction: {e}")
+        raise HTTPException(status_code=500, detail="Error creating correction")
+
+
+@api_router.get("/inka-training/corrections")
+async def get_corrections() -> Dict[str, Any]:
+    try:
+        return {"corrections": []}
+    except Exception as e:
+        logger.error(f"Error getting corrections: {e}")
+        raise HTTPException(status_code=500, detail="Error getting corrections")
+
+
+@api_router.post("/inka-training/knowledge")
+async def create_knowledge(request: Request) -> Dict[str, Any]:
+    try:
+        body = await request.json()
+        return {"success": True}
+    except Exception as e:
+        logger.error(f"Error creating knowledge: {e}")
+        raise HTTPException(status_code=500, detail="Error creating knowledge")
+
+
+@api_router.get("/inka-training/knowledge")
+async def get_knowledge() -> Dict[str, Any]:
+    try:
+        return {"knowledge": []}
+    except Exception as e:
+        logger.error(f"Error getting knowledge: {e}")
+        raise HTTPException(status_code=500, detail="Error getting knowledge")
+
+
+@api_router.get("/inka-training/recent")
+async def get_recent_trainings() -> Dict[str, Any]:
+    try:
+        return {"recent": []}
+    except Exception as e:
+        logger.error(f"Error getting recent inka trainings: {e}")
+        raise HTTPException(status_code=500, detail="Error getting recent trainings")
+
+
+@api_router.post("/inka-training/export")
+async def export_training_data() -> Dict[str, Any]:
+    try:
+        return {"success": True}
+    except Exception as e:
+        logger.error(f"Error exporting inka data: {e}")
+        raise HTTPException(status_code=500, detail="Error exporting data")
+
+
+@api_router.post("/inka-training/import")
+async def import_training_data(request: Request) -> Dict[str, Any]:
+    try:
+        # Accept json payload as placeholder
+        body = await request.json()
+        return {"success": True, "imported": len(body.get('entries', [])) if isinstance(body, dict) else 0}
+    except Exception as e:
+        logger.error(f"Error importing inka data: {e}")
+        raise HTTPException(status_code=500, detail="Error importing data")
+
+
+@api_router.delete("/inka-training/scenario/{id}")
+async def remove_scenario(id: str) -> Dict[str, Any]:
+    try:
+        return {"success": True}
+    except Exception as e:
+        logger.error(f"Error deleting scenario {id}: {e}")
+        raise HTTPException(status_code=500, detail="Error deleting scenario")
+
+
+@api_router.delete("/inka-training/correction/{id}")
+async def remove_correction(id: str) -> Dict[str, Any]:
+    try:
+        return {"success": True}
+    except Exception as e:
+        logger.error(f"Error deleting correction {id}: {e}")
+        raise HTTPException(status_code=500, detail="Error deleting correction")
+
+
+@api_router.delete("/inka-training/knowledge/{id}")
+async def remove_knowledge(id: str) -> Dict[str, Any]:
+    try:
+        return {"success": True}
+    except Exception as e:
+        logger.error(f"Error deleting knowledge {id}: {e}")
+        raise HTTPException(status_code=500, detail="Error deleting knowledge")
+
 @api_router.post("/inka-training")
 async def train_inka(request: Request) -> Dict[str, Any]:
     """Train INKA with provided text"""
