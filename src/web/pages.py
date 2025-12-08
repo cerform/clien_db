@@ -3323,6 +3323,10 @@ async def schedule_page():
                         fetch('/api/services')
                     ]);
                     
+                    if (!bookingsRes.ok || !mastersRes.ok || !clientsRes.ok || !servicesRes.ok) {
+                        throw new Error('Failed to fetch data from API');
+                    }
+                    
                     const bookings = await bookingsRes.json();
                     const mastersData = await mastersRes.json();
                     const clients = await clientsRes.json();
@@ -3405,7 +3409,14 @@ async def schedule_page():
                 
                 try {
                     const res = await fetch(`/api/calendar/master/${currentMasterId}?start_date=${startDate}&end_date=${endDate}`);
+                    if (!res.ok) {
+                        throw new Error(`HTTP Error: ${res.status}`);
+                    }
                     const data = await res.json();
+                    
+                    if (!data.success) {
+                        throw new Error(data.detail || 'API returned error');
+                    }
                     
                     const days = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'];
                     const hours = ['10:00', '11:00', '12:00', '13:00', '14:00', '15:00', '16:00', '17:00', '18:00', '19:00'];
