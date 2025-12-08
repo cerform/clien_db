@@ -3440,7 +3440,7 @@ async def schedule_page():
                             day.setDate(day.getDate() + i);
                             const dateStr = formatDate(day);
                             
-                            const slotEvents = data.events.filter(e => {
+                            const slotEvents = (data.calendar_events || []).filter(e => {
                                 const eventDate = e.start?.substring(0, 10);
                                 const eventHour = e.start?.substring(11, 16);
                                 return eventDate === dateStr && eventHour === hour;
