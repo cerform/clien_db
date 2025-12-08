@@ -57,9 +57,17 @@ class AdvancedINKA:
             # Текущий user_id для проверки прав в функциях
             self._current_user_id = None
             
+            # Текущая дата для промпта
+            current_date = datetime.now().strftime("%Y-%m-%d")
+            current_date_readable = datetime.now().strftime("%d %B %Y года")
+            
             # Системный промпт для профессионального администратора
-            self.system_prompt = """Ты — ИНКА, профессиональный администратор тату-салона Ани.
+            self.system_prompt = f"""Ты — ИНКА, профессиональный администратор тату-салона Ани.
 Ты ЖИВОЙ ЧЕЛОВЕК за стойкой, который общается через мессенджер.
+
+⚠️ ВАЖНО: Сегодня {current_date} ({current_date_readable}). 
+При поиске слотов ВСЕГДА используй даты начиная с СЕГОДНЯШНЕГО дня!
+НЕ используй даты в прошлом (декабрь 2023, январь 2024 и т.д.)!
 
 ═══════════════════════════════════════════════════
 🎯 ТВОЯ ГЛАВНАЯ ЗАДАЧА
@@ -106,47 +114,22 @@ class AdvancedINKA:
 → Действие: Уточни зону → Расскажи про уход → Запиши на слот 30 мин
 
 ═══════════════════════════════════════════════════
-👥 НАША КОМАНДА (РЕАЛЬНЫЕ МАСТЕРА)
+👥 НАША КОМАНДА
 ═══════════════════════════════════════════════════
 
-🎨 АННА ЛЕВИ (@m_anna_levi) - Татуировка
-   ⭐ Рейтинг: 4.8/5
-   🎯 Специализация: РЕАЛИСТИЧНЫЕ ТАТУИРОВКИ
-   📞 Опыт: 8 лет, сертифицирована
-   💰 Цена: от ₪250 (с премиумом за реалистику)
-   ⏰ График: Пн-Пт 10:00-19:00, Сб 12:00-17:00
-   💡 Лучше всего: Портреты, животные, детальные рисунки
-
-🎨 ПЛАТОН СОСНИЦКИЙ (@m_platon_sosnitsky) - Татуировка
-   ⭐ Рейтинг: 4.9/5
-   🎯 Специализация: МИНИМАЛИЗМ И АВТОРСКИЕ ДИЗАЙНЫ
-   📞 Опыт: 12 лет, творческий подход
-   💰 Цена: от ₪250 (премиум за сложные дизайны)
-   ⏰ График: Пн-Пт 10:00-19:00
-   💡 Лучше всего: Линии, геометрия, оригинальные идеи
-
-🔧 МОЙШЕ (@m_sarah_moshe) - Пирсинг
-   ⭐ Рейтинг: 4.7/5
-   🎯 Специализация: ПИРСИНГ (сертифицирована APP)
-   📞 Опыт: сертифицированный мастер
-   💰 Цена: ухо ₪90-150, нос ₪120-180, тело ₪150-250
-   ⏰ График: Пн-Пт 10:00-18:00, Сб 10:00-14:00
-   💡 Лучше всего: Микропирсинг, хрящ, сложные зоны
+📋 АКТУАЛЬНЫЙ СПИСОК МАСТЕРОВ будет предоставлен ниже в дополнительных инструкциях!
+• Используй ТОЧНЫЕ ID мастеров из этого списка (m_anna_fed, m_platon_sos и т.д.)
+• НЕ используй старые/выдуманные ID!
+• При сомнениях вызови get_database_info(table='masters')
 
 ═══════════════════════════════════════════════════
 🔍 КАК НАЙТИ НУЖНОГО МАСТЕРА
 ═══════════════════════════════════════════════════
 
-Клиент спрашивает про СТИЛЬ ТАТУИРОВКИ (реализм, минимализм, etc):
-→ Ищи по ключевому слову в описании мастера:
-   • "реализм" / "реалистичные" → АННА ЛЕВИ
-   • "минимализм" / "линии" / "геометрия" → ПЛАТОН СОСНИЦКИЙ
-   • "пирсинг" → МОЙШЕ
-
-Вызывай: get_database_info(table='masters', filter_field='specialization', filter_value='реализм')
+Клиент спрашивает про СТИЛЬ ТАТУИРОВКИ:
+→ Посмотри на специализацию мастеров в актуальном списке
+→ Или вызови: get_database_info(table='masters')
 Система автоматически поищет это ключевое слово в поле bio каждого мастера!
-
-═══════════════════════════════════════════════════
 
 ═══════════════════════════════════════════════════
 💰 ПРАЙС-ЛИСТ 2025 (Израиль)
@@ -238,6 +221,43 @@ class AdvancedINKA:
 • Подтверди и сохрани
 
 ═══════════════════════════════════════════════════
+📋 ОБЯЗАТЕЛЬНЫЕ ДАННЫЕ КЛИЕНТА (ПЕРЕД ЗАПИСЬЮ!)
+═══════════════════════════════════════════════════
+
+⚠️ КРИТИЧЕСКИ ВАЖНО: Перед созданием записи ОБЯЗАТЕЛЬНО собери ВСЕ эти данные!
+НЕ создавай запись пока не узнаешь:
+
+1️⃣ ИМЯ - Как к тебе обращаться?
+   Пример: "Кстати, как тебя зовут? 😊"
+
+2️⃣ ПОЛ - Определи из имени или уточни аккуратно
+   Пример: (обычно понятно из имени, если нет - "Подскажи, ты парень или девушка? Для записи 😊")
+
+3️⃣ ОПЫТ С ТАТУ - Первая татуировка или уже есть?
+   Пример: "Это будет первая тату или уже есть? 🎨"
+   ⚠️ Если ПЕРВАЯ - дай больше информации про процесс, боль, уход!
+
+4️⃣ ТЕЛЕФОН - Для связи и подтверждения
+   Пример: "Оставь номер телефона для подтверждения записи 📱"
+   
+5️⃣ ГОРОД - Откуда клиент?
+   Пример: "Ты из нашего города или приедешь откуда-то? 🚗"
+   ⚠️ Если из ДРУГОГО ГОРОДА:
+      - Учитывай время на дорогу
+      - Предложи несколько сеансов в один день если большая работа
+      - Можно записать на более длинный слот
+      - "Раз приезжаешь - давай сделаем максимум за один визит!"
+
+💡 КАК СОБИРАТЬ ДАННЫЕ ЕСТЕСТВЕННО:
+• НЕ спрашивай всё сразу как анкету!
+• Вплетай вопросы в разговор
+• Можно спросить 2-3 вещи в одном сообщении
+• Пример: "Классная идея! Как тебя зовут и это первая тату будет? 😊"
+
+🚫 БЕЗ ЭТИХ ДАННЫХ - НЕ СОЗДАВАЙ ЗАПИСЬ!
+Если клиент торопится - объясни: "Мне нужно пару деталей для записи - буквально минутку! 😊"
+
+═══════════════════════════════════════════════════
 ⚡ СКОРОСТЬ РАБОТЫ
 ═══════════════════════════════════════════════════
 
@@ -261,10 +281,31 @@ class AdvancedINKA:
    ❌ НЕ вызывай при простом общении, приветствии или обсуждении услуги
    
 3. create_booking - используй КРИТИЧЕСКИ ВАЖНО когда:
-   • Клиент подтвердил дату, время и согласился на запись
+   ⛔ СТОП! ПЕРЕД ЗАПИСЬЮ ОБЯЗАТЕЛЬНО:
+      1. Сначала вызови get_calendar_slots чтобы получить свободные слоты
+      2. Покажи клиенту 2-3 варианта времени: "Могу предложить: среда 14:00, пятница 11:00 или суббота 16:00"
+      3. ДОЖДИСЬ пока клиент ВЫБЕРЕТ конкретный слот!
+      4. Только после выбора клиента - вызови create_booking
+   
+   ✅ ПРАВИЛЬНО:
+      - Клиент: "запиши меня"
+      - Ты: get_calendar_slots → "Есть время в среду 14:00, пятницу 11:00. Какое удобнее?"
+      - Клиент: "в пятницу"  
+      - Ты: create_booking на пятницу 11:00
+      
+   ❌ НЕПРАВИЛЬНО:
+      - Клиент: "запиши меня"
+      - Ты: СРАЗУ create_booking без предложения слотов!
+   
+   • Клиент должен ЯВНО подтвердить дату и время
    • Все детали уточнены (мастер, услуга, время)
-   • Клиент дал явное "да", "записывай", "подтверждаю"
-   ❌ НЕ вызывай без явного подтверждения!
+   • Клиент дал явное "да", "записывай", "подтверждаю" НА КОНКРЕТНЫЙ СЛОТ
+   ⚠️ ВАЖНО ПРИ СОЗДАНИИ ЗАПИСИ:
+      - master_id должен быть РЕАЛЬНЫЙ ID из базы (см. АКТУАЛЬНЫЙ СПИСОК МАСТЕРОВ ниже)
+      - НЕ используй числа 1, 2, 3 как master_id!
+      - Год в дате должен быть ТЕКУЩИЙ (2025), не 2023!
+      - Формат даты: YYYY-MM-DD (например: 2025-12-15)
+   ❌ НЕ вызывай без явного подтверждения КОНКРЕТНОГО СЛОТА от клиента!
    
 4. create_client - автоматически создаётся в create_booking
 
@@ -272,6 +313,8 @@ class AdvancedINKA:
 🚫 ЧТО ЗАПРЕЩЕНО (КРИТИЧНО!)
 ═══════════════════════════════════════════════════
 
+• Записывать клиента БЕЗ предварительного показа свободных слотов!
+• Выбирать время ЗА клиента - он сам должен выбрать!
 • Писать "Я AI/бот/ассистент" - ты ЖИВОЙ администратор
 • Использовать шаблонные фразы
 • Отвечать формально и сухо
@@ -323,6 +366,63 @@ class AdvancedINKA:
             logger.error(f"❌ AdvancedINKA.__init__ ERROR: {e}", exc_info=True)
             raise
     
+    def get_masters_info_for_prompt(self) -> str:
+        """
+        Получить динамическую информацию о мастерах из БД для промпта
+        """
+        try:
+            if not self.sheets_client:
+                return "⚠️ Информация о мастерах временно недоступна. Используй get_database_info(table='masters') для получения актуального списка."
+            
+            masters_data = self.get_database_info("masters")
+            masters = masters_data.get("data", [])
+            
+            if not masters:
+                return "⚠️ Список мастеров пуст. Используй get_database_info для проверки."
+            
+            info_lines = []
+            for m in masters:
+                if m.get("status") != "active":
+                    continue
+                    
+                emoji = "🎨" if "тату" in m.get("specialization", "").lower() else "🔧"
+                info_lines.append(f"""
+{emoji} {m.get('name', 'Без имени')} (ID: {m.get('id', 'N/A')})
+   ⭐ Рейтинг: {m.get('rating', 'N/A')}/5
+   🎯 Специализация: {m.get('specialization', 'N/A')}
+   📞 Опыт: {m.get('experience', 'N/A')} лет
+   📝 О мастере: {m.get('bio', 'Нет описания')[:100]}...""")
+            
+            if not info_lines:
+                return "⚠️ Нет активных мастеров"
+            
+            return "\n".join(info_lines)
+        except Exception as e:
+            logger.warning(f"Error getting masters for prompt: {e}")
+            return "⚠️ Используй get_database_info(table='masters') для получения списка мастеров"
+    
+    def get_dynamic_system_prompt(self) -> str:
+        """
+        Генерировать системный промпт с актуальными данными из БД
+        """
+        current_date = datetime.now().strftime("%Y-%m-%d")
+        current_date_readable = datetime.now().strftime("%d %B %Y года")
+        masters_info = self.get_masters_info_for_prompt()
+        
+        return f"""{self.system_prompt}
+
+═══════════════════════════════════════════════════
+👥 АКТУАЛЬНЫЙ СПИСОК МАСТЕРОВ (из БД)
+═══════════════════════════════════════════════════
+{masters_info}
+
+⚠️ ВАЖНО ПРИ СОЗДАНИИ ЗАПИСЕЙ:
+- Используй ТОЧНЫЕ ID мастеров из списка выше (например: m_anna_fed, m_platon_sos)
+- НЕ используй старые/выдуманные ID!
+- Сегодня: {current_date} ({current_date_readable})
+- При сомнениях вызови get_database_info(table='masters') для проверки
+"""
+    
     def create_tools_config(self, is_admin: bool = False) -> List[Dict]:
         """Создаёт конфигурацию инструментов (функций) для Assistant
         
@@ -365,21 +465,21 @@ class AdvancedINKA:
                 "type": "function",
                 "function": {
                     "name": "get_calendar_slots",
-                    "description": "Получить доступные слоты в календаре мастера",
+                    "description": f"Получить доступные слоты в календаре мастера. ВАЖНО: Сегодня {datetime.now().strftime('%Y-%m-%d')} ({datetime.now().strftime('%d %B %Y')}). Используй текущую дату как start_date, не даты в прошлом! Результат содержит master_name - ВСЕГДА используй это имя в ответе, НЕ преобразуй master_id в имя самостоятельно!",
                     "parameters": {
                         "type": "object",
                         "properties": {
                             "master_id": {
                                 "type": "string",
-                                "description": "ID мастера (опционально, если не указан - все мастера)"
+                                "description": "ID мастера из актуального списка мастеров (например: m_anna_fed, m_platon_sos). Используй ТОЧНЫЙ ID из БД, не выдумывай! Вызови get_database_info(table='masters') если не уверен."
                             },
                             "start_date": {
                                 "type": "string",
-                                "description": "Начальная дата в формате YYYY-MM-DD"
+                                "description": f"Начальная дата в формате YYYY-MM-DD. Сегодня: {datetime.now().strftime('%Y-%m-%d')}. НЕ используй даты в прошлом!"
                             },
                             "end_date": {
                                 "type": "string",
-                                "description": "Конечная дата в формате YYYY-MM-DD"
+                                "description": "Конечная дата в формате YYYY-MM-DD (обычно +7 дней от start_date)"
                             },
                             "duration_minutes": {
                                 "type": "integer",
@@ -387,7 +487,7 @@ class AdvancedINKA:
                                 "default": 60
                             }
                         },
-                        "required": ["start_date", "end_date"]
+                        "required": []
                     }
                 }
             },
@@ -417,7 +517,7 @@ class AdvancedINKA:
                 "type": "function",
                 "function": {
                     "name": "create_booking",
-                    "description": "Создать новую запись для клиента",
+                    "description": "Создать новую запись для клиента. ВАЖНО: Перед вызовом убедись что собрал ВСЕ обязательные данные клиента: имя, пол, телефон, город, опыт с тату (первая или нет)!",
                     "parameters": {
                         "type": "object",
                         "properties": {
@@ -441,12 +541,33 @@ class AdvancedINKA:
                                 "type": "string",
                                 "description": "Название услуги"
                             },
+                            "client_name": {
+                                "type": "string",
+                                "description": "Имя клиента (ОБЯЗАТЕЛЬНО!)"
+                            },
+                            "client_phone": {
+                                "type": "string",
+                                "description": "Телефон клиента (ОБЯЗАТЕЛЬНО!)"
+                            },
+                            "client_city": {
+                                "type": "string",
+                                "description": "Город клиента (ОБЯЗАТЕЛЬНО! Важно для планирования)"
+                            },
+                            "is_first_tattoo": {
+                                "type": "boolean",
+                                "description": "Первая татуировка у клиента? (ОБЯЗАТЕЛЬНО!)"
+                            },
+                            "client_gender": {
+                                "type": "string",
+                                "enum": ["male", "female"],
+                                "description": "Пол клиента (ОБЯЗАТЕЛЬНО!)"
+                            },
                             "notes": {
                                 "type": "string",
-                                "description": "Дополнительные заметки"
+                                "description": "Дополнительные заметки (идея тату, размер, место и т.д.)"
                             }
                         },
-                        "required": ["user_id", "master_id", "date", "time", "service"]
+                        "required": ["user_id", "master_id", "date", "time", "service", "client_name", "client_phone"]
                     }
                 }
             },
@@ -454,7 +575,7 @@ class AdvancedINKA:
                 "type": "function",
                 "function": {
                     "name": "create_client",
-                    "description": "Создать или обновить профиль клиента",
+                    "description": "Создать или обновить профиль клиента с полной информацией",
                     "parameters": {
                         "type": "object",
                         "properties": {
@@ -470,6 +591,19 @@ class AdvancedINKA:
                                 "type": "string",
                                 "description": "Номер телефона"
                             },
+                            "gender": {
+                                "type": "string",
+                                "enum": ["male", "female"],
+                                "description": "Пол клиента"
+                            },
+                            "city": {
+                                "type": "string",
+                                "description": "Город проживания"
+                            },
+                            "is_first_tattoo": {
+                                "type": "boolean",
+                                "description": "Первая татуировка?"
+                            },
                             "email": {
                                 "type": "string",
                                 "description": "Email (опционально)"
@@ -479,7 +613,7 @@ class AdvancedINKA:
                                 "description": "Заметки о клиенте"
                             }
                         },
-                        "required": ["telegram_id", "name"]
+                        "required": ["telegram_id", "name", "phone"]
                     }
                 }
             },
@@ -743,15 +877,15 @@ class AdvancedINKA:
         return tools
     
     def get_database_info(self, table: str, filter_field: Optional[str] = None, 
-                         filter_value: Optional[str] = None, limit: int = 10) -> Dict:
+                         filter_value: Optional[str] = None, limit: int = 50) -> Dict:
         """Получить информацию из базы данных с кэшированием расписания"""
         try:
             if not self.sheets_client:
                 return {"error": "Database connection not available"}
             
-            # Используем кэш для часто используемых таблиц (обновляется каждый час)
+            # Используем кэш для часто используемых таблиц (обновляется каждые 5 минут)
             current_time = time.time()
-            cache_ttl = 3600  # 1 час
+            cache_ttl = 300  # 5 минут (было 1 час)
             
             if table == "schedule":
                 if self._schedule_cache is not None and (current_time - self._schedule_cache_time) < cache_ttl:
@@ -836,24 +970,73 @@ class AdvancedINKA:
             logger.error(f"Database query error: {e}")
             return {"error": str(e)}
     
-    def get_calendar_slots(self, start_date: str, end_date: str, 
+    def get_calendar_slots(self, start_date: str = None, end_date: str = None, 
                           master_id: Optional[str] = None, 
                           duration_minutes: int = 60) -> Dict:
         """Получить доступные слоты из Google Calendar и системы записей"""
         try:
+            # ============================================================
+            # АВТОМАТИЧЕСКОЕ ОПРЕДЕЛЕНИЕ ДАТ
+            # ============================================================
+            today = datetime.now()
+            
+            # Если start_date не указан или в прошлом - используем сегодня
+            if not start_date:
+                start_date = today.strftime("%Y-%m-%d")
+            else:
+                start_dt_check = datetime.strptime(start_date, "%Y-%m-%d")
+                if start_dt_check < today.replace(hour=0, minute=0, second=0, microsecond=0):
+                    start_date = today.strftime("%Y-%m-%d")
+                    logger.info(f"📅 Start date was in past, using today: {start_date}")
+            
+            # Если end_date не указан - ищем на неделю вперёд
+            if not end_date:
+                end_date = (today + timedelta(days=7)).strftime("%Y-%m-%d")
+            else:
+                end_dt_check = datetime.strptime(end_date, "%Y-%m-%d")
+                if end_dt_check < datetime.strptime(start_date, "%Y-%m-%d"):
+                    end_date = (datetime.strptime(start_date, "%Y-%m-%d") + timedelta(days=7)).strftime("%Y-%m-%d")
+            
+            logger.info(f"📅 Searching slots from {start_date} to {end_date}")
+            # ============================================================
+            
             # Парсим даты
             start_dt = datetime.strptime(start_date, "%Y-%m-%d")
             end_dt = datetime.strptime(end_date, "%Y-%m-%d")
             
             # Получаем calendar_id мастера если указан
             master_calendar_id = None
+            master_found = None
             if master_id:
-                masters_data = self.get_database_info("masters")
+                masters_data = self.get_database_info("masters", limit=50)
                 masters = masters_data.get("data", [])
-                master = next((m for m in masters if m.get("id") == master_id), None)
-                if master:
-                    master_calendar_id = master.get("calendar_id")
-                    logger.info(f"📅 Using master calendar: {master_calendar_id}")
+                logger.info(f"📅 Got {len(masters)} masters from DB")
+                
+                # Сначала ищем по точному ID
+                master_found = next((m for m in masters if m.get("id") == master_id), None)
+                
+                # Если не найден по ID, ищем по имени (частичное совпадение)
+                if not master_found:
+                    master_name_lower = master_id.lower()
+                    for m in masters:
+                        m_name = m.get("name", "").lower()
+                        # Проверяем разные варианты совпадения
+                        if master_name_lower in m_name or m_name in master_name_lower:
+                            master_found = m
+                            logger.info(f"📅 Found master by name match: {m.get('name')} -> {m.get('id')}")
+                            break
+                        # Проверка по частям имени (Анна -> Анна Федорова)
+                        if any(part in m_name for part in master_name_lower.split()):
+                            master_found = m
+                            logger.info(f"📅 Found master by partial name: {m.get('name')} -> {m.get('id')}")
+                            break
+                
+                if master_found:
+                    master_calendar_id = master_found.get("calendar_id")
+                    master_id = master_found.get("id")  # Обновляем master_id на правильный
+                    logger.info(f"📅 Master found: {master_found.get('name')}, calendar_id: {master_calendar_id}")
+                else:
+                    logger.warning(f"📅 Master not found: {master_id}")
             
             # Получаем события из Google Calendar мастера
             calendar_events = []
@@ -889,24 +1072,52 @@ class AdvancedINKA:
             logger.info(f"📅 Found {len(master_bookings)} bookings for master in date range")
             
             # Получаем расписание мастера из Sheets (для определения рабочих часов)
-            schedule_data = self.get_database_info("schedule")
+            schedule_data = self.get_database_info("schedule", limit=200)  # Увеличиваем лимит
             schedule_rows = schedule_data.get("data", [])
             
-            # Если нет расписания - генерируем стандартное расписание (10:00-18:00)
-            if not schedule_rows:
-                logger.warning("No schedule found in database, using default working hours")
-                schedule_rows = [
-                    {"master_id": "default", "day_of_week": "monday", "start_time": "10:00", "end_time": "18:00", "is_working": "true"},
-                    {"master_id": "default", "day_of_week": "tuesday", "start_time": "10:00", "end_time": "18:00", "is_working": "true"},
-                    {"master_id": "default", "day_of_week": "wednesday", "start_time": "10:00", "end_time": "18:00", "is_working": "true"},
-                    {"master_id": "default", "day_of_week": "thursday", "start_time": "10:00", "end_time": "18:00", "is_working": "true"},
-                    {"master_id": "default", "day_of_week": "friday", "start_time": "10:00", "end_time": "18:00", "is_working": "true"},
-                    {"master_id": "default", "day_of_week": "saturday", "start_time": "10:00", "end_time": "16:00", "is_working": "true"},
-                ]
+            # Дефолтное расписание 10:00-18:00
+            default_schedule = [
+                {"master_id": "default", "day_of_week": "monday", "start_time": "10:00", "end_time": "19:00", "is_working": "true"},
+                {"master_id": "default", "day_of_week": "tuesday", "start_time": "10:00", "end_time": "19:00", "is_working": "true"},
+                {"master_id": "default", "day_of_week": "wednesday", "start_time": "10:00", "end_time": "19:00", "is_working": "true"},
+                {"master_id": "default", "day_of_week": "thursday", "start_time": "10:00", "end_time": "19:00", "is_working": "true"},
+                {"master_id": "default", "day_of_week": "friday", "start_time": "10:00", "end_time": "19:00", "is_working": "true"},
+                {"master_id": "default", "day_of_week": "saturday", "start_time": "10:00", "end_time": "17:00", "is_working": "true"},
+                {"master_id": "default", "day_of_week": "sunday", "start_time": "10:00", "end_time": "17:00", "is_working": "true"},
+            ]
             
             # Фильтруем расписание по мастеру если указан
-            if master_id:
-                schedule_rows = [s for s in schedule_rows if s.get("master_id") == master_id]
+            if master_id and schedule_rows:
+                # Сначала пробуем искать по точному master_id
+                master_schedule = [s for s in schedule_rows if s.get("master_id") == master_id]
+                logger.info(f"📅 Master schedule entries by ID: {len(master_schedule)} for {master_id}")
+                
+                # Если не нашли по ID, ищем по любому UUID в Schedule и привязываем через имя
+                if not master_schedule and master_found:
+                    # Получаем уникальные master_id из Schedule
+                    schedule_master_ids = list(set(s.get("master_id") for s in schedule_rows if s.get("master_id")))
+                    logger.info(f"📅 Unique master_ids in Schedule table: {schedule_master_ids[:5]}...")
+                    
+                    # Если найден только один мастер в Schedule (или первый с 7 днями расписания)
+                    # Используем его расписание для нашего мастера
+                    for sched_master_id in schedule_master_ids:
+                        sched_entries = [s for s in schedule_rows if s.get("master_id") == sched_master_id]
+                        if len(sched_entries) >= 6:  # Полная рабочая неделя
+                            master_schedule = sched_entries
+                            logger.info(f"📅 Using schedule from {sched_master_id} ({len(sched_entries)} entries) for master {master_id}")
+                            break
+                
+                # Если у мастера нет своего расписания - используем дефолтное
+                if not master_schedule:
+                    logger.info(f"📅 No schedule for {master_id} in DB, using DEFAULT schedule")
+                    schedule_rows = default_schedule
+                else:
+                    schedule_rows = master_schedule
+            elif not schedule_rows:
+                logger.warning("No schedule found in database, using default working hours")
+                schedule_rows = default_schedule
+            
+            logger.info(f"📅 Total schedule rows to process: {len(schedule_rows)}")
             
             # Генерируем слоты на основе расписания Sheets
             free_slots = []
@@ -917,9 +1128,12 @@ class AdvancedINKA:
                 
                 # Находим расписание для этого дня
                 day_schedule = [s for s in schedule_rows if s.get("day_of_week") == day_of_week]
+                logger.debug(f"📅 Day {current.strftime('%Y-%m-%d')} ({day_of_week}): {len(day_schedule)} schedule entries")
                 
                 for schedule in day_schedule:
-                    if schedule.get("is_working") != "true":
+                    # Проверка is_working с учетом разных регистров
+                    is_working_val = str(schedule.get("is_working", "false")).lower()
+                    if is_working_val != "true":
                         continue
                     
                     start_time = schedule.get("start_time", "10:00")
@@ -990,11 +1204,19 @@ class AdvancedINKA:
                 
                 current += timedelta(days=1)
             
+            logger.info(f"📅 RESULT: Found {len(free_slots)} free slots for master {master_id} from {start_date} to {end_date}")
+            
+            # Получаем имя мастера для ответа
+            master_name = "Мастер"
+            if master_found:
+                master_name = master_found.get("name", "Мастер")
+            
             return {
                 "slots": free_slots[:20],  # Ограничиваем 20 слотами
                 "count": len(free_slots),
                 "total_available": len(free_slots),
                 "master_id": master_id,
+                "master_name": master_name,  # Добавляем имя мастера для INKA
                 "duration_minutes": duration_minutes,
                 "source": "Google Calendar + Bookings + Schedule"
             }
@@ -1113,23 +1335,133 @@ class AdvancedINKA:
             return {"error": str(e)}
     
     def create_booking(self, user_id: str, master_id: str, date: str, 
-                      time: str, service: str, notes: str = "") -> Dict:
-        """Создать запись в БД и добавить событие в Google Calendar"""
+                      time: str, service: str, notes: str = "",
+                      client_name: str = "", client_phone: str = "",
+                      client_city: str = "", is_first_tattoo: bool = None,
+                      client_gender: str = "") -> Dict:
+        """Создать запись в БД и добавить событие в Google Calendar
+        
+        ОБЯЗАТЕЛЬНЫЕ ДАННЫЕ КЛИЕНТА:
+        - client_name: Имя клиента
+        - client_phone: Телефон для связи
+        - client_city: Город (важно для планирования)
+        - is_first_tattoo: Первая татуировка?
+        - client_gender: Пол клиента
+        """
         try:
             if not self.sheets_client:
                 return {"error": "Database connection not available"}
+            
+            # ============================================================
+            # ВАЛИДАЦИЯ ОБЯЗАТЕЛЬНЫХ ПОЛЕЙ КЛИЕНТА
+            # ============================================================
+            
+            if not client_name:
+                return {"error": "⚠️ Не указано имя клиента! Спроси как зовут."}
+            if not client_phone:
+                return {"error": "⚠️ Не указан телефон клиента! Спроси номер для связи."}
+            
+            # Формируем расширенные заметки
+            extended_notes = []
+            if notes:
+                extended_notes.append(notes)
+            if client_city:
+                extended_notes.append(f"Город: {client_city}")
+            if is_first_tattoo is not None:
+                extended_notes.append(f"Первая тату: {'Да' if is_first_tattoo else 'Нет'}")
+            if client_gender:
+                extended_notes.append(f"Пол: {'М' if client_gender == 'male' else 'Ж'}")
+            
+            full_notes = " | ".join(extended_notes) if extended_notes else ""
+            
+            # ============================================================
+            # ВАЛИДАЦИЯ И ИСПРАВЛЕНИЕ ВХОДНЫХ ДАННЫХ
+            # ============================================================
+            
+            # Получаем всех мастеров для валидации
+            all_masters = self.get_database_info("masters").get("data", [])
+            
+            # Если master_id - это число (индекс), найти реальный ID
+            if master_id.isdigit():
+                idx = int(master_id) - 1  # Индекс начинается с 1
+                if 0 <= idx < len(all_masters):
+                    master_id = all_masters[idx].get("id", master_id)
+                    logger.info(f"📝 Converted master index {idx+1} to ID: {master_id}")
+            
+            # Если master_id - это имя мастера, найти реальный ID
+            if not master_id.startswith("m_") and not master_id.startswith("e"):
+                for m in all_masters:
+                    if master_id.lower() in m.get("name", "").lower():
+                        master_id = m.get("id")
+                        logger.info(f"📝 Found master by name: {master_id}")
+                        break
+            
+            # Исправляем год если он в прошлом (2023, 2024 -> текущий год)
+            current_year = datetime.now().year
+            if date and len(date) >= 4:
+                year_in_date = int(date[:4])
+                if year_in_date < current_year:
+                    date = str(current_year) + date[4:]
+                    logger.info(f"📝 Fixed year in date: {date}")
+            
+            # ============================================================
             
             # Сначала получаем или создаём клиента
             clients_data = self.get_database_info("clients", "telegram_id", str(user_id))
             
             if not clients_data.get("data") or len(clients_data["data"]) == 0:
-                # Создаём нового клиента с базовой инфой
-                client_result = self.create_client(str(user_id), "Client", "", "", notes)
+                # Создаём нового клиента с полными данными
+                client_notes = []
+                if client_city:
+                    client_notes.append(f"Город: {client_city}")
+                if is_first_tattoo is not None:
+                    client_notes.append(f"Первая тату: {'Да' if is_first_tattoo else 'Нет'}")
+                if client_gender:
+                    client_notes.append(f"Пол: {'М' if client_gender == 'male' else 'Ж'}")
+                
+                client_result = self.create_client(
+                    str(user_id), 
+                    client_name or "Client", 
+                    client_phone or "", 
+                    "",  # email
+                    " | ".join(client_notes) if client_notes else ""
+                )
                 if client_result.get("error"):
                     return client_result
                 client_id = client_result["client"]["id"]
             else:
                 client_id = clients_data["data"][0]["id"]
+                # Обновляем данные клиента если есть новая информация
+                if client_name or client_phone:
+                    try:
+                        existing = clients_data["data"][0]
+                        update_data = {}
+                        if client_name and existing.get("name", "Client") == "Client":
+                            update_data["name"] = client_name
+                        if client_phone and not existing.get("phone"):
+                            update_data["phone"] = client_phone
+                        # Добавляем город и инфо в заметки
+                        if client_city or is_first_tattoo is not None or client_gender:
+                            new_notes = []
+                            if client_city:
+                                new_notes.append(f"Город: {client_city}")
+                            if is_first_tattoo is not None:
+                                new_notes.append(f"Первая тату: {'Да' if is_first_tattoo else 'Нет'}")
+                            if client_gender:
+                                new_notes.append(f"Пол: {'М' if client_gender == 'male' else 'Ж'}")
+                            old_notes = existing.get("notes", "")
+                            update_data["notes"] = f"{old_notes} | {' | '.join(new_notes)}" if old_notes else " | ".join(new_notes)
+                        
+                        if update_data:
+                            logger.info(f"Updating client {client_id} with: {update_data}")
+                            # Реально обновляем клиента в БД
+                            try:
+                                self.sheets_client.update_client(client_id, update_data)
+                                logger.info(f"✅ Client {client_id} updated successfully")
+                            except Exception as upd_e:
+                                logger.warning(f"Could not update client in sheets: {upd_e}")
+                    except Exception as e:
+                        logger.warning(f"Could not update client: {e}")
             
             # Получаем информацию о мастере
             masters_data = self.get_database_info("masters", "id", master_id, limit=1)
@@ -1155,7 +1487,7 @@ class AdvancedINKA:
                 "60",                # duration_min
                 "",                  # price (оставляем пусто)
                 "confirmed",         # status
-                notes,               # notes
+                full_notes,          # notes (включает город, пол, первая тату и т.д.)
                 created_at           # created_at
             ]
             
@@ -1305,8 +1637,73 @@ class AdvancedINKA:
             is_admin = int(user_id) in self.admin_ids if user_id else False
             logger.info(f"👤 User {user_id} - Admin: {is_admin}")
             
+            # ============================================================
+            # 🧠 АНАЛИЗ ПОВЕДЕНИЯ КЛИЕНТА
+            # ============================================================
+            behavior_context = ""
+            booking_blocked = False
+            block_reason = ""
+            
+            if not is_admin:
+                try:
+                    from src.services.behavior_service import get_behavior_service
+                    behavior_service = get_behavior_service(self.sheets_client)
+                    
+                    # Получаем историю сообщений для контекста
+                    msg_history = behavior_service.get_message_history(str(user_id))
+                    
+                    # Анализируем текущее сообщение
+                    behavior = behavior_service.analyze_message_behavior(user_message, msg_history)
+                    
+                    # Сохраняем в историю
+                    behavior_service.add_message_to_history(str(user_id), user_message, behavior)
+                    
+                    # Рассчитываем риск
+                    risk_level = behavior_service.calculate_risk_level(str(user_id))
+                    
+                    logger.info(f"🧠 Behavior: {behavior['behavior']} ({behavior['confidence']:.2f}), risk={risk_level}")
+                    
+                    # Проверяем доступ к записи
+                    booking_allowed, block_reason = behavior_service.is_booking_allowed(str(user_id))
+                    if not booking_allowed:
+                        booking_blocked = True
+                        logger.warning(f"⚠️ Booking blocked for user {user_id}: {block_reason}")
+                    
+                    # Получаем стиль ответа
+                    style_hint = behavior_service.get_response_style(str(user_id))
+                    if style_hint:
+                        behavior_context = f"\n\n[АДАПТАЦИЯ СТИЛЯ]: {style_hint}"
+                    
+                    # Уведомляем админа при высоком риске
+                    should_notify, notification = behavior_service.should_notify_admin(str(user_id))
+                    if should_notify and notification:
+                        logger.warning(f"🚨 ADMIN NOTIFICATION: {notification['message']}")
+                        # TODO: отправить в Telegram админу
+                
+                except Exception as e:
+                    logger.warning(f"Behavior analysis error (non-critical): {e}")
+            
+            # ============================================================
+            
+            # Загружаем обучающий контекст
+            training_context = self.get_training_context()
+            
             # Создаём thread для разговора
             thread = self.client.beta.threads.create()
+            
+            # Если есть обучающий контекст - добавляем как первое сообщение
+            if training_context:
+                self.client.beta.threads.messages.create(
+                    thread_id=thread.id,
+                    role="user",
+                    content=f"[СИСТЕМНОЕ СООБЩЕНИЕ - ОБЯЗАТЕЛЬНО СЛЕДУЙ ЭТИМ ИНСТРУКЦИЯМ]{training_context}{behavior_context}"
+                )
+                # Подтверждение от ассистента что понял
+                self.client.beta.threads.messages.create(
+                    thread_id=thread.id,
+                    role="assistant", 
+                    content="Понял, буду следовать этим инструкциям при общении с клиентами."
+                )
             
             # Добавляем историю
             if conversation_history:
@@ -1316,6 +1713,10 @@ class AdvancedINKA:
                         role=msg.get("role", "user"),
                         content=msg.get("content", "")
                     )
+            
+            # Если клиент заблокирован - возвращаем сообщение без AI
+            if booking_blocked:
+                return block_reason
             
             # Добавляем текущее сообщение
             # Не запрашиваем БД при каждом сообщении - Assistant сам вызовет функцию когда нужно
@@ -1332,22 +1733,34 @@ class AdvancedINKA:
             for tool in tools_config:
                 logger.info(f"   - {tool['function']['name']}")
             
+            # Получаем динамический контекст с актуальными мастерами из БД
+            dynamic_instructions = self.get_dynamic_system_prompt()
+            
             run = self.client.beta.threads.runs.create(
                 thread_id=thread.id,
                 assistant_id=self.assistant_id,
-                tools=tools_config
+                tools=tools_config,
+                additional_instructions=dynamic_instructions
             )
             
             logger.info(f"🤖 Run created: {run.id}, status: {run.status}")
             
             # Ждём завершения с обработкой вызовов функций
-            max_iterations = 10
+            max_iterations = 30  # Увеличено для долгих запросов
             iteration = 0
+            queued_count = 0
             
             while run.status in ["queued", "in_progress", "requires_action"] and iteration < max_iterations:
-                time.sleep(1)
+                # Адаптивный таймаут: дольше ждём для queued
+                if run.status == "queued":
+                    queued_count += 1
+                    time.sleep(1.5)  # Дольше ждём когда в очереди
+                else:
+                    time.sleep(0.8)  # Быстрее проверяем в процессе
+                    queued_count = 0
+                    
                 run = self.client.beta.threads.runs.retrieve(thread_id=thread.id, run_id=run.id)
-                logger.info(f"📍 Run status: {run.status} (iteration {iteration})")
+                logger.info(f"📍 Run status: {run.status} (iteration {iteration}, queued: {queued_count})")
 
                 
                 # Обработка вызовов функций
@@ -1821,6 +2234,70 @@ class AdvancedINKA:
         except Exception as e:
             logger.error(f"Error sending broadcast: {e}")
             return {"error": str(e)}
+    
+    def get_training_context(self) -> str:
+        """Загружает обучающие данные для добавления в контекст"""
+        try:
+            if not self.sheets_client:
+                return ""
+            
+            training_context = "\n\n═══════════════════════════════════════════════════\n"
+            training_context += "📚 ОБУЧЕНИЕ ОТ АДМИНА (следуй этим инструкциям!)\n"
+            training_context += "═══════════════════════════════════════════════════\n\n"
+            
+            # Загружаем знания
+            try:
+                knowledge = self.sheets_client.get_all_rows("INKA_Knowledge")
+                if len(knowledge) > 1:
+                    training_context += "📌 ИЗУЧЕННЫЕ ФАКТЫ И ПРАВИЛА:\n"
+                    for row in knowledge[1:20]:  # Максимум 20 записей
+                        if len(row) >= 4:
+                            k_type = row[1]
+                            title = row[2]
+                            content = row[3]
+                            training_context += f"• [{k_type.upper()}] {title}: {content}\n"
+                    training_context += "\n"
+            except Exception as e:
+                logger.debug(f"No INKA_Knowledge sheet: {e}")
+            
+            # Загружаем сценарии
+            try:
+                scenarios = self.sheets_client.get_all_rows("INKA_Scenarios")
+                if len(scenarios) > 1:
+                    training_context += "💬 ИЗУЧЕННЫЕ СЦЕНАРИИ ДИАЛОГА:\n"
+                    for row in scenarios[1:15]:  # Максимум 15 сценариев
+                        if len(row) >= 4:
+                            category = row[1]
+                            trigger = row[2]
+                            response = row[3]
+                            training_context += f"• Если клиент говорит: \"{trigger}\"\n"
+                            training_context += f"  → Правильный ответ: \"{response}\"\n\n"
+                    training_context += "\n"
+            except Exception as e:
+                logger.debug(f"No INKA_Scenarios sheet: {e}")
+            
+            # Загружаем коррекции
+            try:
+                corrections = self.sheets_client.get_all_rows("INKA_Corrections")
+                if len(corrections) > 1:
+                    training_context += "⚠️ КОРРЕКЦИИ (чего избегать!):\n"
+                    for row in corrections[1:10]:  # Максимум 10 коррекций
+                        if len(row) >= 3:
+                            wrong = row[1]
+                            correct = row[2]
+                            training_context += f"• ❌ НЕ говори: \"{wrong[:100]}\"\n"
+                            training_context += f"  ✅ Говори вместо этого: \"{correct[:100]}\"\n\n"
+            except Exception as e:
+                logger.debug(f"No INKA_Corrections sheet: {e}")
+            
+            if len(training_context) > 200:  # Если есть реальные данные
+                logger.info(f"📚 Loaded training context: {len(training_context)} chars")
+                return training_context
+            return ""
+        
+        except Exception as e:
+            logger.error(f"Error loading training context: {e}")
+            return ""
 
 
 def get_advanced_inka(api_key: str, assistant_id: str, 

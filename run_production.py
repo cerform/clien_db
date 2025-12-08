@@ -42,7 +42,7 @@ logger.info(f"🔧 OPENAI_API_KEY: {'установлен' if os.getenv('OPENAI_
 
 # Наши модули
 from src.config import get_config
-from src.bot.handlers import start_handler, client_handler
+from src.bot.handlers import client_handler  # start_handler убран - бот активируется любым сообщением
 from src.web.app import create_app
 
 # Глобальные объекты
@@ -68,12 +68,9 @@ async def setup_webhook():
         )
         logger.info(f"✅ Webhook установлен: {webhook_url}")
         
-        # Установка команд
-        await bot.set_my_commands([
-            BotCommand(command="start", description="Главное меню"),
-            BotCommand(command="help", description="Справка"),
-        ])
-        logger.info("✅ Бот готов к работе")
+        # Удаляем команды бота (без кнопки Старт)
+        await bot.delete_my_commands()
+        logger.info("✅ Бот готов к работе (без команд/кнопок)")
         _webhook_setup_done = True
     except Exception as e:
         logger.error(f"❌ Ошибка установки webhook: {e}")
@@ -95,13 +92,9 @@ def main():
         bot = Bot(token=config.telegram_bot_token)
         dp = Dispatcher(storage=storage)
         
-        # Регистрация обработчиков
+        # Регистрация обработчиков (только client_handler, без start)
         logger.warning("⚠️  REGISTERING HANDLERS...")
-        try:
-            dp.include_router(start_handler.router)
-            logger.warning("⚠️  start_handler.router registered")
-        except Exception as e:
-            logger.error(f"❌ Failed to register start_handler: {e}")
+        # start_handler убран - бот активируется любым сообщением
         
         try:
             dp.include_router(client_handler.router)

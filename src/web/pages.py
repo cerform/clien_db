@@ -129,9 +129,15 @@ async def masters_page():
                 </div>
                 <form id="masterForm" onsubmit="saveMaster(event)">
                     <input type="hidden" id="masterId">
+                    <input type="hidden" id="originalMasterId">
+                    <div class="form-group" id="idFieldGroup" style="display:none">
+                        <label for="newMasterId">ID мастера (для INKA)</label>
+                        <input type="text" id="newMasterId" placeholder="m_anna_fedorova" pattern="m_[a-z_]+">
+                        <small style="color:#666;font-size:11px">Формат: m_имя_фамилия (латиницей, нижний регистр). Пример: m_anna_fedorova</small>
+                    </div>
                     <div class="form-group">
                         <label for="name">Имя *</label>
-                        <input type="text" id="name" required>
+                        <input type="text" id="name" required oninput="suggestMasterId()">
                     </div>
                     <div class="form-group">
                         <label for="phone">Телефон *</label>
@@ -236,6 +242,9 @@ async def masters_page():
                 document.getElementById('modalTitle').textContent = 'Добавить мастера';
                 document.getElementById('masterForm').reset();
                 document.getElementById('masterId').value = '';
+                document.getElementById('originalMasterId').value = '';
+                document.getElementById('newMasterId').value = '';
+                document.getElementById('idFieldGroup').style.display = 'none';
                 document.getElementById('masterModal').style.display = 'block';
             }
             
@@ -245,6 +254,9 @@ async def masters_page():
                 
                 document.getElementById('modalTitle').textContent = 'Редактировать мастера';
                 document.getElementById('masterId').value = master.id;
+                document.getElementById('originalMasterId').value = master.id;
+                document.getElementById('newMasterId').value = master.id;
+                document.getElementById('idFieldGroup').style.display = 'block';
                 document.getElementById('name').value = master.name || '';
                 document.getElementById('phone').value = master.phone || '';
                 document.getElementById('specialization').value = master.specialization || '';
@@ -257,6 +269,24 @@ async def masters_page():
                 document.getElementById('masterModal').style.display = 'block';
             }
             
+            // Транслитерация для генерации ID
+            function transliterate(text) {
+                const ru = {'а':'a','б':'b','в':'v','г':'g','д':'d','е':'e','ё':'e','ж':'zh','з':'z','и':'i','й':'y','к':'k','л':'l','м':'m','н':'n','о':'o','п':'p','р':'r','с':'s','т':'t','у':'u','ф':'f','х':'h','ц':'ts','ч':'ch','ш':'sh','щ':'sch','ъ':'','ы':'y','ь':'','э':'e','ю':'yu','я':'ya',' ':'_'};
+                return text.toLowerCase().split('').map(c => ru[c] || c).join('').replace(/[^a-z_]/g, '');
+            }
+            
+            function suggestMasterId() {
+                const masterId = document.getElementById('masterId').value;
+                // Только для новых мастеров (без ID)
+                if (!masterId) {
+                    const name = document.getElementById('name').value;
+                    if (name) {
+                        const suggestedId = 'm_' + transliterate(name);
+                        document.getElementById('newMasterId').value = suggestedId;
+                    }
+                }
+            }
+            
             function closeModal() {
                 document.getElementById('masterModal').style.display = 'none';
             }
@@ -265,6 +295,9 @@ async def masters_page():
                 event.preventDefault();
                 
                 const id = document.getElementById('masterId').value;
+                const originalId = document.getElementById('originalMasterId').value;
+                const newMasterId = document.getElementById('newMasterId').value;
+                
                 const data = {
                     name: document.getElementById('name').value,
                     phone: document.getElementById('phone').value,
@@ -276,6 +309,16 @@ async def masters_page():
                     calendar_id: document.getElementById('calendar_id').value,
                     status: document.getElementById('status').value
                 };
+                
+                // Если ID изменился - добавляем new_id для обновления
+                if (id && newMasterId && newMasterId !== originalId) {
+                    data.new_id = newMasterId;
+                }
+                
+                // Для нового мастера - используем предложенный ID
+                if (!id && newMasterId) {
+                    data.id = newMasterId;
+                }
                 
                 try {
                     const url = id ? `/api/masters/${id}` : '/api/masters';
@@ -777,7 +820,13 @@ async def clients_page():
                 
                 <div class="search-box">
                     <input type="text" id="searchInput" placeholder="Поиск по имени, телефону или email..." oninput="filterClients()">
+                    <select id="statusFilter" onchange="filterClients()" style="padding:10px; border-radius:5px;">
+                        <option value="all">Все</option>
+                        <option value="active">Активные</option>
+                        <option value="deleted">Удалённые</option>
+                    </select>
                     <button class="btn" onclick="openAddModal()">➕ Добавить клиента</button>
+                    <button class="btn" onclick="resetFilter()" style="background:#6c757d;">Показать все</button>
                 </div>
                 
                 <table>
@@ -874,8 +923,15 @@ async def clients_page():
                     const createdAt = c.created_at ? new Date(c.created_at).toLocaleDateString('ru-RU') : '-';
                     const lastVisit = c.last_visit ? new Date(c.last_visit).toLocaleDateString('ru-RU') : '-';
                     const isDeleted = c.notes && c.notes.includes('[DELETED]');
-                    if (isDeleted) return '';
-                    return `<tr>
+                    let actions = '';
+                    if (isDeleted) {
+                        actions = `<button class="btn-edit" onclick="restoreClient('${c.id}')">♻️ Восстановить</button>`;
+                    } else {
+                        actions = `<button class="btn-view" onclick="viewClient('${c.id}')">👁️ Подробнее</button>
+                                   <button class="btn-edit" onclick="editClient('${c.id}')">✏️</button>
+                                   <button class="btn-delete" onclick="deleteClient('${c.id}', '${c.name}')">🗑️</button>`;
+                    }
+                    return `<tr style="${isDeleted ? 'opacity:0.5;background:#f8d7da;' : ''}">
                         <td>${c.id ? c.id.substring(0, 8) + '...' : '-'}</td>
                         <td><strong>${c.name || '-'}</strong></td>
                         <td>${c.phone || '-'}</td>
@@ -883,24 +939,64 @@ async def clients_page():
                         <td>${c.telegram_id || '-'}</td>
                         <td>${createdAt}</td>
                         <td>${lastVisit}</td>
-                        <td>
-                            <button class="btn-view" onclick="viewClient('${c.id}')">👁️ Подробнее</button>
-                            <button class="btn-edit" onclick="editClient('${c.id}')">✏️</button>
-                            <button class="btn-delete" onclick="deleteClient('${c.id}', '${c.name}')">🗑️</button>
-                        </td>
+                        <td>${actions}</td>
                     </tr>`;
-                }).filter(row => row).join('');
+                }).join('');
             }
             
             function filterClients() {
                 const search = document.getElementById('searchInput').value.toLowerCase();
-                const filtered = allClients.filter(c => 
-                    (c.name && c.name.toLowerCase().includes(search)) ||
-                    (c.phone && c.phone.includes(search)) ||
-                    (c.email && c.email.toLowerCase().includes(search)) ||
-                    (c.telegram_id && c.telegram_id.includes(search))
-                );
+                const status = document.getElementById('statusFilter').value;
+                let filtered = allClients.filter(c => {
+                    const match = (c.name && c.name.toLowerCase().includes(search)) ||
+                                  (c.phone && c.phone.includes(search)) ||
+                                  (c.email && c.email.toLowerCase().includes(search)) ||
+                                  (c.telegram_id && c.telegram_id.includes(search));
+                    if (!match) return false;
+                    const isDeleted = c.notes && c.notes.includes('[DELETED]');
+                    if (status === 'active') return !isDeleted;
+                    if (status === 'deleted') return isDeleted;
+                    return true;
+                });
                 renderClients(filtered);
+            }
+
+            function resetFilter() {
+                document.getElementById('searchInput').value = '';
+                document.getElementById('statusFilter').value = 'all';
+                renderClients(allClients);
+            }
+
+            async function restoreClient(id) {
+                if (!confirm('Восстановить клиента?')) return;
+                try {
+                    const client = allClients.find(c => c.id === id);
+                    if (!client) return;
+                    // Удаляем [DELETED] из notes
+                    let notes = client.notes || '';
+                    notes = notes.replace('[DELETED]', '').trim();
+                    const data = {
+                        name: client.name,
+                        phone: client.phone,
+                        email: client.email,
+                        telegram_id: client.telegram_id,
+                        notes: notes
+                    };
+                    const response = await fetch(`/api/clients/${id}`, {
+                        method: 'PUT',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(data)
+                    });
+                    const result = await response.json();
+                    if (response.ok && result.success) {
+                        showAlert('Клиент восстановлен!', 'success');
+                        loadClients();
+                    } else {
+                        showAlert(result.detail || 'Ошибка восстановления', 'error');
+                    }
+                } catch (error) {
+                    showAlert('Ошибка восстановления', 'error');
+                }
             }
             
             function openAddModal() {
@@ -1498,7 +1594,7 @@ async def bookings_page():
 
 @admin_router.get("/inka-training", response_class=HTMLResponse)
 async def inka_training_page():
-    """INKA training page"""
+    """INKA training page with interactive chat"""
     return """
     <!DOCTYPE html>
     <html lang="ru">
@@ -1511,48 +1607,94 @@ async def inka_training_page():
             body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
                    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
                    min-height: 100vh; padding: 20px; }
-            .container { max-width: 1200px; margin: 0 auto; background: white;
-                        border-radius: 10px; box-shadow: 0 10px 40px rgba(0,0,0,0.3); }
+            .container { max-width: 1400px; margin: 0 auto; background: white;
+                        border-radius: 10px; box-shadow: 0 10px 40px rgba(0,0,0,0.3); overflow: hidden; }
             .header { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-                     color: white; padding: 20px; display: flex; justify-content: space-between; }
+                     color: white; padding: 20px; display: flex; justify-content: space-between; align-items: center; }
             .header h1 { font-size: 1.8em; }
             .btn-back { background: rgba(255,255,255,0.2); color: white; border: none;
                        padding: 10px 20px; border-radius: 5px; cursor: pointer; }
-            .content { padding: 30px; }
-            .btn { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-                  color: white; border: none; padding: 10px 20px; border-radius: 5px;
-                  cursor: pointer; }
-            textarea { width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 5px; }
-            .stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; margin-top: 20px; }
-            .stat-box { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white;
-                       padding: 20px; border-radius: 8px; text-align: center; }
-            .stat-value { font-size: 2em; font-weight: bold; }
-        </style>
-        <script>
-            async function trainInka() {
-                const text = document.getElementById('trainingText').value;
-                if (!text) {
-                    alert('Введите текст для обучения');
-                    return;
-                }
-                try {
-                    const response = await fetch('/api/inka-training', {
-                        method: 'POST',
-                        headers: {'Content-Type': 'application/json'},
-                        body: JSON.stringify({text})
-                    });
-                    if (response.ok) {
-                        alert('Обучение начато!');
-                        document.getElementById('trainingText').value = '';
-                    } else {
-                        alert('Ошибка при обучении');
-                    }
-                } catch (error) {
-                    console.error('Training error:', error);
-                    alert('Ошибка подключения');
-                }
+            .content { padding: 0; display: grid; grid-template-columns: 1fr 350px; min-height: 600px; }
+            
+            /* Tabs */
+            .tabs { display: flex; background: #f5f5f5; border-bottom: 2px solid #e0e0e0; }
+            .tab { padding: 15px 25px; cursor: pointer; border: none; background: transparent;
+                   font-size: 14px; font-weight: 500; color: #666; transition: all 0.3s; }
+            .tab:hover { background: #e0e0e0; }
+            .tab.active { background: white; color: #667eea; border-bottom: 2px solid #667eea; margin-bottom: -2px; }
+            
+            /* Main Panel */
+            .main-panel { display: flex; flex-direction: column; border-right: 1px solid #e0e0e0; }
+            .tab-content { display: none; flex: 1; flex-direction: column; }
+            .tab-content.active { display: flex; }
+            
+            /* Chat */
+            .chat-container { flex: 1; display: flex; flex-direction: column; }
+            .chat-messages { flex: 1; overflow-y: auto; padding: 20px; background: #fafafa; max-height: 450px; }
+            .message { margin-bottom: 15px; display: flex; }
+            .message.user { justify-content: flex-end; }
+            .message.inka { justify-content: flex-start; }
+            .message-bubble { max-width: 80%; padding: 12px 16px; border-radius: 18px; }
+            .message.user .message-bubble { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; }
+            .message.inka .message-bubble { background: #e8e8e8; color: #333; }
+            .message-time { font-size: 10px; opacity: 0.7; margin-top: 4px; }
+            .typing-indicator { color: #999; font-style: italic; padding: 10px 20px; }
+            
+            .chat-input-container { padding: 15px; background: white; border-top: 1px solid #e0e0e0; display: flex; gap: 10px; }
+            .chat-input { flex: 1; padding: 12px; border: 2px solid #e0e0e0; border-radius: 25px; outline: none; }
+            .chat-input:focus { border-color: #667eea; }
+            .send-btn { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white;
+                       border: none; width: 45px; height: 45px; border-radius: 50%; cursor: pointer; font-size: 18px; }
+            .send-btn:hover { transform: scale(1.1); }
+            
+            /* Training Cards */
+            .training-section { padding: 20px; }
+            .training-card { background: #f8f9fa; border-radius: 10px; padding: 20px; margin-bottom: 15px; border: 1px solid #e0e0e0; }
+            .training-card h3 { margin-bottom: 10px; color: #333; display: flex; align-items: center; gap: 8px; }
+            .training-card p { color: #666; font-size: 14px; margin-bottom: 15px; }
+            .training-form { display: flex; flex-direction: column; gap: 10px; }
+            .training-form input, .training-form textarea, .training-form select {
+                padding: 10px; border: 1px solid #ddd; border-radius: 5px; font-size: 14px; }
+            .training-form textarea { resize: vertical; min-height: 80px; }
+            .btn { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white;
+                  border: none; padding: 10px 20px; border-radius: 5px; cursor: pointer; font-size: 14px; }
+            .btn:hover { opacity: 0.9; }
+            .btn-secondary { background: #6c757d; }
+            .btn-success { background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%); }
+            .btn-danger { background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%); }
+            
+            /* Sidebar */
+            .sidebar { background: #f8f9fa; padding: 20px; display: flex; flex-direction: column; gap: 20px; }
+            .sidebar-section { background: white; border-radius: 10px; padding: 15px; border: 1px solid #e0e0e0; }
+            .sidebar-section h3 { font-size: 14px; color: #667eea; margin-bottom: 10px; display: flex; align-items: center; gap: 8px; }
+            
+            /* Stats */
+            .stats-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+            .stat-item { text-align: center; padding: 10px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                        border-radius: 8px; color: white; }
+            .stat-value { font-size: 1.5em; font-weight: bold; }
+            .stat-label { font-size: 10px; opacity: 0.9; }
+            
+            /* Knowledge Base */
+            .knowledge-list { max-height: 200px; overflow-y: auto; }
+            .knowledge-item { padding: 8px; border-bottom: 1px solid #eee; font-size: 13px; display: flex;
+                             justify-content: space-between; align-items: center; }
+            .knowledge-item:hover { background: #f5f5f5; }
+            .knowledge-type { font-size: 10px; background: #667eea; color: white; padding: 2px 6px; border-radius: 10px; }
+            .delete-btn { background: none; border: none; color: #dc3545; cursor: pointer; font-size: 14px; }
+            
+            /* Context Hints */
+            .context-hints { display: flex; flex-wrap: wrap; gap: 5px; }
+            .hint-tag { background: #e0e0e0; padding: 4px 10px; border-radius: 15px; font-size: 11px;
+                       cursor: pointer; transition: all 0.2s; }
+            .hint-tag:hover { background: #667eea; color: white; }
+            
+            /* Responsive */
+            @media (max-width: 900px) {
+                .content { grid-template-columns: 1fr; }
+                .sidebar { border-top: 1px solid #e0e0e0; }
             }
-        </script>
+        </style>
     </head>
     <body>
         <div class="container">
@@ -1561,24 +1703,537 @@ async def inka_training_page():
                 <button class="btn-back" onclick="window.location.href='/'">← Назад</button>
             </div>
             <div class="content">
-                <h2>📈 Статистика</h2>
-                <div class="stats" id="stats"></div>
+                <div class="main-panel">
+                    <div class="tabs">
+                        <button class="tab active" onclick="showTab('chat')">💬 Интерактивный чат</button>
+                        <button class="tab" onclick="showTab('scenarios')">📝 Сценарии</button>
+                        <button class="tab" onclick="showTab('corrections')">✏️ Коррекции</button>
+                        <button class="tab" onclick="showTab('knowledge')">📚 База знаний</button>
+                    </div>
+                    
+                    <!-- Chat Tab -->
+                    <div id="chatTab" class="tab-content active">
+                        <div class="chat-container">
+                            <div class="chat-messages" id="chatMessages">
+                                <div class="message inka">
+                                    <div class="message-bubble">
+                                        Привет! Я готова к обучению. Вы можете:<br><br>
+                                        • Показать мне примеры правильных ответов<br>
+                                        • Исправить мои ошибки<br>
+                                        • Добавить новую информацию<br>
+                                        • Протестировать мои знания<br><br>
+                                        Начните с любого вопроса или примера!
+                                    </div>
+                                </div>
+                            </div>
+                            <div id="typingIndicator" class="typing-indicator" style="display:none">ИНКА думает...</div>
+                            <div class="chat-input-container">
+                                <input type="text" class="chat-input" id="chatInput" placeholder="Напишите сообщение для обучения..." onkeypress="if(event.key==='Enter')sendTrainingMessage()">
+                                <button class="send-btn" onclick="sendTrainingMessage()">➤</button>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Scenarios Tab -->
+                    <div id="scenariosTab" class="tab-content">
+                        <div class="training-section">
+                            <div class="training-card">
+                                <h3>📋 Добавить сценарий диалога</h3>
+                                <p>Создайте пример диалога, который ИНКА должна воспроизводить</p>
+                                <div class="training-form">
+                                    <select id="scenarioCategory">
+                                        <option value="booking">📅 Запись на приём</option>
+                                        <option value="pricing">💰 Вопросы о ценах</option>
+                                        <option value="masters">👨‍🎨 Информация о мастерах</option>
+                                        <option value="services">💼 Описание услуг</option>
+                                        <option value="objections">🤔 Работа с возражениями</option>
+                                        <option value="other">📝 Другое</option>
+                                    </select>
+                                    <input type="text" id="scenarioTrigger" placeholder="Вопрос клиента (например: 'Сколько стоит татуировка?')">
+                                    <textarea id="scenarioResponse" placeholder="Правильный ответ ИНКИ..."></textarea>
+                                    <textarea id="scenarioContext" placeholder="Дополнительный контекст (опционально)..." rows="2"></textarea>
+                                    <button class="btn btn-success" onclick="addScenario()">➕ Добавить сценарий</button>
+                                </div>
+                            </div>
+                            
+                            <div class="training-card">
+                                <h3>📂 Сохранённые сценарии</h3>
+                                <div id="scenariosList" class="knowledge-list">
+                                    <p style="color:#999;text-align:center;padding:20px">Загрузка...</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Corrections Tab -->
+                    <div id="correctionsTab" class="tab-content">
+                        <div class="training-section">
+                            <div class="training-card">
+                                <h3>✏️ Исправить ответ ИНКИ</h3>
+                                <p>Укажите что ИНКА сказала неправильно и как нужно отвечать</p>
+                                <div class="training-form">
+                                    <textarea id="wrongResponse" placeholder="Неправильный ответ ИНКИ..."></textarea>
+                                    <textarea id="correctResponse" placeholder="Правильный ответ..."></textarea>
+                                    <input type="text" id="correctionReason" placeholder="Причина коррекции (опционально)">
+                                    <button class="btn btn-danger" onclick="addCorrection()">⚠️ Добавить коррекцию</button>
+                                </div>
+                            </div>
+                            
+                            <div class="training-card">
+                                <h3>📋 История коррекций</h3>
+                                <div id="correctionsList" class="knowledge-list">
+                                    <p style="color:#999;text-align:center;padding:20px">Загрузка...</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Knowledge Tab -->
+                    <div id="knowledgeTab" class="tab-content">
+                        <div class="training-section">
+                            <div class="training-card">
+                                <h3>📚 Добавить знание</h3>
+                                <p>Добавьте факт или правило, которое ИНКА должна знать</p>
+                                <div class="training-form">
+                                    <select id="knowledgeType">
+                                        <option value="fact">📌 Факт</option>
+                                        <option value="rule">📏 Правило</option>
+                                        <option value="policy">📋 Политика</option>
+                                        <option value="term">📖 Термин</option>
+                                        <option value="faq">❓ FAQ</option>
+                                    </select>
+                                    <input type="text" id="knowledgeTitle" placeholder="Название/Ключевые слова">
+                                    <textarea id="knowledgeContent" placeholder="Содержание..."></textarea>
+                                    <div style="display:flex;gap:10px">
+                                        <button class="btn btn-success" onclick="addKnowledge()">➕ Добавить</button>
+                                        <button class="btn btn-secondary" onclick="importKnowledge()">📥 Импорт из файла</button>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <div class="training-card">
+                                <h3>🗂️ База знаний</h3>
+                                <div style="margin-bottom:10px">
+                                    <input type="text" id="knowledgeSearch" placeholder="Поиск..." style="width:100%;padding:8px;border:1px solid #ddd;border-radius:5px" oninput="searchKnowledge()">
+                                </div>
+                                <div id="knowledgeList" class="knowledge-list">
+                                    <p style="color:#999;text-align:center;padding:20px">Загрузка...</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
                 
-                <h2 style="margin-top:30px">📚 Добавить данные для обучения</h2>
-                <textarea id="trainingText" placeholder="Введите текст для обучения..." rows="5"></textarea>
-                <button class="btn" style="margin-top:10px" onclick="trainInka()">🚀 Обучить ИНКУ</button>
+                <!-- Sidebar -->
+                <div class="sidebar">
+                    <div class="sidebar-section">
+                        <h3>📊 Статистика обучения</h3>
+                        <div class="stats-grid" id="statsGrid">
+                            <div class="stat-item"><div class="stat-value" id="totalSessions">0</div><div class="stat-label">Сессий</div></div>
+                            <div class="stat-item"><div class="stat-value" id="totalKnowledge">0</div><div class="stat-label">Знаний</div></div>
+                            <div class="stat-item"><div class="stat-value" id="totalCorrections">0</div><div class="stat-label">Коррекций</div></div>
+                        </div>
+                    </div>
+                    
+                    <div class="sidebar-section">
+                        <h3>🎯 Быстрые действия</h3>
+                        <div style="display:flex;flex-direction:column;gap:8px">
+                            <button class="btn" onclick="testInka()" style="font-size:12px">🧪 Тестировать ИНКУ</button>
+                            <button class="btn btn-secondary" onclick="exportTraining()" style="font-size:12px">📤 Экспорт обучения</button>
+                            <button class="btn btn-secondary" onclick="resetContext()" style="font-size:12px">🔄 Сбросить контекст</button>
+                        </div>
+                    </div>
+                    
+                    <div class="sidebar-section">
+                        <h3>💡 Подсказки для обучения</h3>
+                        <div class="context-hints">
+                            <span class="hint-tag" onclick="useHint('Как отвечать на вопрос о ценах?')">💰 Цены</span>
+                            <span class="hint-tag" onclick="useHint('Как записать клиента?')">📅 Запись</span>
+                            <span class="hint-tag" onclick="useHint('Как работать с возражениями?')">🤔 Возражения</span>
+                            <span class="hint-tag" onclick="useHint('Расскажи о мастерах')">👨‍🎨 Мастера</span>
+                            <span class="hint-tag" onclick="useHint('Как описать услуги?')">💼 Услуги</span>
+                            <span class="hint-tag" onclick="useHint('Правила общения с клиентами')">📋 Правила</span>
+                        </div>
+                    </div>
+                    
+                    <div class="sidebar-section">
+                        <h3>📝 Последние обучения</h3>
+                        <div id="recentTrainings" style="font-size:12px;color:#666">
+                            <p>Загрузка...</p>
+                        </div>
+                    </div>
+                </div>
             </div>
         </div>
         
         <script>
-            async function loadStats() {
-                const response = await fetch('/api/inka-training-stats');
-                const data = await response.json();
-                const statsHTML = `<div class="stat-box"><div class="stat-value">${data.total_sessions || 0}</div><div>Всего сеансов</div></div><div class="stat-box"><div class="stat-value">${data.successful_trainings || 0}</div><div>Успешных</div></div><div class="stat-box"><div class="stat-value">${(data.average_score || 0).toFixed(2)}</div><div>Средний рейтинг</div></div>`;
-                document.getElementById('stats').innerHTML = statsHTML;
+            let chatHistory = [];
+            let trainingMode = 'learn'; // learn, test, correct
+            
+            function showTab(tab) {
+                document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+                document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+                event.target.classList.add('active');
+                document.getElementById(tab + 'Tab').classList.add('active');
             }
             
+            async function sendTrainingMessage() {
+                const input = document.getElementById('chatInput');
+                const message = input.value.trim();
+                if (!message) return;
+                
+                input.value = '';
+                addMessage(message, 'user');
+                document.getElementById('typingIndicator').style.display = 'block';
+                
+                try {
+                    const response = await fetch('/api/inka-training/chat', {
+                        method: 'POST',
+                        headers: {'Content-Type': 'application/json'},
+                        body: JSON.stringify({
+                            message: message,
+                            mode: trainingMode,
+                            history: chatHistory.slice(-10)
+                        })
+                    });
+                    
+                    const data = await response.json();
+                    document.getElementById('typingIndicator').style.display = 'none';
+                    
+                    addMessage(data.response, 'inka');
+                    chatHistory.push({role: 'user', content: message});
+                    chatHistory.push({role: 'assistant', content: data.response});
+                    
+                    // Update stats
+                    loadStats();
+                    loadRecentTrainings();
+                    
+                    // Check if learning happened
+                    if (data.learned) {
+                        showNotification('✅ ИНКА обучилась новому!');
+                    }
+                } catch (error) {
+                    document.getElementById('typingIndicator').style.display = 'none';
+                    addMessage('Ошибка соединения. Попробуйте ещё раз.', 'inka');
+                }
+            }
+            
+            function addMessage(text, sender) {
+                const container = document.getElementById('chatMessages');
+                const time = new Date().toLocaleTimeString('ru', {hour: '2-digit', minute: '2-digit'});
+                container.innerHTML += `
+                    <div class="message ${sender}">
+                        <div class="message-bubble">
+                            ${text.replace(/\\n/g, '<br>')}
+                            <div class="message-time">${time}</div>
+                        </div>
+                    </div>
+                `;
+                container.scrollTop = container.scrollHeight;
+            }
+            
+            async function addScenario() {
+                const category = document.getElementById('scenarioCategory').value;
+                const trigger = document.getElementById('scenarioTrigger').value;
+                const response = document.getElementById('scenarioResponse').value;
+                const context = document.getElementById('scenarioContext').value;
+                
+                if (!trigger || !response) {
+                    alert('Заполните вопрос и ответ');
+                    return;
+                }
+                
+                try {
+                    const res = await fetch('/api/inka-training/scenario', {
+                        method: 'POST',
+                        headers: {'Content-Type': 'application/json'},
+                        body: JSON.stringify({category, trigger, response, context})
+                    });
+                    
+                    if (res.ok) {
+                        showNotification('✅ Сценарий добавлен!');
+                        document.getElementById('scenarioTrigger').value = '';
+                        document.getElementById('scenarioResponse').value = '';
+                        document.getElementById('scenarioContext').value = '';
+                        loadScenarios();
+                        loadStats();
+                    }
+                } catch (e) {
+                    alert('Ошибка сохранения');
+                }
+            }
+            
+            async function addCorrection() {
+                const wrong = document.getElementById('wrongResponse').value;
+                const correct = document.getElementById('correctResponse').value;
+                const reason = document.getElementById('correctionReason').value;
+                
+                if (!wrong || !correct) {
+                    alert('Заполните оба поля');
+                    return;
+                }
+                
+                try {
+                    const res = await fetch('/api/inka-training/correction', {
+                        method: 'POST',
+                        headers: {'Content-Type': 'application/json'},
+                        body: JSON.stringify({wrong_response: wrong, correct_response: correct, reason})
+                    });
+                    
+                    if (res.ok) {
+                        showNotification('✅ Коррекция сохранена!');
+                        document.getElementById('wrongResponse').value = '';
+                        document.getElementById('correctResponse').value = '';
+                        document.getElementById('correctionReason').value = '';
+                        loadCorrections();
+                        loadStats();
+                    }
+                } catch (e) {
+                    alert('Ошибка сохранения');
+                }
+            }
+            
+            async function addKnowledge() {
+                const type = document.getElementById('knowledgeType').value;
+                const title = document.getElementById('knowledgeTitle').value;
+                const content = document.getElementById('knowledgeContent').value;
+                
+                if (!title || !content) {
+                    alert('Заполните название и содержание');
+                    return;
+                }
+                
+                try {
+                    const res = await fetch('/api/inka-training/knowledge', {
+                        method: 'POST',
+                        headers: {'Content-Type': 'application/json'},
+                        body: JSON.stringify({type, title, content})
+                    });
+                    
+                    if (res.ok) {
+                        showNotification('✅ Знание добавлено!');
+                        document.getElementById('knowledgeTitle').value = '';
+                        document.getElementById('knowledgeContent').value = '';
+                        loadKnowledge();
+                        loadStats();
+                    }
+                } catch (e) {
+                    alert('Ошибка сохранения');
+                }
+            }
+            
+            async function loadStats() {
+                try {
+                    const res = await fetch('/api/inka-training/stats');
+                    const data = await res.json();
+                    document.getElementById('totalSessions').textContent = data.total_sessions || 0;
+                    document.getElementById('totalKnowledge').textContent = data.total_knowledge || 0;
+                    document.getElementById('totalCorrections').textContent = data.total_corrections || 0;
+                } catch (e) {
+                    console.error('Error loading stats:', e);
+                }
+            }
+            
+            async function loadScenarios() {
+                try {
+                    const res = await fetch('/api/inka-training/scenarios');
+                    const data = await res.json();
+                    const container = document.getElementById('scenariosList');
+                    
+                    if (!data.scenarios || data.scenarios.length === 0) {
+                        container.innerHTML = '<p style="color:#999;text-align:center;padding:20px">Нет сценариев</p>';
+                        return;
+                    }
+                    
+                    container.innerHTML = data.scenarios.map(s => `
+                        <div class="knowledge-item">
+                            <div>
+                                <span class="knowledge-type">${s.category}</span>
+                                <strong>${s.trigger.substring(0, 40)}...</strong>
+                            </div>
+                            <button class="delete-btn" onclick="deleteScenario('${s.id}')">🗑️</button>
+                        </div>
+                    `).join('');
+                } catch (e) {
+                    console.error('Error loading scenarios:', e);
+                }
+            }
+            
+            async function loadCorrections() {
+                try {
+                    const res = await fetch('/api/inka-training/corrections');
+                    const data = await res.json();
+                    const container = document.getElementById('correctionsList');
+                    
+                    if (!data.corrections || data.corrections.length === 0) {
+                        container.innerHTML = '<p style="color:#999;text-align:center;padding:20px">Нет коррекций</p>';
+                        return;
+                    }
+                    
+                    container.innerHTML = data.corrections.map(c => `
+                        <div class="knowledge-item">
+                            <div>
+                                <span style="color:#dc3545">✗</span> ${c.wrong_response.substring(0, 30)}...<br>
+                                <span style="color:#28a745">✓</span> ${c.correct_response.substring(0, 30)}...
+                            </div>
+                            <button class="delete-btn" onclick="deleteCorrection('${c.id}')">🗑️</button>
+                        </div>
+                    `).join('');
+                } catch (e) {
+                    console.error('Error loading corrections:', e);
+                }
+            }
+            
+            async function loadKnowledge() {
+                try {
+                    const res = await fetch('/api/inka-training/knowledge');
+                    const data = await res.json();
+                    const container = document.getElementById('knowledgeList');
+                    
+                    if (!data.knowledge || data.knowledge.length === 0) {
+                        container.innerHTML = '<p style="color:#999;text-align:center;padding:20px">База знаний пуста</p>';
+                        return;
+                    }
+                    
+                    container.innerHTML = data.knowledge.map(k => `
+                        <div class="knowledge-item">
+                            <div>
+                                <span class="knowledge-type">${k.type}</span>
+                                <strong>${k.title}</strong>
+                            </div>
+                            <button class="delete-btn" onclick="deleteKnowledge('${k.id}')">🗑️</button>
+                        </div>
+                    `).join('');
+                } catch (e) {
+                    console.error('Error loading knowledge:', e);
+                }
+            }
+            
+            async function loadRecentTrainings() {
+                try {
+                    const res = await fetch('/api/inka-training/recent');
+                    const data = await res.json();
+                    const container = document.getElementById('recentTrainings');
+                    
+                    if (!data.recent || data.recent.length === 0) {
+                        container.innerHTML = '<p style="color:#999">Нет обучений</p>';
+                        return;
+                    }
+                    
+                    container.innerHTML = data.recent.slice(0, 5).map(r => `
+                        <div style="padding:5px 0;border-bottom:1px solid #eee">
+                            <strong>${r.type}</strong>: ${r.summary}<br>
+                            <small style="color:#999">${r.timestamp}</small>
+                        </div>
+                    `).join('');
+                } catch (e) {
+                    console.error('Error loading recent:', e);
+                }
+            }
+            
+            function useHint(hint) {
+                document.getElementById('chatInput').value = hint;
+                document.getElementById('chatInput').focus();
+            }
+            
+            async function testInka() {
+                trainingMode = 'test';
+                addMessage('🧪 Режим тестирования активирован. Задайте мне любой вопрос как клиент, и я отвечу. Потом вы сможете оценить мой ответ.', 'inka');
+            }
+            
+            function resetContext() {
+                chatHistory = [];
+                trainingMode = 'learn';
+                document.getElementById('chatMessages').innerHTML = `
+                    <div class="message inka">
+                        <div class="message-bubble">
+                            Контекст сброшен. Готова к новому обучению!
+                        </div>
+                    </div>
+                `;
+            }
+            
+            async function exportTraining() {
+                try {
+                    const res = await fetch('/api/inka-training/export');
+                    const data = await res.json();
+                    const blob = new Blob([JSON.stringify(data, null, 2)], {type: 'application/json'});
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = 'inka_training_' + new Date().toISOString().slice(0,10) + '.json';
+                    a.click();
+                } catch (e) {
+                    alert('Ошибка экспорта');
+                }
+            }
+            
+            function searchKnowledge() {
+                const query = document.getElementById('knowledgeSearch').value.toLowerCase();
+                const items = document.querySelectorAll('#knowledgeList .knowledge-item');
+                items.forEach(item => {
+                    const text = item.textContent.toLowerCase();
+                    item.style.display = text.includes(query) ? 'flex' : 'none';
+                });
+            }
+            
+            function showNotification(text) {
+                const notif = document.createElement('div');
+                notif.style.cssText = 'position:fixed;top:20px;right:20px;background:#28a745;color:white;padding:15px 25px;border-radius:10px;z-index:1000;animation:fadeIn 0.3s';
+                notif.textContent = text;
+                document.body.appendChild(notif);
+                setTimeout(() => notif.remove(), 3000);
+            }
+            
+            function importKnowledge() {
+                const input = document.createElement('input');
+                input.type = 'file';
+                input.accept = '.json,.txt';
+                input.onchange = async (e) => {
+                    const file = e.target.files[0];
+                    const text = await file.text();
+                    try {
+                        const data = JSON.parse(text);
+                        await fetch('/api/inka-training/import', {
+                            method: 'POST',
+                            headers: {'Content-Type': 'application/json'},
+                            body: JSON.stringify(data)
+                        });
+                        showNotification('✅ Данные импортированы!');
+                        loadKnowledge();
+                        loadStats();
+                    } catch (e) {
+                        alert('Ошибка импорта файла');
+                    }
+                };
+                input.click();
+            }
+            
+            // Delete functions
+            async function deleteScenario(id) {
+                if (!confirm('Удалить сценарий?')) return;
+                await fetch('/api/inka-training/scenario/' + id, {method: 'DELETE'});
+                loadScenarios();
+            }
+            
+            async function deleteCorrection(id) {
+                if (!confirm('Удалить коррекцию?')) return;
+                await fetch('/api/inka-training/correction/' + id, {method: 'DELETE'});
+                loadCorrections();
+            }
+            
+            async function deleteKnowledge(id) {
+                if (!confirm('Удалить знание?')) return;
+                await fetch('/api/inka-training/knowledge/' + id, {method: 'DELETE'});
+                loadKnowledge();
+            }
+            
+            // Init
             loadStats();
+            loadScenarios();
+            loadCorrections();
+            loadKnowledge();
+            loadRecentTrainings();
         </script>
     </body>
     </html>
@@ -1981,6 +2636,7 @@ async def schedule_page():
                 <div class="tabs">
                     <button class="tab active" onclick="showTab('salon')">🏠 Календарь салона</button>
                     <button class="tab" onclick="showTab('masters')">👨‍🎨 Календари мастеров</button>
+                    <button class="tab" onclick="showTab('sync')">🔄 Синхронизация</button>
                     <button class="tab" onclick="showTab('availability')">⏰ Доступность</button>
                     <button class="tab" onclick="showTab('settings')">⚙️ Настройки</button>
                 </div>
@@ -2047,6 +2703,132 @@ async def schedule_page():
                     <h4>Доступные слоты:</h4>
                     <div class="availability-grid" id="availabilityGrid">
                         <p>Выберите мастера и дату</p>
+                    </div>
+                </div>
+                
+                <!-- Sync Tab -->
+                <div id="syncTab" class="tab-content" style="display:none">
+                    <h3>🔄 Синхронизация календаря с расписанием</h3>
+                    <p style="color:#666;margin:10px 0 20px">Синхронизируйте Google Calendar мастера с таблицей расписания в базе данных</p>
+                    
+                    <div style="display:flex;gap:20px;margin-bottom:20px;flex-wrap:wrap">
+                        <div class="form-group" style="flex:1;min-width:250px">
+                            <label>Выберите мастера</label>
+                            <select id="syncMaster" onchange="loadSyncStatus()">
+                                <option value="">Выберите мастера...</option>
+                            </select>
+                        </div>
+                    </div>
+                    
+                    <!-- Sync Status -->
+                    <div id="syncStatusPanel" style="display:none">
+                        <div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(280px, 1fr));gap:20px;margin-bottom:20px">
+                            <!-- Calendar Status -->
+                            <div style="background:#f8f9fa;padding:20px;border-radius:10px">
+                                <h4>📅 Google Calendar</h4>
+                                <div id="calendarStatus">
+                                    <p>Загрузка...</p>
+                                </div>
+                            </div>
+                            
+                            <!-- DB Schedule Status -->
+                            <div style="background:#f8f9fa;padding:20px;border-radius:10px">
+                                <h4>🗄️ Расписание в БД</h4>
+                                <div id="dbScheduleStatus">
+                                    <p>Загрузка...</p>
+                                </div>
+                            </div>
+                            
+                            <!-- Bookings Status -->
+                            <div style="background:#f8f9fa;padding:20px;border-radius:10px">
+                                <h4>📝 Записи клиентов</h4>
+                                <div id="bookingsStatus">
+                                    <p>Загрузка...</p>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- Actions -->
+                        <div style="background:#e8f4fd;padding:20px;border-radius:10px;margin-bottom:20px">
+                            <h4>⚡ Действия</h4>
+                            <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:15px">
+                                <button class="btn btn-primary" onclick="previewSync()">👁️ Предпросмотр синхронизации</button>
+                                <button class="btn" style="background:#28a745;color:white" onclick="syncToDb()">📥 Синхронизировать в БД</button>
+                                <button class="btn" style="background:#17a2b8;color:white" onclick="createDefaultSchedule()">📋 Создать стандартное расписание</button>
+                            </div>
+                        </div>
+                        
+                        <!-- Schedule Table -->
+                        <div style="background:#fff;border:1px solid #ddd;border-radius:10px;overflow:hidden">
+                            <h4 style="padding:15px;background:#f8f9fa;margin:0;border-bottom:1px solid #ddd">📊 Текущее расписание в БД</h4>
+                            <div style="overflow-x:auto">
+                                <table style="width:100%;border-collapse:collapse" id="scheduleTable">
+                                    <thead>
+                                        <tr style="background:#667eea;color:white">
+                                            <th style="padding:12px;text-align:left">День</th>
+                                            <th style="padding:12px;text-align:center">Начало</th>
+                                            <th style="padding:12px;text-align:center">Конец</th>
+                                            <th style="padding:12px;text-align:center">Работает</th>
+                                            <th style="padding:12px;text-align:center">Действия</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="scheduleTableBody">
+                                        <tr><td colspan="5" style="padding:20px;text-align:center">Нет данных</td></tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                        
+                        <!-- Preview Results -->
+                        <div id="syncPreviewResults" style="display:none;margin-top:20px;background:#fff3cd;padding:20px;border-radius:10px">
+                            <h4>👁️ Предпросмотр изменений</h4>
+                            <div id="previewContent"></div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Edit Schedule Modal -->
+                <div id="editScheduleModal" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.5);z-index:1000;justify-content:center;align-items:center">
+                    <div style="background:white;padding:30px;border-radius:15px;width:90%;max-width:500px;box-shadow:0 10px 40px rgba(0,0,0,0.3)">
+                        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px">
+                            <h3>✏️ Редактирование расписания</h3>
+                            <button onclick="closeEditModal()" style="background:none;border:none;font-size:24px;cursor:pointer">&times;</button>
+                        </div>
+                        <form id="editScheduleForm" onsubmit="saveScheduleEntry(event)">
+                            <input type="hidden" id="edit_entry_id">
+                            <div class="form-group" style="margin-bottom:15px">
+                                <label style="display:block;margin-bottom:5px;font-weight:bold">День недели</label>
+                                <select id="edit_day_of_week" style="width:100%;padding:10px;border:2px solid #e0e0e0;border-radius:5px" disabled>
+                                    <option value="monday">Понедельник</option>
+                                    <option value="tuesday">Вторник</option>
+                                    <option value="wednesday">Среда</option>
+                                    <option value="thursday">Четверг</option>
+                                    <option value="friday">Пятница</option>
+                                    <option value="saturday">Суббота</option>
+                                    <option value="sunday">Воскресенье</option>
+                                </select>
+                            </div>
+                            <div style="display:grid;grid-template-columns:1fr 1fr;gap:15px;margin-bottom:15px">
+                                <div class="form-group">
+                                    <label style="display:block;margin-bottom:5px;font-weight:bold">Начало работы</label>
+                                    <input type="time" id="edit_start_time" style="width:100%;padding:10px;border:2px solid #e0e0e0;border-radius:5px" required>
+                                </div>
+                                <div class="form-group">
+                                    <label style="display:block;margin-bottom:5px;font-weight:bold">Конец работы</label>
+                                    <input type="time" id="edit_end_time" style="width:100%;padding:10px;border:2px solid #e0e0e0;border-radius:5px" required>
+                                </div>
+                            </div>
+                            <div class="form-group" style="margin-bottom:15px">
+                                <label style="display:flex;align-items:center;gap:10px;cursor:pointer">
+                                    <input type="checkbox" id="edit_is_working" style="width:20px;height:20px">
+                                    <span style="font-weight:bold">Рабочий день</span>
+                                </label>
+                            </div>
+                            <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:20px">
+                                <button type="button" onclick="closeEditModal()" style="padding:10px 20px;border:2px solid #e0e0e0;border-radius:5px;background:white;cursor:pointer">Отмена</button>
+                                <button type="submit" style="padding:10px 20px;border:none;border-radius:5px;background:linear-gradient(135deg,#667eea 0%,#764ba2 100%);color:white;cursor:pointer">💾 Сохранить</button>
+                            </div>
+                        </form>
                     </div>
                 </div>
                 
@@ -2226,6 +3008,261 @@ async def schedule_page():
                 if (tab === 'salon') loadSalonCalendar();
                 if (tab === 'masters' && currentMasterId) loadMasterCalendar();
                 if (tab === 'settings') updateMastersWithoutCalendar();
+                if (tab === 'sync') populateSyncMasterSelector();
+            }
+            
+            // ===== SYNC FUNCTIONS =====
+            let syncMasterId = null;
+            
+            function populateSyncMasterSelector() {
+                const select = document.getElementById('syncMaster');
+                select.innerHTML = '<option value="">Выберите мастера...</option>' +
+                    masters.filter(m => m.status === 'active')
+                        .map(m => `<option value="${m.id}" ${m.calendar_id ? '' : '(нет календаря)'}>${m.name} ${m.calendar_id ? '✅' : '⚠️'}</option>`)
+                        .join('');
+            }
+            
+            async function loadSyncStatus() {
+                const masterId = document.getElementById('syncMaster').value;
+                if (!masterId) {
+                    document.getElementById('syncStatusPanel').style.display = 'none';
+                    return;
+                }
+                
+                syncMasterId = masterId;
+                document.getElementById('syncStatusPanel').style.display = 'block';
+                
+                try {
+                    const res = await fetch(`/api/calendar/sync/${masterId}`);
+                    const data = await res.json();
+                    
+                    // Update Calendar Status
+                    document.getElementById('calendarStatus').innerHTML = data.calendar_connected
+                        ? `<p style="color:green">✅ Подключен</p>
+                           <p style="font-size:12px;color:#666">ID: ${data.calendar_id?.substring(0, 30)}...</p>
+                           <p>📅 События (7 дней): <strong>${data.calendar_events}</strong></p>`
+                        : `<p style="color:red">❌ Не подключен</p>
+                           <p style="font-size:12px">Настройте Calendar ID в профиле мастера</p>`;
+                    
+                    // Update DB Schedule Status
+                    document.getElementById('dbScheduleStatus').innerHTML = 
+                        `<p>Записей расписания: <strong>${data.db_schedule_entries}</strong></p>
+                         ${data.db_schedule_entries === 0 ? '<p style="color:orange">⚠️ Нет расписания</p>' : '<p style="color:green">✅ Расписание есть</p>'}`;
+                    
+                    // Update Bookings Status
+                    document.getElementById('bookingsStatus').innerHTML = 
+                        `<p>Активных записей: <strong>${data.db_bookings}</strong></p>`;
+                    
+                    // Update Schedule Table
+                    renderScheduleTable(data.schedule || []);
+                    
+                } catch (e) {
+                    console.error('Error loading sync status:', e);
+                    alert('Ошибка загрузки статуса синхронизации');
+                }
+            }
+            
+            // Store current schedule data for editing
+            let currentScheduleData = [];
+            
+            function renderScheduleTable(schedule) {
+                currentScheduleData = schedule; // Store for editing
+                const dayNames = {
+                    'monday': 'Понедельник', 'tuesday': 'Вторник', 'wednesday': 'Среда',
+                    'thursday': 'Четверг', 'friday': 'Пятница', 'saturday': 'Суббота', 'sunday': 'Воскресенье'
+                };
+                const dayOrder = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'];
+                
+                // Sort by day of week
+                schedule.sort((a, b) => dayOrder.indexOf(a.day_of_week) - dayOrder.indexOf(b.day_of_week));
+                
+                const tbody = document.getElementById('scheduleTableBody');
+                if (!schedule.length) {
+                    tbody.innerHTML = '<tr><td colspan="5" style="padding:20px;text-align:center;color:#666">Расписание не настроено. Создайте стандартное расписание.</td></tr>';
+                    return;
+                }
+                
+                tbody.innerHTML = schedule.map(s => {
+                    const isWorking = s.is_working?.toString().toLowerCase() === 'true';
+                    return `<tr style="background:${isWorking ? '#e8f5e9' : '#ffebee'}">
+                        <td style="padding:12px">${dayNames[s.day_of_week] || s.day_of_week}</td>
+                        <td style="padding:12px;text-align:center">${s.start_time || '-'}</td>
+                        <td style="padding:12px;text-align:center">${s.end_time || '-'}</td>
+                        <td style="padding:12px;text-align:center">${isWorking ? '✅ Да' : '❌ Нет'}</td>
+                        <td style="padding:12px;text-align:center">
+                            <button onclick="editScheduleEntry('${s.id}')" style="padding:5px 10px;cursor:pointer;background:#ffc107;border:none;border-radius:3px" title="Редактировать">✏️</button>
+                            <button onclick="toggleWorkDay('${s.id}', ${!isWorking})" style="padding:5px 10px;cursor:pointer;background:${isWorking ? '#dc3545' : '#28a745'};border:none;border-radius:3px;color:white" title="${isWorking ? 'Отключить' : 'Включить'}">${isWorking ? '🚫' : '✅'}</button>
+                        </td>
+                    </tr>`;
+                }).join('');
+            }
+            
+            function editScheduleEntry(entryId) {
+                const entry = currentScheduleData.find(s => s.id === entryId);
+                if (!entry) {
+                    alert('Запись не найдена');
+                    return;
+                }
+                
+                // Fill form
+                document.getElementById('edit_entry_id').value = entry.id;
+                document.getElementById('edit_day_of_week').value = entry.day_of_week || 'monday';
+                document.getElementById('edit_start_time').value = entry.start_time || '10:00';
+                document.getElementById('edit_end_time').value = entry.end_time || '19:00';
+                document.getElementById('edit_is_working').checked = entry.is_working?.toString().toLowerCase() === 'true';
+                
+                // Show modal
+                document.getElementById('editScheduleModal').style.display = 'flex';
+            }
+            
+            function closeEditModal() {
+                document.getElementById('editScheduleModal').style.display = 'none';
+            }
+            
+            async function saveScheduleEntry(event) {
+                event.preventDefault();
+                
+                const entryId = document.getElementById('edit_entry_id').value;
+                const data = {
+                    day_of_week: document.getElementById('edit_day_of_week').value,
+                    start_time: document.getElementById('edit_start_time').value,
+                    end_time: document.getElementById('edit_end_time').value,
+                    is_working: document.getElementById('edit_is_working').checked ? 'true' : 'false'
+                };
+                
+                try {
+                    const res = await fetch(`/api/schedule/${entryId}`, {
+                        method: 'PUT',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(data)
+                    });
+                    
+                    if (res.ok) {
+                        closeEditModal();
+                        loadSyncStatus(); // Refresh the table
+                        alert('✅ Расписание обновлено');
+                    } else {
+                        const error = await res.json();
+                        alert('Ошибка: ' + (error.detail || 'Не удалось сохранить'));
+                    }
+                } catch (e) {
+                    console.error('Error saving schedule:', e);
+                    alert('Ошибка сохранения');
+                }
+            }
+            
+            async function previewSync() {
+                if (!syncMasterId) return alert('Выберите мастера');
+                
+                try {
+                    const res = await fetch(`/api/calendar/sync/${syncMasterId}`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ action: 'preview' })
+                    });
+                    const data = await res.json();
+                    
+                    const preview = document.getElementById('syncPreviewResults');
+                    preview.style.display = 'block';
+                    
+                    const dayNames = {
+                        'monday': 'Понедельник', 'tuesday': 'Вторник', 'wednesday': 'Среда',
+                        'thursday': 'Четверг', 'friday': 'Пятница', 'saturday': 'Суббота', 'sunday': 'Воскресенье'
+                    };
+                    
+                    let html = `<p>${data.message}</p>`;
+                    if (Object.keys(data.detected_working_days || {}).length > 0) {
+                        html += '<table style="width:100%;margin-top:10px;border-collapse:collapse">';
+                        html += '<tr style="background:#667eea;color:white"><th style="padding:8px">День</th><th style="padding:8px">Начало</th><th style="padding:8px">Конец</th></tr>';
+                        for (const [day, hours] of Object.entries(data.detected_working_days)) {
+                            html += `<tr><td style="padding:8px;border:1px solid #ddd">${dayNames[day] || day}</td>
+                                    <td style="padding:8px;border:1px solid #ddd;text-align:center">${hours.start}</td>
+                                    <td style="padding:8px;border:1px solid #ddd;text-align:center">${hours.end}</td></tr>`;
+                        }
+                        html += '</table>';
+                    } else {
+                        html += '<p style="color:orange">⚠️ Не найдено событий о рабочем времени в календаре. Используйте "Создать стандартное расписание".</p>';
+                    }
+                    
+                    document.getElementById('previewContent').innerHTML = html;
+                    
+                } catch (e) {
+                    console.error('Error previewing sync:', e);
+                    alert('Ошибка предпросмотра');
+                }
+            }
+            
+            async function syncToDb() {
+                if (!syncMasterId) return alert('Выберите мастера');
+                if (!confirm('Синхронизировать расписание из календаря в БД?')) return;
+                
+                try {
+                    const res = await fetch(`/api/calendar/sync/${syncMasterId}`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ action: 'sync_to_db' })
+                    });
+                    const data = await res.json();
+                    
+                    alert(data.message);
+                    loadSyncStatus();
+                    
+                } catch (e) {
+                    console.error('Error syncing:', e);
+                    alert('Ошибка синхронизации');
+                }
+            }
+            
+            async function createDefaultSchedule() {
+                if (!syncMasterId) return alert('Выберите мастера');
+                
+                const startTime = prompt('Время начала работы (формат HH:MM):', '10:00');
+                if (!startTime) return;
+                
+                const endTime = prompt('Время окончания работы (формат HH:MM):', '19:00');
+                if (!endTime) return;
+                
+                const workDays = confirm('Включить воскресенье как рабочий день?') 
+                    ? ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday']
+                    : ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
+                
+                try {
+                    const res = await fetch(`/api/calendar/sync/${syncMasterId}`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ 
+                            action: 'create_default_schedule',
+                            default_hours: { start: startTime, end: endTime },
+                            working_days: workDays
+                        })
+                    });
+                    const data = await res.json();
+                    
+                    alert(data.message);
+                    loadSyncStatus();
+                    
+                } catch (e) {
+                    console.error('Error creating schedule:', e);
+                    alert('Ошибка создания расписания');
+                }
+            }
+            
+            async function toggleWorkDay(entryId, newValue) {
+                try {
+                    const res = await fetch(`/api/schedule/${entryId}`, {
+                        method: 'PUT',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ is_working: newValue ? 'TRUE' : 'FALSE' })
+                    });
+                    
+                    if (res.ok) {
+                        loadSyncStatus();
+                    } else {
+                        alert('Ошибка обновления');
+                    }
+                } catch (e) {
+                    console.error('Error toggling work day:', e);
+                }
             }
             
             function formatDate(date) {
@@ -2515,7 +3552,7 @@ async def schedule_page():
                     ${price ? `<p><strong>Стоимость:</strong> ${price} ₽</p>` : ''}
                     ${id.startsWith('booking_') ? `
                         <div style="margin-top:20px;display:flex;gap:10px">
-                            <button class="btn btn-primary" onclick="window.location.href='/bookings'">Открыть записи</button>
+                            <button class="btn btn-primary" onclick="window.location.href='/admin/bookings'">Открыть записи</button>
                         </div>
                     ` : ''}
                 `;
@@ -2530,6 +3567,446 @@ async def schedule_page():
             document.getElementById('availDate').value = formatDate(new Date());
             loadMasters();
             loadSalonCalendar();
+        </script>
+    </body>
+    </html>
+    """
+
+
+@admin_router.get("/admins", response_class=HTMLResponse)
+async def admins_page():
+    """Admins management page"""
+    return """
+    <!DOCTYPE html>
+    <html lang="ru">
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Управление Админами - Admin Panel</title>
+        <style>
+            * { margin: 0; padding: 0; box-sizing: border-box; }
+            body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+                   background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                   min-height: 100vh; padding: 20px; }
+            .container { max-width: 1200px; margin: 0 auto; background: white;
+                        border-radius: 10px; box-shadow: 0 10px 40px rgba(0,0,0,0.3); overflow: hidden; }
+            .header { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                     color: white; padding: 20px; display: flex; justify-content: space-between; align-items: center; }
+            .header h1 { font-size: 1.8em; }
+            .btn-back { background: rgba(255,255,255,0.2); color: white; border: none;
+                       padding: 10px 20px; border-radius: 5px; cursor: pointer; transition: all 0.3s; }
+            .btn-back:hover { background: rgba(255,255,255,0.3); }
+            .content { padding: 30px; }
+            .btn { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                  color: white; border: none; padding: 10px 20px; border-radius: 5px;
+                  cursor: pointer; margin-bottom: 20px; transition: all 0.3s; }
+            .btn:hover { transform: scale(1.05); box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4); }
+            .btn-edit { background: #3498db; color: white; border: none; padding: 8px 12px;
+                       border-radius: 4px; cursor: pointer; margin-right: 5px; }
+            .btn-password { background: #f39c12; color: white; border: none; padding: 8px 12px;
+                           border-radius: 4px; cursor: pointer; margin-right: 5px; }
+            .btn-toggle { background: #27ae60; color: white; border: none; padding: 8px 12px;
+                         border-radius: 4px; cursor: pointer; margin-right: 5px; }
+            .btn-toggle.inactive { background: #95a5a6; }
+            .btn-delete { background: #e74c3c; color: white; border: none; padding: 8px 12px;
+                         border-radius: 4px; cursor: pointer; }
+            .table-container { overflow-x: auto; }
+            table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+            th, td { padding: 12px; text-align: left; border-bottom: 1px solid #ddd; }
+            th { background: #f5f5f5; font-weight: bold; }
+            tr:hover { background: #f9f9f9; }
+            
+            /* Modal styles */
+            .modal { display: none; position: fixed; z-index: 1000; left: 0; top: 0;
+                    width: 100%; height: 100%; background-color: rgba(0,0,0,0.5); }
+            .modal-content { background-color: white; margin: 5% auto; padding: 30px;
+                            border-radius: 10px; width: 90%; max-width: 500px;
+                            box-shadow: 0 10px 40px rgba(0,0,0,0.3); }
+            .modal-header { display: flex; justify-content: space-between; align-items: center;
+                           margin-bottom: 20px; padding-bottom: 15px; border-bottom: 1px solid #eee; }
+            .modal-header h2 { color: #333; }
+            .close { color: #aaa; font-size: 28px; font-weight: bold; cursor: pointer; }
+            .close:hover { color: #333; }
+            .form-group { margin-bottom: 15px; }
+            .form-group label { display: block; margin-bottom: 5px; color: #333; font-weight: 500; }
+            .form-group input, .form-group select, .form-group textarea {
+                width: 100%; padding: 10px; border: 2px solid #e0e0e0; border-radius: 5px;
+                font-size: 14px; transition: border-color 0.3s; }
+            .form-group input:focus, .form-group select:focus, .form-group textarea:focus {
+                outline: none; border-color: #667eea; }
+            .form-actions { display: flex; gap: 10px; justify-content: flex-end; margin-top: 20px; }
+            .btn-cancel { background: #95a5a6; }
+            .btn-save { background: #27ae60; }
+            .status-active { color: #27ae60; font-weight: bold; }
+            .status-inactive { color: #e74c3c; font-weight: bold; }
+            .role-superadmin { color: #9b59b6; font-weight: bold; }
+            .role-admin { color: #3498db; font-weight: bold; }
+            .search-box { display: flex; gap: 10px; margin-bottom: 20px; }
+            .search-box input { flex: 1; padding: 10px; border: 2px solid #e0e0e0; border-radius: 5px; }
+            .alert { padding: 15px; border-radius: 5px; margin-bottom: 20px; display: none; }
+            .alert-success { background: #d4edda; color: #155724; border: 1px solid #c3e6cb; }
+            .alert-error { background: #f8d7da; color: #721c24; border: 1px solid #f5c6cb; }
+            .password-hint { font-size: 12px; color: #666; margin-top: 5px; }
+            .info-box { background: #e3f2fd; border: 1px solid #bbdefb; padding: 15px; border-radius: 8px; margin-bottom: 20px; }
+            .info-box h3 { color: #1976d2; margin-bottom: 10px; }
+            .info-box p { color: #333; font-size: 14px; line-height: 1.6; }
+        </style>
+    </head>
+    <body>
+        <div class="container">
+            <div class="header">
+                <h1>👤 Управление Админами</h1>
+                <button class="btn-back" onclick="window.location.href='/'">← Назад</button>
+            </div>
+            
+            <div class="content">
+                <div id="alert" class="alert"></div>
+                
+                <div class="info-box">
+                    <h3>ℹ️ Информация</h3>
+                    <p>
+                        <strong>Роли:</strong><br>
+                        • <span class="role-superadmin">Superadmin</span> - полные права, нельзя удалить последнего<br>
+                        • <span class="role-admin">Admin</span> - доступ к админ-панели<br><br>
+                        <strong>Telegram ID</strong> - нужен для доступа к боту как админ
+                    </p>
+                </div>
+                
+                <div class="search-box">
+                    <input type="text" id="searchInput" placeholder="Поиск по имени или роли..." oninput="filterAdmins()">
+                    <button class="btn" onclick="openAddModal()">➕ Добавить админа</button>
+                </div>
+                
+                <div class="table-container">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>ID</th>
+                                <th>Логин</th>
+                                <th>Роль</th>
+                                <th>Telegram ID</th>
+                                <th>Создан</th>
+                                <th>Последний вход</th>
+                                <th>Статус</th>
+                                <th>Действия</th>
+                            </tr>
+                        </thead>
+                        <tbody id="adminsList">
+                            <tr><td colspan="8" style="text-align:center">Загрузка...</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Add/Edit Admin Modal -->
+        <div id="adminModal" class="modal">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h2 id="modalTitle">Добавить админа</h2>
+                    <span class="close" onclick="closeModal()">&times;</span>
+                </div>
+                <form id="adminForm" onsubmit="saveAdmin(event)">
+                    <input type="hidden" id="adminId" name="adminId">
+                    
+                    <div class="form-group">
+                        <label for="username">Логин *</label>
+                        <input type="text" id="username" name="username" required minlength="3">
+                    </div>
+                    
+                    <div class="form-group" id="passwordGroup">
+                        <label for="password">Пароль *</label>
+                        <input type="password" id="password" name="password" minlength="6">
+                        <p class="password-hint">Минимум 6 символов</p>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="role">Роль</label>
+                        <select id="role" name="role">
+                            <option value="admin">Admin</option>
+                            <option value="superadmin">Superadmin</option>
+                        </select>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="telegram_id">Telegram ID</label>
+                        <input type="text" id="telegram_id" name="telegram_id" placeholder="123456789">
+                        <p class="password-hint">Числовой ID пользователя Telegram (для бота)</p>
+                    </div>
+                    
+                    <div class="form-actions">
+                        <button type="button" class="btn btn-cancel" onclick="closeModal()">Отмена</button>
+                        <button type="submit" class="btn btn-save">Сохранить</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+        
+        <!-- Change Password Modal -->
+        <div id="passwordModal" class="modal">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h2>🔐 Изменить пароль</h2>
+                    <span class="close" onclick="closePasswordModal()">&times;</span>
+                </div>
+                <form id="passwordForm" onsubmit="changePassword(event)">
+                    <input type="hidden" id="pwdAdminId">
+                    <p id="pwdAdminName" style="margin-bottom: 20px; font-weight: bold; color: #333;"></p>
+                    
+                    <div class="form-group">
+                        <label for="newPassword">Новый пароль *</label>
+                        <input type="password" id="newPassword" name="newPassword" required minlength="6">
+                        <p class="password-hint">Минимум 6 символов</p>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="confirmPassword">Подтвердите пароль *</label>
+                        <input type="password" id="confirmPassword" name="confirmPassword" required minlength="6">
+                    </div>
+                    
+                    <div class="form-actions">
+                        <button type="button" class="btn btn-cancel" onclick="closePasswordModal()">Отмена</button>
+                        <button type="submit" class="btn btn-save">Изменить пароль</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+        
+        <script>
+            let allAdmins = [];
+            
+            async function loadAdmins() {
+                try {
+                    const response = await fetch('/api/admins');
+                    allAdmins = await response.json();
+                    renderAdmins(allAdmins);
+                } catch (error) {
+                    console.error('Error loading admins:', error);
+                    showAlert('Ошибка загрузки данных', 'error');
+                }
+            }
+            
+            function renderAdmins(admins) {
+                const tbody = document.getElementById('adminsList');
+                if (!admins || admins.length === 0) {
+                    tbody.innerHTML = '<tr><td colspan="8" style="text-align:center">Нет админов</td></tr>';
+                    return;
+                }
+                tbody.innerHTML = admins.map(a => {
+                    const statusClass = a.is_active ? 'status-active' : 'status-inactive';
+                    const statusText = a.is_active ? 'Активен' : 'Неактивен';
+                    const roleClass = a.role === 'superadmin' ? 'role-superadmin' : 'role-admin';
+                    const roleText = a.role === 'superadmin' ? 'Superadmin' : 'Admin';
+                    const createdAt = a.created_at ? new Date(a.created_at).toLocaleDateString('ru-RU') : '-';
+                    const lastLogin = a.last_login ? new Date(a.last_login).toLocaleString('ru-RU') : 'Никогда';
+                    const toggleText = a.is_active ? '⏸️' : '▶️';
+                    const toggleClass = a.is_active ? '' : 'inactive';
+                    
+                    return `<tr>
+                        <td>${a.id ? a.id.substring(0, 12) + '...' : '-'}</td>
+                        <td><strong>${a.username || '-'}</strong></td>
+                        <td class="${roleClass}">${roleText}</td>
+                        <td>${a.telegram_id || '-'}</td>
+                        <td>${createdAt}</td>
+                        <td>${lastLogin}</td>
+                        <td class="${statusClass}">${statusText}</td>
+                        <td>
+                            <button class="btn-edit" onclick="editAdmin('${a.id}')" title="Редактировать">✏️</button>
+                            <button class="btn-password" onclick="openPasswordModal('${a.id}', '${a.username}')" title="Изменить пароль">🔐</button>
+                            <button class="btn-toggle ${toggleClass}" onclick="toggleStatus('${a.id}')" title="${a.is_active ? 'Деактивировать' : 'Активировать'}">${toggleText}</button>
+                            <button class="btn-delete" onclick="deleteAdmin('${a.id}', '${a.username}')" title="Удалить">🗑️</button>
+                        </td>
+                    </tr>`;
+                }).join('');
+            }
+            
+            function filterAdmins() {
+                const search = document.getElementById('searchInput').value.toLowerCase();
+                const filtered = allAdmins.filter(a => 
+                    (a.username && a.username.toLowerCase().includes(search)) ||
+                    (a.role && a.role.toLowerCase().includes(search)) ||
+                    (a.telegram_id && a.telegram_id.toString().includes(search))
+                );
+                renderAdmins(filtered);
+            }
+            
+            function openAddModal() {
+                document.getElementById('modalTitle').textContent = 'Добавить админа';
+                document.getElementById('adminForm').reset();
+                document.getElementById('adminId').value = '';
+                document.getElementById('password').required = true;
+                document.getElementById('passwordGroup').style.display = 'block';
+                document.getElementById('adminModal').style.display = 'block';
+            }
+            
+            function editAdmin(id) {
+                const admin = allAdmins.find(a => a.id === id);
+                if (!admin) return;
+                
+                document.getElementById('modalTitle').textContent = 'Редактировать админа';
+                document.getElementById('adminId').value = admin.id;
+                document.getElementById('username').value = admin.username || '';
+                document.getElementById('role').value = admin.role || 'admin';
+                document.getElementById('telegram_id').value = admin.telegram_id || '';
+                document.getElementById('password').required = false;
+                document.getElementById('password').value = '';
+                document.getElementById('passwordGroup').style.display = 'none';
+                document.getElementById('adminModal').style.display = 'block';
+            }
+            
+            function closeModal() {
+                document.getElementById('adminModal').style.display = 'none';
+            }
+            
+            function openPasswordModal(id, username) {
+                document.getElementById('pwdAdminId').value = id;
+                document.getElementById('pwdAdminName').textContent = `Админ: ${username}`;
+                document.getElementById('passwordForm').reset();
+                document.getElementById('passwordModal').style.display = 'block';
+            }
+            
+            function closePasswordModal() {
+                document.getElementById('passwordModal').style.display = 'none';
+            }
+            
+            async function saveAdmin(event) {
+                event.preventDefault();
+                
+                const id = document.getElementById('adminId').value;
+                
+                const data = {
+                    username: document.getElementById('username').value,
+                    role: document.getElementById('role').value,
+                    telegram_id: document.getElementById('telegram_id').value || null
+                };
+                
+                // Only include password for new admins
+                if (!id) {
+                    data.password = document.getElementById('password').value;
+                }
+                
+                try {
+                    const url = id ? `/api/admins/${id}` : '/api/admins';
+                    const method = id ? 'PUT' : 'POST';
+                    
+                    const response = await fetch(url, {
+                        method: method,
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(data)
+                    });
+                    
+                    const result = await response.json();
+                    
+                    if (response.ok && result.success) {
+                        showAlert(result.message || 'Сохранено успешно!', 'success');
+                        closeModal();
+                        loadAdmins();
+                    } else {
+                        showAlert(result.detail || result.message || 'Ошибка сохранения', 'error');
+                    }
+                } catch (error) {
+                    console.error('Save error:', error);
+                    showAlert('Ошибка сохранения', 'error');
+                }
+            }
+            
+            async function changePassword(event) {
+                event.preventDefault();
+                
+                const adminId = document.getElementById('pwdAdminId').value;
+                const newPassword = document.getElementById('newPassword').value;
+                const confirmPassword = document.getElementById('confirmPassword').value;
+                
+                if (newPassword !== confirmPassword) {
+                    showAlert('Пароли не совпадают', 'error');
+                    return;
+                }
+                
+                try {
+                    const response = await fetch(`/api/admins/${adminId}/change-password`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ new_password: newPassword })
+                    });
+                    
+                    const result = await response.json();
+                    
+                    if (response.ok && result.success) {
+                        showAlert(result.message || 'Пароль изменен!', 'success');
+                        closePasswordModal();
+                    } else {
+                        showAlert(result.detail || result.message || 'Ошибка изменения пароля', 'error');
+                    }
+                } catch (error) {
+                    console.error('Password change error:', error);
+                    showAlert('Ошибка изменения пароля', 'error');
+                }
+            }
+            
+            async function toggleStatus(id) {
+                const admin = allAdmins.find(a => a.id === id);
+                if (!admin) return;
+                
+                const action = admin.is_active ? 'деактивировать' : 'активировать';
+                if (!confirm(`${action.charAt(0).toUpperCase() + action.slice(1)} админа "${admin.username}"?`)) return;
+                
+                try {
+                    const response = await fetch(`/api/admins/${id}/toggle-status`, { method: 'PUT' });
+                    const result = await response.json();
+                    
+                    if (response.ok && result.success) {
+                        showAlert(result.message || 'Статус изменен!', 'success');
+                        loadAdmins();
+                    } else {
+                        showAlert(result.detail || 'Ошибка изменения статуса', 'error');
+                    }
+                } catch (error) {
+                    console.error('Toggle error:', error);
+                    showAlert('Ошибка изменения статуса', 'error');
+                }
+            }
+            
+            async function deleteAdmin(id, name) {
+                if (!confirm(`Удалить админа "${name}"? Это действие нельзя отменить!`)) return;
+                
+                try {
+                    const response = await fetch(`/api/admins/${id}`, { method: 'DELETE' });
+                    const result = await response.json();
+                    
+                    if (response.ok && result.success) {
+                        showAlert(result.message || 'Админ удален!', 'success');
+                        loadAdmins();
+                    } else {
+                        showAlert(result.detail || 'Ошибка удаления', 'error');
+                    }
+                } catch (error) {
+                    console.error('Delete error:', error);
+                    showAlert('Ошибка удаления', 'error');
+                }
+            }
+            
+            function showAlert(message, type) {
+                const alert = document.getElementById('alert');
+                alert.textContent = message;
+                alert.className = `alert alert-${type}`;
+                alert.style.display = 'block';
+                setTimeout(() => { alert.style.display = 'none'; }, 5000);
+            }
+            
+            // Close modal on outside click
+            window.onclick = function(event) {
+                const adminModal = document.getElementById('adminModal');
+                const passwordModal = document.getElementById('passwordModal');
+                if (event.target === adminModal) {
+                    closeModal();
+                }
+                if (event.target === passwordModal) {
+                    closePasswordModal();
+                }
+            }
+            
+            // Load data on page load
+            loadAdmins();
         </script>
     </body>
     </html>

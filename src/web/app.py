@@ -21,10 +21,11 @@ logger = logging.getLogger(__name__)
 # Initialize managers
 db_manager: Optional[DatabaseManager] = None
 learning_system: Optional[InkaLearningSystem] = None
+sheets_client = None  # Global sheets client for API access
 
 def create_app() -> FastAPI:
     """Create and configure FastAPI application"""
-    global db_manager, learning_system
+    global db_manager, learning_system, sheets_client
     
     config = get_config()
     
@@ -57,6 +58,7 @@ def create_app() -> FastAPI:
         logger.warning(f"⚠️ Could not initialize database manager: {e}")
         db_manager = None
         learning_system = None
+        sheets_client = None
     
     # CORS middleware
     app.add_middleware(
@@ -93,20 +95,40 @@ def create_app() -> FastAPI:
     async def login(request: Request):
         """Вход в систему"""
         try:
+            from src.web.auth import authenticate_admin, check_admin_password
+            
             body = await request.json()
+            username = body.get("username", "").strip()
             password = body.get("password", "")
             
-            if check_admin_password(password, get_config().admin_password):
-                return {
-                    "success": True,
-                    "token": "admin_token_123",  # В production использовать JWT
-                    "message": "Успешный вход"
-                }
+            # If username provided, use full authentication
+            if username:
+                success, admin_info = authenticate_admin(username, password)
+                if success:
+                    return {
+                        "success": True,
+                        "token": f"admin_token_{admin_info['id']}",
+                        "user": admin_info,
+                        "message": "Успешный вход"
+                    }
+                else:
+                    return {
+                        "success": False,
+                        "message": "Неверный логин или пароль"
+                    }
             else:
-                return {
-                    "success": False,
-                    "message": "Неверный пароль"
-                }
+                # Fallback: password-only login (backward compatibility)
+                if check_admin_password(password):
+                    return {
+                        "success": True,
+                        "token": "admin_token_123",
+                        "message": "Успешный вход"
+                    }
+                else:
+                    return {
+                        "success": False,
+                        "message": "Неверный пароль"
+                    }
         except Exception as e:
             logger.error(f"Login error: {e}")
             return {"success": False, "message": "Ошибка входа"}
@@ -400,6 +422,12 @@ def get_dashboard_html() -> str:
                         <p>Календарь салона и мастеров</p>
                     </div>
                     
+                    <div class="card" onclick="goTo('/admin/admins')">
+                        <div class="card-icon">👤</div>
+                        <h3>Админы</h3>
+                        <p>Управление администраторами и паролями</p>
+                    </div>
+                    
                     <div class="card" onclick="goTo('/console')">
                         <div class="card-icon">🔍</div>
                         <h3>Веб-Консоль</h3>
@@ -661,8 +689,13 @@ def get_login_html() -> str:
             
             <form id="loginForm" onsubmit="handleLogin(event)">
                 <div class="form-group">
-                    <label for="password">Пароль администратора:</label>
-                    <input type="password" id="password" name="password" required autofocus>
+                    <label for="username">Логин:</label>
+                    <input type="text" id="username" name="username" placeholder="admin" autofocus>
+                </div>
+                
+                <div class="form-group">
+                    <label for="password">Пароль:</label>
+                    <input type="password" id="password" name="password" required>
                 </div>
                 
                 <button type="submit" class="btn" id="submitBtn">Войти</button>
@@ -677,6 +710,7 @@ def get_login_html() -> str:
             async function handleLogin(event) {
                 event.preventDefault();
                 
+                const username = document.getElementById('username').value.trim();
                 const password = document.getElementById('password').value;
                 const errorDiv = document.getElementById('error');
                 const submitBtn = document.getElementById('submitBtn');
@@ -692,7 +726,7 @@ def get_login_html() -> str:
                         headers: {
                             'Content-Type': 'application/json',
                         },
-                        body: JSON.stringify({ password })
+                        body: JSON.stringify({ username, password })
                     });
                     
                     const data = await response.json();

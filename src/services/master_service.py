@@ -19,18 +19,21 @@ class MasterService:
     def __init__(self, sheets_client: GoogleSheetsClient):
         self.sheets = sheets_client
     
-    def create_master(self, name: str, specialization: str, phone: str, calendar_id: str = "") -> bool:
-        """Create a new master"""
+    def create_master(self, id: str, name: str, specialization: str, experience: str = "", rating: str = "", phone: str = "", instagram: str = "", price: str = "", status: str = "active", description: str = "") -> bool:
+        """Create a new master (all fields in correct order)"""
         try:
             values = [
+                id,
                 name,
                 specialization,
+                experience,
+                rating,
                 phone,
-                calendar_id,
-                datetime.now().strftime("%d.%m.%Y %H:%M"),
-                "active"
+                instagram,
+                price,
+                status,
+                description
             ]
-            
             success = self.sheets.append_row(SHEET_MASTERS, values)
             if success:
                 logger.info(f"Master created: {name}")

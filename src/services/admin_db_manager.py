@@ -39,6 +39,87 @@ class DatabaseManager:
         """
         self.sheets = sheets_client
         self.validation_rules = self._init_validation_rules()
+        
+        # Кэш для ID
+        self._masters_cache = None
+        self._services_cache = None
+        self._cache_time = 0
+        self._cache_ttl = 60  # секунд
+    
+    # ============ HELPER ФУНКЦИИ ДЛЯ ID ============
+    
+    def get_master_ids(self, force_refresh: bool = False) -> Dict[str, str]:
+        """
+        Получить словарь ID мастеров {id: name}
+        Используй для валидации и динамических списков
+        """
+        import time
+        now = time.time()
+        
+        if not force_refresh and self._masters_cache and (now - self._cache_time) < self._cache_ttl:
+            return self._masters_cache
+        
+        try:
+            masters = self.get_all_masters()
+            self._masters_cache = {m["id"]: m["name"] for m in masters if m.get("id")}
+            self._cache_time = now
+            return self._masters_cache
+        except Exception as e:
+            logger.error(f"Error getting master IDs: {e}")
+            return {}
+    
+    def get_service_ids(self, force_refresh: bool = False) -> Dict[str, str]:
+        """
+        Получить словарь ID услуг {id: name}
+        """
+        import time
+        now = time.time()
+        
+        if not force_refresh and self._services_cache and (now - self._cache_time) < self._cache_ttl:
+            return self._services_cache
+        
+        try:
+            services = self.get_all_services()
+            self._services_cache = {s["id"]: s["name"] for s in services if s.get("id")}
+            self._cache_time = now
+            return self._services_cache
+        except Exception as e:
+            logger.error(f"Error getting service IDs: {e}")
+            return {}
+    
+    def validate_master_id(self, master_id: str) -> Tuple[bool, str]:
+        """Проверить существует ли мастер с таким ID"""
+        masters = self.get_master_ids()
+        if master_id in masters:
+            return True, masters[master_id]
+        return False, f"Мастер с ID '{master_id}' не найден"
+    
+    def validate_service_id(self, service_id: str) -> Tuple[bool, str]:
+        """Проверить существует ли услуга с таким ID"""
+        services = self.get_service_ids()
+        if service_id in services:
+            return True, services[service_id]
+        return False, f"Услуга с ID '{service_id}' не найдена"
+    
+    def find_master_by_name(self, name: str) -> Optional[str]:
+        """Найти ID мастера по имени (частичное совпадение)"""
+        masters = self.get_master_ids()
+        name_lower = name.lower()
+        for mid, mname in masters.items():
+            if name_lower in mname.lower():
+                return mid
+        return None
+    
+    def find_service_by_name(self, name: str) -> Optional[str]:
+        """Найти ID услуги по названию (частичное совпадение)"""
+        services = self.get_service_ids()
+        name_lower = name.lower()
+        for sid, sname in services.items():
+            if name_lower in sname.lower():
+                return sid
+        return None
+    
+    # ============ ВАЛИДАЦИЯ ============
     
     def _init_validation_rules(self) -> Dict[str, callable]:
         """Инициализировать правила валидации"""
@@ -234,6 +315,20 @@ class DatabaseManager:
             while len(row) < 11:
                 row.append("")
             
+            # Проверяем, нужно ли изменить ID
+            new_id = updates.pop("new_id", None)
+            if new_id and new_id != master_id:
+                # Проверяем формат нового ID
+                if not new_id.startswith("m_"):
+                    return False, "❌ ID должен начинаться с 'm_'"
+                # Проверяем что новый ID не занят
+                for check_row in data:
+                    if len(check_row) > 0 and check_row[0] == new_id:
+                        return False, f"❌ ID '{new_id}' уже используется"
+                # Обновляем ID
+                row[0] = new_id
+                logger.info(f"Changing master ID from {master_id} to {new_id}")
+            
             field_map = {
                 "name": 1, "phone": 2, "telegram_id": 3, "specialization": 4,
                 "rating": 5, "experience": 6, "instagram": 7, "status": 8,
@@ -428,7 +523,7 @@ class DatabaseManager:
             
             return {
                 "total": len(clients),
-                "clients": clients[:10]
+                "clients": clients  # Возвращаем всех клиентов
             }
         except Exception as e:
             logger.error(f"Error getting clients: {e}")
@@ -761,6 +856,67 @@ class DatabaseManager:
         
         except Exception as e:
             logger.error(f"Error adding schedule entry: {e}")
+            return False, f"❌ Ошибка: {str(e)}"
+    
+    def update_schedule_entry(self, entry_id: str, updates: Dict[str, str]) -> Tuple[bool, str]:
+        """Обновить запись расписания"""
+        try:
+            data = self.sheets.get_sheet_values("Расписание", "A:I")
+            
+            row_idx = None
+            for i, row in enumerate(data):
+                if len(row) > 0 and row[0] == entry_id:
+                    row_idx = i
+                    break
+            
+            if row_idx is None:
+                return False, "Запись расписания не найдена"
+            
+            row = list(data[row_idx])
+            while len(row) < 9:
+                row.append("")
+            
+            field_map = {
+                "master_id": 1, "day_of_week": 2, "start_time": 3, "end_time": 4,
+                "is_working": 5, "break_start": 6, "break_end": 7, "notes": 8
+            }
+            
+            for field, value in updates.items():
+                if field in field_map:
+                    row[field_map[field]] = value
+            
+            self.sheets.update_range("Расписание", f"A{row_idx+1}:I{row_idx+1}", [row])
+            return True, f"✅ Запись расписания обновлена!"
+        
+        except Exception as e:
+            logger.error(f"Error updating schedule entry: {e}")
+            return False, f"❌ Ошибка: {str(e)}"
+    
+    def delete_schedule_entry(self, entry_id: str) -> Tuple[bool, str]:
+        """Удалить запись расписания"""
+        try:
+            data = self.sheets.get_sheet_values("Расписание", "A:I")
+            
+            row_idx = None
+            for i, row in enumerate(data):
+                if len(row) > 0 and row[0] == entry_id:
+                    row_idx = i
+                    break
+            
+            if row_idx is None:
+                return False, "Запись расписания не найдена"
+            
+            # Помечаем как не рабочий вместо удаления
+            row = list(data[row_idx])
+            while len(row) < 6:
+                row.append("")
+            row[5] = "FALSE"
+            
+            self.sheets.update_range("Расписание", f"A{row_idx+1}:I{row_idx+1}", [row])
+            return True, f"✅ Запись расписания удалена!"
+        
+        except Exception as e:
+            logger.error(f"Error deleting schedule entry: {e}")
             return False, f"❌ Ошибка: {str(e)}"
     
     # ============ СТАТИСТИКА ============

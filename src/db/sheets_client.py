@@ -288,3 +288,53 @@ class GoogleSheetsClient:
         except Exception as e:
             logger.error(f"❌ Failed to delete row {row_index} from {sheet_name}: {e}")
             return False
+
+    def update_client(self, client_id: str, update_data: Dict[str, Any]) -> bool:
+        """
+        Update client data by client_id
+        
+        Args:
+            client_id: Client UUID
+            update_data: Dict with fields to update (name, phone, email, notes)
+        
+        Returns:
+            True if successful
+        """
+        try:
+            # Получаем все данные клиентов
+            values = self.get_sheet_values("Clients")
+            if not values:
+                logger.error("❌ No data in Clients sheet")
+                return False
+            
+            # Ищем строку с нужным client_id (колонка A = индекс 0)
+            row_index = None
+            for idx, row in enumerate(values):
+                if len(row) > 0 and row[0] == client_id:
+                    row_index = idx + 1  # 1-based для Google Sheets
+                    break
+            
+            if row_index is None:
+                logger.error(f"❌ Client {client_id} not found")
+                return False
+            
+            # Колонки: id(A), telegram_id(B), name(C), phone(D), email(E), notes(F), created_at(G), last_visit(H)
+            column_map = {
+                "name": "C",
+                "phone": "D", 
+                "email": "E",
+                "notes": "F"
+            }
+            
+            # Обновляем каждое поле
+            for field, value in update_data.items():
+                if field in column_map:
+                    cell = f"{column_map[field]}{row_index}"
+                    self.update_cell("Clients", cell, value)
+                    logger.info(f"✅ Updated client {client_id}: {field} = {value[:50] if len(str(value)) > 50 else value}")
+            
+            return True
+            
+        except Exception as e:
+            logger.error(f"❌ Failed to update client {client_id}: {e}")
+            return False

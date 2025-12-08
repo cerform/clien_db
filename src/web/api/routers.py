@@ -478,7 +478,7 @@ async def get_bookings(
     date_from: Optional[str] = None,
     date_to: Optional[str] = None
 ) -> List[Dict[str, Any]]:
-    """Get all bookings with optional filters"""
+    """Get all bookings with client and master names"""
     try:
         from src.web.app import db_manager
         
@@ -486,6 +486,10 @@ async def get_bookings(
             raise HTTPException(status_code=500, detail="Database manager not initialized")
         
         bookings = db_manager.get_all_bookings()
+        clients = db_manager.get_all_clients()
+        masters = db_manager.get_all_masters()
+        client_map = {c.get("id"): c.get("name", "Client") for c in clients}
+        master_map = {m.get("id"): m.get("name", "Мастер") for m in masters}
         
         # Apply filters
         if status:
@@ -501,6 +505,11 @@ async def get_bookings(
         
         # Sort by date descending
         bookings.sort(key=lambda x: (x.get("date", ""), x.get("time", "")), reverse=True)
+        
+        # Добавляем имена
+        for b in bookings:
+            b["client_name"] = client_map.get(b.get("client_id"), "Client")
+            b["master_name"] = master_map.get(b.get("master_id"), "Мастер")
         
         return bookings
     except Exception as e:
@@ -792,6 +801,52 @@ async def create_schedule_entry(request: Request) -> Dict[str, Any]:
         raise HTTPException(status_code=500, detail="Error creating schedule entry")
 
 
+@api_router.put("/schedule/{entry_id}")
+async def update_schedule_entry(entry_id: str, request: Request) -> Dict[str, Any]:
+    """Update schedule entry"""
+    try:
+        from src.web.app import db_manager
+        
+        body = await request.json()
+        
+        if not db_manager:
+            raise HTTPException(status_code=500, detail="Database manager not initialized")
+        
+        success, message = db_manager.update_schedule_entry(entry_id, body)
+        
+        if success:
+            return {"success": True, "message": message}
+        else:
+            raise HTTPException(status_code=400, detail=message)
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error updating schedule entry: {e}")
+        raise HTTPException(status_code=500, detail="Error updating schedule entry")
+
+
+@api_router.delete("/schedule/{entry_id}")
+async def delete_schedule_entry(entry_id: str) -> Dict[str, Any]:
+    """Delete schedule entry"""
+    try:
+        from src.web.app import db_manager
+        
+        if not db_manager:
+            raise HTTPException(status_code=500, detail="Database manager not initialized")
+        
+        success, message = db_manager.delete_schedule_entry(entry_id)
+        
+        if success:
+            return {"success": True, "message": message}
+        else:
+            raise HTTPException(status_code=400, detail=message)
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error deleting schedule entry: {e}")
+        raise HTTPException(status_code=500, detail="Error deleting schedule entry")
+
+
 # ================== GOOGLE CALENDAR ==================
 
 @api_router.get("/calendar/salon")
@@ -1000,6 +1055,234 @@ async def create_calendar_event(request: Request) -> Dict[str, Any]:
         raise HTTPException(status_code=500, detail=str(e))
 
 
+# ================== CALENDAR SYNC ==================
+
+@api_router.get("/calendar/sync/{master_id}")
+async def get_sync_status(master_id: str) -> Dict[str, Any]:
+    """Get synchronization status for master's calendar and schedule"""
+    try:
+        from src.web.app import db_manager
+        from src.config import config
+        from datetime import datetime, timedelta
+        
+        if not db_manager:
+            raise HTTPException(status_code=500, detail="Database not initialized")
+        
+        # Get master
+        masters = db_manager.get_all_masters()
+        master = next((m for m in masters if m.get("id") == master_id), None)
+        
+        if not master:
+            raise HTTPException(status_code=404, detail="Master not found")
+        
+        calendar_id = master.get("calendar_id")
+        
+        # Get schedule from DB
+        schedule_data = db_manager.get_schedule(master_id)
+        db_schedule = schedule_data.get("schedule", [])
+        
+        # Get events from Google Calendar (next 7 days)
+        calendar_events = []
+        if calendar_id:
+            try:
+                from src.calendars.google_calendar_sync import GoogleCalendarSync
+                credentials_file = getattr(config, 'google_credentials_file', 'credentials.json')
+                calendar = GoogleCalendarSync(credentials_file, calendar_id)
+                
+                start_date = datetime.now().strftime("%Y-%m-%d")
+                end_date = (datetime.now() + timedelta(days=7)).strftime("%Y-%m-%d")
+                calendar_events = calendar.get_events(start_date, end_date) or []
+            except Exception as e:
+                logger.warning(f"Failed to fetch calendar events: {e}")
+        
+        # Get bookings from DB for this master
+        all_bookings = db_manager.get_all_bookings()
+        db_bookings = [b for b in all_bookings if b.get("master_id") == master_id]
+        
+        # Calculate sync status
+        return {
+            "master_id": master_id,
+            "master_name": master.get("name"),
+            "calendar_connected": bool(calendar_id),
+            "calendar_id": calendar_id,
+            "db_schedule_entries": len(db_schedule),
+            "calendar_events": len(calendar_events),
+            "db_bookings": len(db_bookings),
+            "schedule": db_schedule,
+            "events": calendar_events[:20],
+            "bookings": db_bookings[:20]
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error getting sync status: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@api_router.post("/calendar/sync/{master_id}")
+async def sync_calendar_to_schedule(master_id: str, request: Request) -> Dict[str, Any]:
+    """Sync master's Google Calendar to Schedule table"""
+    try:
+        from src.web.app import db_manager
+        from src.config import config
+        from datetime import datetime, timedelta
+        import uuid
+        
+        body = await request.json()
+        action = body.get("action", "preview")  # preview, sync_to_db, sync_to_calendar
+        
+        if not db_manager:
+            raise HTTPException(status_code=500, detail="Database not initialized")
+        
+        # Get master
+        masters = db_manager.get_all_masters()
+        master = next((m for m in masters if m.get("id") == master_id), None)
+        
+        if not master:
+            raise HTTPException(status_code=404, detail="Master not found")
+        
+        calendar_id = master.get("calendar_id")
+        if not calendar_id:
+            raise HTTPException(status_code=400, detail="Master has no calendar configured")
+        
+        # Get current schedule from DB
+        schedule_data = db_manager.get_schedule(master_id)
+        db_schedule = schedule_data.get("schedule", [])
+        
+        # Get events from Google Calendar
+        from src.calendars.google_calendar_sync import GoogleCalendarSync
+        credentials_file = getattr(config, 'google_credentials_file', 'credentials.json')
+        calendar = GoogleCalendarSync(credentials_file, calendar_id)
+        
+        start_date = datetime.now()
+        end_date = start_date + timedelta(days=7)
+        calendar_events = calendar.get_events(start_date.strftime("%Y-%m-%d"), end_date.strftime("%Y-%m-%d")) or []
+        
+        # Analyze working hours from calendar events
+        working_days = {}
+        day_names = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"]
+        
+        for event in calendar_events:
+            event_start = event.get("start", {}).get("dateTime") or event.get("start", {}).get("date")
+            event_end = event.get("end", {}).get("dateTime") or event.get("end", {}).get("date")
+            summary = event.get("summary", "").lower()
+            
+            # Skip if it's a booking/appointment (contains client name or specific keywords)
+            skip_keywords = ["клиент", "запись", "тату", "сеанс", "консультация", "booking"]
+            if any(kw in summary for kw in skip_keywords):
+                continue
+            
+            # Check if it's a "working day" event
+            work_keywords = ["работа", "work", "рабочий", "рабочее время", "working"]
+            is_work_event = any(kw in summary for kw in work_keywords) or "work" in event.get("colorId", "")
+            
+            if event_start and "T" in str(event_start):
+                try:
+                    start_dt = datetime.fromisoformat(event_start.replace('Z', '+00:00'))
+                    end_dt = datetime.fromisoformat(event_end.replace('Z', '+00:00')) if event_end and "T" in str(event_end) else start_dt + timedelta(hours=8)
+                    
+                    day_name = day_names[start_dt.weekday()]
+                    start_time = start_dt.strftime("%H:%M")
+                    end_time = end_dt.strftime("%H:%M")
+                    
+                    if day_name not in working_days:
+                        working_days[day_name] = {"start": start_time, "end": end_time, "is_working": "TRUE"}
+                    else:
+                        # Extend hours if needed
+                        if start_time < working_days[day_name]["start"]:
+                            working_days[day_name]["start"] = start_time
+                        if end_time > working_days[day_name]["end"]:
+                            working_days[day_name]["end"] = end_time
+                except Exception as e:
+                    logger.warning(f"Failed to parse event time: {e}")
+        
+        if action == "preview":
+            return {
+                "success": True,
+                "action": "preview",
+                "current_schedule": db_schedule,
+                "detected_working_days": working_days,
+                "calendar_events_count": len(calendar_events),
+                "message": f"Обнаружено {len(working_days)} рабочих дней из календаря"
+            }
+        
+        elif action == "sync_to_db":
+            # Create/update schedule entries in DB
+            updated = 0
+            created = 0
+            
+            for day_name, hours in working_days.items():
+                # Check if entry exists
+                existing = next((s for s in db_schedule if s.get("day_of_week") == day_name), None)
+                
+                if existing:
+                    # Update existing
+                    try:
+                        db_manager.update_schedule_entry(existing.get("id"), {
+                            "start_time": hours["start"],
+                            "end_time": hours["end"],
+                            "is_working": "TRUE"
+                        })
+                        updated += 1
+                    except Exception as e:
+                        logger.warning(f"Failed to update schedule entry: {e}")
+                else:
+                    # Create new
+                    try:
+                        new_entry = {
+                            "id": str(uuid.uuid4()),
+                            "master_id": master_id,
+            
+            return {
+                "success": True,
+                "action": "sync_to_db",
+                "updated": updated,
+                "created": created,
+                "message": f"Синхронизировано! Обновлено: {updated}, Создано: {created}"
+            }
+        
+        elif action == "create_default_schedule":
+            # Create default 7-day schedule
+            default_hours = body.get("default_hours", {"start": "10:00", "end": "19:00"})
+            working_days_list = body.get("working_days", ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday"])
+            
+            created = 0
+            for day_name in day_names:
+                # Check if exists
+                existing = next((s for s in db_schedule if s.get("day_of_week") == day_name), None)
+                if not existing:
+                    is_working = "TRUE" if day_name in working_days_list else "FALSE"
+                    try:
+                        new_entry = {
+                            "id": str(uuid.uuid4()),
+                            "master_id": master_id,
+                            "day_of_week": day_name,
+                            "start_time": default_hours["start"],
+                            "end_time": default_hours["end"],
+                            "is_working": is_working
+                        }
+                        db_manager.add_schedule_entry(new_entry)
+                        created += 1
+                    except Exception as e:
+                        logger.warning(f"Failed to create schedule entry: {e}")
+            
+            return {
+                "success": True,
+                "action": "create_default_schedule",
+                "created": created,
+                "message": f"Создано {created} записей расписания"
+            }
+        
+        else:
+            raise HTTPException(status_code=400, detail=f"Unknown action: {action}")
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error syncing calendar: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 # ================== SETTINGS ==================
 
 @api_router.get("/settings/salon-calendar")
@@ -1124,6 +1407,923 @@ async def get_master_availability(master_id: str, date: str) -> Dict[str, Any]:
     except Exception as e:
         logger.error(f"Error getting availability: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+
+# ================== INKA INTERACTIVE TRAINING ==================
+
+def _get_inka_training_sheet():
+    """Get or create INKA training sheet"""
+    from src.web.app import sheets_client
+    if not sheets_client:
+        return None
+    return sheets_client
+
+def _ensure_training_sheets():
+    """Ensure training sheets exist"""
+    sheets_client = _get_inka_training_sheet()
+    if not sheets_client:
+        return False
+    
+    try:
+        # Check if INKA_Training sheet exists
+        metadata = sheets_client.service.spreadsheets().get(
+            spreadsheetId=sheets_client.spreadsheet_id
+        ).execute()
+        
+        existing_sheets = [s['properties']['title'] for s in metadata.get('sheets', [])]
+        
+        # Create sheets if needed
+        requests = []
+        for sheet_name in ['INKA_Knowledge', 'INKA_Scenarios', 'INKA_Corrections', 'INKA_Sessions']:
+            if sheet_name not in existing_sheets:
+                requests.append({
+                    'addSheet': {
+                        'properties': {'title': sheet_name}
+                    }
+                })
+        
+        if requests:
+            sheets_client.service.spreadsheets().batchUpdate(
+                spreadsheetId=sheets_client.spreadsheet_id,
+                body={'requests': requests}
+            ).execute()
+            
+            # Add headers
+            headers = {
+                'INKA_Knowledge': ['id', 'type', 'title', 'content', 'created_at'],
+                'INKA_Scenarios': ['id', 'category', 'trigger', 'response', 'context', 'created_at'],
+                'INKA_Corrections': ['id', 'wrong_response', 'correct_response', 'reason', 'created_at'],
+                'INKA_Sessions': ['id', 'type', 'summary', 'data', 'timestamp']
+            }
+            
+            for sheet_name, header_row in headers.items():
+                if sheet_name not in existing_sheets:
+                    sheets_client.service.spreadsheets().values().update(
+                        spreadsheetId=sheets_client.spreadsheet_id,
+                        range=f"{sheet_name}!A1",
+                        valueInputOption="RAW",
+                        body={"values": [header_row]}
+                    ).execute()
+        
+        return True
+    except Exception as e:
+        logger.error(f"Error ensuring training sheets: {e}")
+        return False
+
+
+@api_router.get("/inka-training/stats")
+async def get_inka_interactive_stats() -> Dict[str, Any]:
+    """Get interactive training statistics"""
+    try:
+        sheets_client = _get_inka_training_sheet()
+        if not sheets_client:
+            return {"total_sessions": 0, "total_knowledge": 0, "total_corrections": 0}
+        
+        _ensure_training_sheets()
+        
+        knowledge = sheets_client.get_all_rows("INKA_Knowledge")
+        scenarios = sheets_client.get_all_rows("INKA_Scenarios")
+        corrections = sheets_client.get_all_rows("INKA_Corrections")
+        sessions = sheets_client.get_all_rows("INKA_Sessions")
+        
+        return {
+            "total_sessions": max(0, len(sessions) - 1),
+            "total_knowledge": max(0, len(knowledge) - 1) + max(0, len(scenarios) - 1),
+            "total_corrections": max(0, len(corrections) - 1)
+        }
+    except Exception as e:
+        logger.error(f"Error getting training stats: {e}")
+        return {"total_sessions": 0, "total_knowledge": 0, "total_corrections": 0}
+
+
+@api_router.post("/inka-training/chat")
+async def inka_training_chat(request: Request) -> Dict[str, Any]:
+    """Interactive chat for training INKA"""
+    try:
+        body = await request.json()
+        message = body.get("message", "")
+        mode = body.get("mode", "learn")
+        history = body.get("history", [])
+        
+        if not message:
+            raise HTTPException(status_code=400, detail="Message is required")
+        
+        _ensure_training_sheets()
+        sheets_client = _get_inka_training_sheet()
+        
+        # Build context from training data
+        training_context = ""
+        learned = False
+        
+        if sheets_client:
+            # Get existing knowledge
+            knowledge = sheets_client.get_all_rows("INKA_Knowledge")
+            scenarios = sheets_client.get_all_rows("INKA_Scenarios")
+            corrections = sheets_client.get_all_rows("INKA_Corrections")
+            
+            # Add knowledge to context
+            if len(knowledge) > 1:
+                training_context += "\\n\\nИзученные знания:\\n"
+                for row in knowledge[1:10]:  # Limit to recent 10
+                    if len(row) >= 4:
+                        training_context += f"- {row[2]}: {row[3][:100]}\\n"
+            
+            if len(scenarios) > 1:
+                training_context += "\\n\\nИзученные сценарии:\\n"
+                for row in scenarios[1:10]:
+                    if len(row) >= 4:
+                        training_context += f"- Вопрос: {row[2][:50]} -> Ответ: {row[3][:50]}\\n"
+            
+            if len(corrections) > 1:
+                training_context += "\\n\\nКоррекции (чего избегать):\\n"
+                for row in corrections[1:5]:
+                    if len(row) >= 3:
+                        training_context += f"- НЕ говорить: {row[1][:50]}, а говорить: {row[2][:50]}\\n"
+        
+        # Determine response based on mode
+        if mode == "test":
+            # In test mode, respond as if to a real client
+            system_prompt = f"""Ты ИНКА - виртуальный ассистент тату-салона. 
+Отвечай на вопрос клиента, используя свои знания.
+{training_context}
+
+Правила:
+- Будь вежливой и профессиональной
+- Давай конкретную информацию
+- Предлагай записаться на консультацию"""
+            
+            response_text = await _generate_inka_response(message, system_prompt, history)
+            
+        else:
+            # In learn mode, analyze admin's input for learning
+            system_prompt = f"""Ты ИНКА в режиме обучения. Админ обучает тебя.
+{training_context}
+
+Твоя задача:
+1. Понять что админ хочет тебе объяснить
+2. Подтвердить понимание
+3. Если это пример ответа - запомнить его
+4. Если это исправление - принять к сведению
+5. Если это вопрос - честно ответить
+
+Формат ответа:
+- Начни с понимания намерения
+- Покажи что усвоила
+- Попроси уточнения если нужно
+
+Предыдущие сообщения: {history[-4:] if history else 'нет'}"""
+            
+            response_text = await _generate_inka_response(message, system_prompt, history)
+            
+            # Check if this is a learning opportunity
+            learning_keywords = ['отвечай', 'говори', 'когда спрашивают', 'если клиент', 'запомни', 'важно', 'всегда', 'никогда']
+            if any(kw in message.lower() for kw in learning_keywords):
+                # Save this as a potential learning
+                if sheets_client:
+                    try:
+                        session_id = datetime.now().strftime("%Y%m%d%H%M%S")
+                        sheets_client.service.spreadsheets().values().append(
+                            spreadsheetId=sheets_client.spreadsheet_id,
+                            range="INKA_Sessions!A:E",
+                            valueInputOption="USER_ENTERED",
+                            body={"values": [[
+                                session_id,
+                                "chat_learning",
+                                message[:100],
+                                response_text[:200],
+                                datetime.now().isoformat()
+                            ]]}
+                        ).execute()
+                        learned = True
+                    except Exception as e:
+                        logger.warning(f"Failed to save learning: {e}")
+        
+        return {"response": response_text, "learned": learned, "mode": mode}
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error in training chat: {e}")
+        return {"response": f"Произошла ошибка: {str(e)}", "learned": False}
+
+
+async def _generate_inka_response(message: str, system_prompt: str, history: list) -> str:
+    """Generate INKA response using OpenAI"""
+    try:
+        import openai
+        import os
+        
+        client = openai.OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+        
+        messages = [{"role": "system", "content": system_prompt}]
+        
+        # Add history
+        for h in history[-6:]:  # Last 6 messages
+            messages.append({"role": h.get("role", "user"), "content": h.get("content", "")})
+        
+        messages.append({"role": "user", "content": message})
+        
+        response = client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=messages,
+            max_tokens=500,
+            temperature=0.7
+        )
+        
+        return response.choices[0].message.content
+    except Exception as e:
+        logger.error(f"OpenAI error: {e}")
+        return f"Извините, не могу ответить сейчас. Ошибка: {str(e)}"
+
+
+@api_router.post("/inka-training/scenario")
+async def add_training_scenario(request: Request) -> Dict[str, Any]:
+    """Add a training scenario"""
+    try:
+        body = await request.json()
+        category = body.get("category", "general")
+        trigger = body.get("trigger", "")
+        response = body.get("response", "")
+        context = body.get("context", "")
+        
+        if not trigger or not response:
+            raise HTTPException(status_code=400, detail="Trigger and response are required")
+        
+        _ensure_training_sheets()
+        sheets_client = _get_inka_training_sheet()
+        
+        if not sheets_client:
+            raise HTTPException(status_code=500, detail="Database not available")
+        
+        scenario_id = datetime.now().strftime("%Y%m%d%H%M%S")
+        
+        sheets_client.service.spreadsheets().values().append(
+            spreadsheetId=sheets_client.spreadsheet_id,
+            range="INKA_Scenarios!A:F",
+            valueInputOption="USER_ENTERED",
+            body={"values": [[scenario_id, category, trigger, response, context, datetime.now().isoformat()]]}
+        ).execute()
+        
+        return {"success": True, "id": scenario_id}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error adding scenario: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@api_router.get("/inka-training/scenarios")
+async def get_training_scenarios() -> Dict[str, Any]:
+    """Get all training scenarios"""
+    try:
+        sheets_client = _get_inka_training_sheet()
+        if not sheets_client:
+            return {"scenarios": []}
+        
+        _ensure_training_sheets()
+        data = sheets_client.get_all_rows("INKA_Scenarios")
+        
+        scenarios = []
+        for row in data[1:]:  # Skip header
+            if len(row) >= 4:
+                scenarios.append({
+                    "id": row[0],
+                    "category": row[1],
+                    "trigger": row[2],
+                    "response": row[3],
+                    "context": row[4] if len(row) > 4 else "",
+                    "created_at": row[5] if len(row) > 5 else ""
+                })
+        
+        return {"scenarios": scenarios}
+    except Exception as e:
+        logger.error(f"Error getting scenarios: {e}")
+        return {"scenarios": []}
+
+
+@api_router.delete("/inka-training/scenario/{scenario_id}")
+async def delete_scenario(scenario_id: str) -> Dict[str, Any]:
+    """Delete a training scenario"""
+    try:
+        sheets_client = _get_inka_training_sheet()
+        if not sheets_client:
+            raise HTTPException(status_code=500, detail="Database not available")
+        
+        data = sheets_client.get_all_rows("INKA_Scenarios")
+        
+        for i, row in enumerate(data):
+            if row and row[0] == scenario_id:
+                # Delete row
+                sheets_client.service.spreadsheets().batchUpdate(
+                    spreadsheetId=sheets_client.spreadsheet_id,
+                    body={
+                        "requests": [{
+                            "deleteDimension": {
+                                "range": {
+                                    "sheetId": _get_sheet_id(sheets_client, "INKA_Scenarios"),
+                                    "dimension": "ROWS",
+                                    "startIndex": i,
+                                    "endIndex": i + 1
+                                }
+                            }
+                        }]
+                    }
+                ).execute()
+                return {"success": True}
+        
+        raise HTTPException(status_code=404, detail="Scenario not found")
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error deleting scenario: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@api_router.post("/inka-training/correction")
+async def add_correction(request: Request) -> Dict[str, Any]:
+    """Add a correction"""
+    try:
+        body = await request.json()
+        wrong_response = body.get("wrong_response", "")
+        correct_response = body.get("correct_response", "")
+        reason = body.get("reason", "")
+        
+        if not wrong_response or not correct_response:
+            raise HTTPException(status_code=400, detail="Both responses are required")
+        
+        _ensure_training_sheets()
+        sheets_client = _get_inka_training_sheet()
+        
+        if not sheets_client:
+            raise HTTPException(status_code=500, detail="Database not available")
+        
+        correction_id = datetime.now().strftime("%Y%m%d%H%M%S")
+        
+        sheets_client.service.spreadsheets().values().append(
+            spreadsheetId=sheets_client.spreadsheet_id,
+            range="INKA_Corrections!A:E",
+            valueInputOption="USER_ENTERED",
+            body={"values": [[correction_id, wrong_response, correct_response, reason, datetime.now().isoformat()]]}
+        ).execute()
+        
+        return {"success": True, "id": correction_id}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error adding correction: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@api_router.get("/inka-training/corrections")
+async def get_corrections() -> Dict[str, Any]:
+    """Get all corrections"""
+    try:
+        sheets_client = _get_inka_training_sheet()
+        if not sheets_client:
+            return {"corrections": []}
+        
+        _ensure_training_sheets()
+        data = sheets_client.get_all_rows("INKA_Corrections")
+        
+        corrections = []
+        for row in data[1:]:
+            if len(row) >= 3:
+                corrections.append({
+                    "id": row[0],
+                    "wrong_response": row[1],
+                    "correct_response": row[2],
+                    "reason": row[3] if len(row) > 3 else "",
+                    "created_at": row[4] if len(row) > 4 else ""
+                })
+        
+        return {"corrections": corrections}
+    except Exception as e:
+        logger.error(f"Error getting corrections: {e}")
+        return {"corrections": []}
+
+
+@api_router.delete("/inka-training/correction/{correction_id}")
+async def delete_correction(correction_id: str) -> Dict[str, Any]:
+    """Delete a correction"""
+    try:
+        sheets_client = _get_inka_training_sheet()
+        if not sheets_client:
+            raise HTTPException(status_code=500, detail="Database not available")
+        
+        data = sheets_client.get_all_rows("INKA_Corrections")
+        
+        for i, row in enumerate(data):
+            if row and row[0] == correction_id:
+                sheets_client.service.spreadsheets().batchUpdate(
+                    spreadsheetId=sheets_client.spreadsheet_id,
+                    body={
+                        "requests": [{
+                            "deleteDimension": {
+                                "range": {
+                                    "sheetId": _get_sheet_id(sheets_client, "INKA_Corrections"),
+                                    "dimension": "ROWS",
+                                    "startIndex": i,
+                                    "endIndex": i + 1
+                                }
+                            }
+                        }]
+                    }
+                ).execute()
+                return {"success": True}
+        
+        raise HTTPException(status_code=404, detail="Correction not found")
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error deleting correction: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@api_router.post("/inka-training/knowledge")
+async def add_knowledge(request: Request) -> Dict[str, Any]:
+    """Add knowledge to INKA"""
+    try:
+        body = await request.json()
+        knowledge_type = body.get("type", "fact")
+        title = body.get("title", "")
+        content = body.get("content", "")
+        
+        if not title or not content:
+            raise HTTPException(status_code=400, detail="Title and content are required")
+        
+        _ensure_training_sheets()
+        sheets_client = _get_inka_training_sheet()
+        
+        if not sheets_client:
+            raise HTTPException(status_code=500, detail="Database not available")
+        
+        knowledge_id = datetime.now().strftime("%Y%m%d%H%M%S")
+        
+        sheets_client.service.spreadsheets().values().append(
+            spreadsheetId=sheets_client.spreadsheet_id,
+            range="INKA_Knowledge!A:E",
+            valueInputOption="USER_ENTERED",
+            body={"values": [[knowledge_id, knowledge_type, title, content, datetime.now().isoformat()]]}
+        ).execute()
+        
+        return {"success": True, "id": knowledge_id}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error adding knowledge: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@api_router.get("/inka-training/knowledge")
+async def get_knowledge() -> Dict[str, Any]:
+    """Get all knowledge"""
+    try:
+        sheets_client = _get_inka_training_sheet()
+        if not sheets_client:
+            return {"knowledge": []}
+        
+        _ensure_training_sheets()
+        data = sheets_client.get_all_rows("INKA_Knowledge")
+        
+        knowledge = []
+        for row in data[1:]:
+            if len(row) >= 4:
+                knowledge.append({
+                    "id": row[0],
+                    "type": row[1],
+                    "title": row[2],
+                    "content": row[3],
+                    "created_at": row[4] if len(row) > 4 else ""
+                })
+        
+        return {"knowledge": knowledge}
+    except Exception as e:
+        logger.error(f"Error getting knowledge: {e}")
+        return {"knowledge": []}
+
+
+@api_router.delete("/inka-training/knowledge/{knowledge_id}")
+async def delete_knowledge(knowledge_id: str) -> Dict[str, Any]:
+    """Delete knowledge entry"""
+    try:
+        sheets_client = _get_inka_training_sheet()
+        if not sheets_client:
+            raise HTTPException(status_code=500, detail="Database not available")
+        
+        data = sheets_client.get_all_rows("INKA_Knowledge")
+        
+        for i, row in enumerate(data):
+            if row and row[0] == knowledge_id:
+                sheets_client.service.spreadsheets().batchUpdate(
+                    spreadsheetId=sheets_client.spreadsheet_id,
+                    body={
+                        "requests": [{
+                            "deleteDimension": {
+                                "range": {
+                                    "sheetId": _get_sheet_id(sheets_client, "INKA_Knowledge"),
+                                    "dimension": "ROWS",
+                                    "startIndex": i,
+                                    "endIndex": i + 1
+                                }
+                            }
+                        }]
+                    }
+                ).execute()
+                return {"success": True}
+        
+        raise HTTPException(status_code=404, detail="Knowledge not found")
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error deleting knowledge: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@api_router.get("/inka-training/recent")
+async def get_recent_trainings() -> Dict[str, Any]:
+    """Get recent training sessions"""
+    try:
+        sheets_client = _get_inka_training_sheet()
+        if not sheets_client:
+            return {"recent": []}
+        
+        _ensure_training_sheets()
+        data = sheets_client.get_all_rows("INKA_Sessions")
+        
+        recent = []
+        for row in data[-11:-1]:  # Last 10
+            if len(row) >= 3:
+                recent.append({
+                    "id": row[0],
+                    "type": row[1],
+                    "summary": row[2],
+                    "timestamp": row[4] if len(row) > 4 else ""
+                })
+        
+        return {"recent": recent[::-1]}  # Reverse to show newest first
+    except Exception as e:
+        logger.error(f"Error getting recent trainings: {e}")
+        return {"recent": []}
+
+
+@api_router.get("/inka-training/export")
+async def export_training() -> Dict[str, Any]:
+    """Export all training data"""
+    try:
+        sheets_client = _get_inka_training_sheet()
+        if not sheets_client:
+            return {"knowledge": [], "scenarios": [], "corrections": [], "sessions": []}
+        
+        _ensure_training_sheets()
+        
+        knowledge = sheets_client.get_all_rows("INKA_Knowledge")
+        scenarios = sheets_client.get_all_rows("INKA_Scenarios")
+        corrections = sheets_client.get_all_rows("INKA_Corrections")
+        sessions = sheets_client.get_all_rows("INKA_Sessions")
+        
+        return {
+            "export_date": datetime.now().isoformat(),
+            "knowledge": knowledge[1:] if len(knowledge) > 1 else [],
+            "scenarios": scenarios[1:] if len(scenarios) > 1 else [],
+            "corrections": corrections[1:] if len(corrections) > 1 else [],
+            "sessions": sessions[1:] if len(sessions) > 1 else []
+        }
+    except Exception as e:
+        logger.error(f"Error exporting training: {e}")
+        return {"error": str(e)}
+
+
+@api_router.post("/inka-training/import")
+async def import_training(request: Request) -> Dict[str, Any]:
+    """Import training data"""
+    try:
+        body = await request.json()
+        
+        _ensure_training_sheets()
+        sheets_client = _get_inka_training_sheet()
+        
+        if not sheets_client:
+            raise HTTPException(status_code=500, detail="Database not available")
+        
+        imported = {"knowledge": 0, "scenarios": 0, "corrections": 0}
+        
+        # Import knowledge
+        if "knowledge" in body and body["knowledge"]:
+            for item in body["knowledge"]:
+                if len(item) >= 4:
+                    sheets_client.service.spreadsheets().values().append(
+                        spreadsheetId=sheets_client.spreadsheet_id,
+                        range="INKA_Knowledge!A:E",
+                        valueInputOption="USER_ENTERED",
+                        body={"values": [item[:5]]}
+                    ).execute()
+                    imported["knowledge"] += 1
+        
+        # Import scenarios
+        if "scenarios" in body and body["scenarios"]:
+            for item in body["scenarios"]:
+                if len(item) >= 4:
+                    sheets_client.service.spreadsheets().values().append(
+                        spreadsheetId=sheets_client.spreadsheet_id,
+                        range="INKA_Scenarios!A:F",
+                        valueInputOption="USER_ENTERED",
+                        body={"values": [item[:6]]}
+                    ).execute()
+                    imported["scenarios"] += 1
+        
+        # Import corrections
+        if "corrections" in body and body["corrections"]:
+            for item in body["corrections"]:
+                if len(item) >= 3:
+                    sheets_client.service.spreadsheets().values().append(
+                        spreadsheetId=sheets_client.spreadsheet_id,
+                        range="INKA_Corrections!A:E",
+                        valueInputOption="USER_ENTERED",
+                        body={"values": [item[:5]]}
+                    ).execute()
+                    imported["corrections"] += 1
+        
+        return {"success": True, "imported": imported}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error importing training: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+def _get_sheet_id(sheets_client, sheet_name: str) -> int:
+    """Get sheet ID by name"""
+    try:
+        metadata = sheets_client.service.spreadsheets().get(
+            spreadsheetId=sheets_client.spreadsheet_id
+        ).execute()
+        
+        for sheet in metadata.get('sheets', []):
+            if sheet['properties']['title'] == sheet_name:
+                return sheet['properties']['sheetId']
+        return 0
+    except:
+        return 0
+
+
+# ================== BEHAVIOR ANALYSIS ==================
+
+@api_router.post("/behavior/analyze")
+async def analyze_behavior(request: Request) -> Dict[str, Any]:
+    """Анализировать поведение по тексту сообщения"""
+    try:
+        from src.services.behavior_service import get_behavior_service
+        
+        body = await request.json()
+        text = body.get("text", "")
+        context = body.get("context", [])
+        tg_id = body.get("tg_id")
+        
+        if not text:
+            raise HTTPException(status_code=400, detail="Text is required")
+        
+        behavior_service = get_behavior_service()
+        result = behavior_service.analyze_message_behavior(text, context)
+        
+        # Если указан tg_id - сохраняем в историю
+        if tg_id:
+            behavior_service.add_message_to_history(str(tg_id), text, result)
+        
+        return result
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error analyzing behavior: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@api_router.get("/behavior/client/{tg_id}")
+async def get_client_behavior(tg_id: str) -> Dict[str, Any]:
+    """Получить информацию о поведении клиента"""
+    try:
+        from src.services.behavior_service import get_behavior_service
+        
+        behavior_service = get_behavior_service()
+        
+        return {
+            "tg_id": tg_id,
+            "risk_level": behavior_service.calculate_risk_level(tg_id),
+            "access": behavior_service.get_access_info(tg_id),
+            "message_history_count": len(behavior_service.get_message_history(tg_id))
+        }
+    except Exception as e:
+        logger.error(f"Error getting client behavior: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@api_router.post("/behavior/event")
+async def record_behavior_event(request: Request) -> Dict[str, Any]:
+    """Записать событие поведения (визит, отмена, неявка и т.д.)"""
+    try:
+        from src.services.behavior_service import get_behavior_service
+        
+        body = await request.json()
+        tg_id = body.get("tg_id")
+        event_type = body.get("event_type")
+        
+        if not tg_id or not event_type:
+            raise HTTPException(status_code=400, detail="tg_id and event_type are required")
+        
+        behavior_service = get_behavior_service()
+        new_risk = behavior_service.record_event(str(tg_id), event_type)
+        
+        return {
+            "success": True,
+            "tg_id": tg_id,
+            "event_type": event_type,
+            "new_risk_level": new_risk
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error recording behavior event: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@api_router.get("/behavior/check-booking/{tg_id}")
+async def check_booking_allowed(tg_id: str) -> Dict[str, Any]:
+    """Проверить, разрешена ли запись клиенту"""
+    try:
+        from src.services.behavior_service import get_behavior_service
+        
+        behavior_service = get_behavior_service()
+        allowed, reason = behavior_service.is_booking_allowed(tg_id)
+        
+        return {
+            "tg_id": tg_id,
+            "allowed": allowed,
+            "reason": reason,
+            "access": behavior_service.get_access_info(tg_id)
+        }
+    except Exception as e:
+        logger.error(f"Error checking booking: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@api_router.get("/behavior/types")
+async def get_behavior_types() -> Dict[str, Any]:
+    """Получить список типов поведения и уровней риска"""
+    from src.services.behavior_service import BEHAVIOR_TYPES, ACCESS_LEVELS, BEHAVIOR_EVENTS
+    
+    return {
+        "behavior_types": BEHAVIOR_TYPES,
+        "access_levels": ACCESS_LEVELS,
+        "behavior_events": BEHAVIOR_EVENTS
+    }
+
+
+# ================== ADMINS MANAGEMENT ==================
+
+@api_router.get("/admins")
+async def get_admins() -> List[Dict[str, Any]]:
+    """Get all admin users"""
+    try:
+        from src.web.auth import get_admin_users
+        
+        admins = get_admin_users()
+        # Don't return password hashes
+        safe_admins = []
+        for admin in admins:
+            safe_admin = {
+                "id": admin.get("id"),
+                "username": admin.get("username"),
+                "role": admin.get("role", "admin"),
+                "created_at": admin.get("created_at"),
+                "last_login": admin.get("last_login"),
+                "telegram_id": admin.get("telegram_id"),
+                "is_active": admin.get("is_active", True)
+            }
+            safe_admins.append(safe_admin)
+        return safe_admins
+    except Exception as e:
+        logger.error(f"Error getting admins: {e}")
+        raise HTTPException(status_code=500, detail="Error getting admins")
+
+
+@api_router.post("/admins")
+async def create_admin(request: Request) -> Dict[str, Any]:
+    """Create new admin user"""
+    try:
+        from src.web.auth import add_admin_user
+        
+        body = await request.json()
+        
+        # Validate required fields
+        username = body.get("username", "").strip()
+        password = body.get("password", "")
+        
+        if not username:
+            raise HTTPException(status_code=400, detail="Username is required")
+        if not password or len(password) < 6:
+            raise HTTPException(status_code=400, detail="Password must be at least 6 characters")
+        
+        success, message = add_admin_user(
+            username=username,
+            password=password,
+            role=body.get("role", "admin"),
+            telegram_id=body.get("telegram_id")
+        )
+        
+        if success:
+            return {"success": True, "message": message}
+        else:
+            raise HTTPException(status_code=400, detail=message)
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error creating admin: {e}")
+        raise HTTPException(status_code=500, detail="Error creating admin")
+
+
+@api_router.put("/admins/{admin_id}")
+async def update_admin(admin_id: str, request: Request) -> Dict[str, Any]:
+    """Update admin user"""
+    try:
+        from src.web.auth import update_admin_user
+        
+        body = await request.json()
+        
+        success, message = update_admin_user(admin_id, body)
+        
+        if success:
+            return {"success": True, "message": message}
+        else:
+            raise HTTPException(status_code=400, detail=message)
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error updating admin: {e}")
+        raise HTTPException(status_code=500, detail="Error updating admin")
+
+
+@api_router.delete("/admins/{admin_id}")
+async def delete_admin(admin_id: str) -> Dict[str, Any]:
+    """Delete admin user"""
+    try:
+        from src.web.auth import delete_admin_user
+        
+        success, message = delete_admin_user(admin_id)
+        
+        if success:
+            return {"success": True, "message": message}
+        else:
+            raise HTTPException(status_code=400, detail=message)
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error deleting admin: {e}")
+        raise HTTPException(status_code=500, detail="Error deleting admin")
+
+
+@api_router.post("/admins/{admin_id}/change-password")
+async def change_admin_password(admin_id: str, request: Request) -> Dict[str, Any]:
+    """Change admin password"""
+    try:
+        from src.web.auth import change_admin_password as do_change_password
+        
+        body = await request.json()
+        
+        new_password = body.get("new_password", "")
+        current_password = body.get("current_password", "")
+        
+        if not new_password or len(new_password) < 6:
+            raise HTTPException(status_code=400, detail="New password must be at least 6 characters")
+        
+        success, message = do_change_password(admin_id, new_password, current_password)
+        
+        if success:
+            return {"success": True, "message": message}
+        else:
+            raise HTTPException(status_code=400, detail=message)
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error changing password: {e}")
+        raise HTTPException(status_code=500, detail="Error changing password")
+
+
+@api_router.put("/admins/{admin_id}/toggle-status")
+async def toggle_admin_status(admin_id: str) -> Dict[str, Any]:
+    """Toggle admin active status"""
+    try:
+        from src.web.auth import toggle_admin_status as do_toggle
+        
+        success, message, is_active = do_toggle(admin_id)
+        
+        if success:
+            return {"success": True, "message": message, "is_active": is_active}
+        else:
+            raise HTTPException(status_code=400, detail=message)
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error toggling admin status: {e}")
+        raise HTTPException(status_code=500, detail="Error toggling admin status")
 
 
 # ================== HEALTH ==================
