@@ -5,6 +5,7 @@ venv/
 
 # Environment
 .env
+env.yaml
 
 # Google OAuth tokens & credentials
 src/google/token.json
