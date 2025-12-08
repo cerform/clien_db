@@ -378,11 +378,27 @@ def main():
     if passed == total:
         print(f"{Colors.GREEN}{Colors.BOLD}✅ ALL CHECKS PASSED ({passed}/{total}){Colors.ENDC}")
         print(f"{Colors.GREEN}Ready for deployment!{Colors.ENDC}\n")
+        write_report(results)
         return 0
     else:
         print(f"{Colors.YELLOW}{Colors.BOLD}⚠️  SOME CHECKS FAILED ({passed}/{total}){Colors.ENDC}")
         print(f"{Colors.YELLOW}Please review warnings above before deploying{Colors.ENDC}\n")
+        write_report(results)
         return 1
+
+
+def write_report(results: dict, path: str = 'pre_deploy_report.json'):
+    import json, time
+    payload = {
+        'ts': time.time(),
+        'results': results,
+        'summary': { 'passed': sum(1 for v in results.values() if v), 'total': len(results) }
+    }
+    try:
+        Path(path).write_text(json.dumps(payload))
+        print(f"{Colors.GREEN}✅ Saved report to {path}{Colors.ENDC}")
+    except Exception as e:
+        print(f"{Colors.YELLOW}⚠️  Could not write report: {e}{Colors.ENDC}")
 
 if __name__ == "__main__":
     sys.exit(main())
