@@ -1,3 +1,45 @@
+name: Deploy - Cloud Run
+
+on:
+  push:
+    branches:
+      - 'new-migration/*'
+
+jobs:
+  deploy:
+    name: Build & Deploy to Cloud Run
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+        with:
+          project_id: ${{ secrets.GCLOUD_PROJECT_ID }}
+          service_account_key: ${{ secrets.GCLOUD_SA_KEY }}
+          export_default_credentials: true
+
+      - name: Configure Docker for GCR
+        run: |-
+          gcloud --quiet auth configure-docker
+
+      - name: Build and push image
+        env:
+          IMAGE: gcr.io/${{ secrets.GCLOUD_PROJECT_ID }}/tattoo-admin:${{ github.sha }}
+        run: |
+          gcloud builds submit --tag "$IMAGE"
+
+      - name: Deploy to Cloud Run
+        env:
+          IMAGE: gcr.io/${{ secrets.GCLOUD_PROJECT_ID }}/tattoo-admin:${{ github.sha }}
+        run: |
+          gcloud run deploy tattoo-admin \
+            --image "$IMAGE" \
+            --platform managed \
+            --region ${{ secrets.GCLOUD_REGION }} \
+            --project ${{ secrets.GCLOUD_PROJECT_ID }} \
+            --allow-unauthenticated
 name: Deploy to Google Cloud Run (with checks)
 
 on:
