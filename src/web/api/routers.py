@@ -1,6 +1,6 @@
 """API routers for web interface"""
 
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, HTTPException, Request, Depends
 from typing import List, Dict, Any, Optional
 import logging
 from datetime import datetime, timedelta
@@ -56,9 +56,9 @@ async def monitoring_history() -> Dict[str, Any]:
 
 
 @api_router.get("/health")
-async def health_check() -> Dict[str, str]:
+async def health_check() -> Dict[str, Any]:
     """Health check endpoint"""
-    return {"status": "ok", "service": "tattoo-bot-admin"}
+    return {"ok": True, "status": "ok", "service": "tattoo-bot-admin"}
 
 
 @api_router.post('/telemetry/events')
@@ -117,7 +117,8 @@ async def create_client(request: Request) -> Dict[str, Any]:
         raise HTTPException(status_code=500, detail="Database not initialized")
     try:
         data = await request.json()
-        success, message = db_manager.add_client(data)
+        actor = request.headers.get('X-Requester', 'web')
+        success, message = db_manager.add_client(data, actor=actor)
         if success:
             return {"success": True, "message": message}
         else:
@@ -133,7 +134,8 @@ async def update_client(client_id: str, request: Request) -> Dict[str, Any]:
         raise HTTPException(status_code=500, detail="Database not initialized")
     try:
         data = await request.json()
-        success, message = db_manager.edit_client(client_id, data)
+        actor = request.headers.get('X-Requester', 'web')
+        success, message = db_manager.edit_client(client_id, data, actor=actor)
         if success:
             return {"success": True, "message": message}
         else:
@@ -143,12 +145,45 @@ async def update_client(client_id: str, request: Request) -> Dict[str, Any]:
         raise HTTPException(status_code=500, detail=str(e))
 
 @api_router.delete("/clients/{client_id}")
+@api_router.get('/clients/{client_id_or_user}')
+async def get_client_by_id(client_id_or_user: str) -> Dict[str, Any]:
+    from src.web.app import db_manager
+    if db_manager is None:
+        raise HTTPException(status_code=500, detail="Database not initialized")
+    try:
+        # Try to find by client UUID first
+        clients = db_manager.get_all_clients()
+        # Numeric values might mean user_id (telegram_id)
+        candidate = None
+        for c in clients:
+            if c.get('client_id') == client_id_or_user or c.get('id') == client_id_or_user:
+                candidate = c
+                break
+            try:
+                if str(c.get('user_id')) == str(client_id_or_user):
+                    candidate = c
+                    break
+            except Exception:
+                pass
+        if candidate:
+            return candidate
+        raise HTTPException(status_code=404, detail='Client not found')
+    except Exception as e:
+        logger.error(f"Error getting client: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 async def delete_client(client_id: str) -> Dict[str, Any]:
     from src.web.app import db_manager
     if db_manager is None:
         raise HTTPException(status_code=500, detail="Database not initialized")
     try:
+        actor = request.headers.get('X-Requester', 'web')
+        # Log delete op with actor
         success, message = db_manager.delete_client(client_id)
+        try:
+            if actor:
+                db_manager.add_audit_log(actor, 'delete_client', 'Clients', f"Deleted client {client_id}")
+        except Exception:
+            pass
         if success:
             return {"success": True, "message": message}
         else:
@@ -291,6 +326,58 @@ async def get_bookings() -> List[dict]:
         return db_manager.get_all_bookings()
     except Exception as e:
         logger.error(f"Error getting bookings: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@api_router.post("/bookings/{booking_id}/confirm")
+async def confirm_booking(booking_id: str, request: Request) -> Dict[str, Any]:
+    from src.web.app import db_manager
+    if db_manager is None:
+        raise HTTPException(status_code=500, detail="Database not initialized")
+    try:
+        actor = request.headers.get('X-Requester', 'web')
+        success, message = db_manager.confirm_booking(booking_id, actor=actor)
+        if success:
+            return {"success": True, "message": message}
+        else:
+            raise HTTPException(status_code=400, detail=message)
+    except Exception as e:
+        logger.error(f"Error confirming booking {booking_id}: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@api_router.post("/bookings/{booking_id}/complete")
+async def complete_booking(booking_id: str, request: Request) -> Dict[str, Any]:
+    from src.web.app import db_manager
+    if db_manager is None:
+        raise HTTPException(status_code=500, detail="Database not initialized")
+    try:
+        actor = request.headers.get('X-Requester', 'web')
+        success, message = db_manager.complete_booking(booking_id, actor=actor)
+        if success:
+            return {"success": True, "message": message}
+        else:
+            raise HTTPException(status_code=400, detail=message)
+    except Exception as e:
+        logger.error(f"Error completing booking {booking_id}: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@api_router.delete("/bookings/{booking_id}")
+async def delete_booking(booking_id: str, request: Request) -> Dict[str, Any]:
+    from src.web.app import db_manager
+    if db_manager is None:
+        raise HTTPException(status_code=500, detail="Database not initialized")
+    try:
+        # Optional reason from request body
+        body = await request.json()
+        reason = body.get('reason', '')
+        
+        actor = request.headers.get('X-Requester', 'web')
+        success, message = db_manager.cancel_booking(booking_id, reason, actor=actor)
+        if success:
+            return {"success": True, "message": message}
+        else:
+            raise HTTPException(status_code=400, detail=message)
+    except Exception as e:
+        logger.error(f"Error deleting booking {booking_id}: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -455,9 +542,34 @@ async def add_audit_log(request: Request) -> Dict[str, Any]:
         raise HTTPException(status_code=500, detail=str(e))
 
 
+def _get_admin_from_token(request: Request):
+    """Dependency that validates Authorization header containing Bearer token."""
+    auth_hdr = request.headers.get('Authorization') or request.headers.get('authorization')
+    if not auth_hdr:
+        raise HTTPException(status_code=401, detail='Authorization required')
+    try:
+        from src.web.auth import validate_admin_token
+        admin = validate_admin_token(auth_hdr)
+        if not admin:
+            raise HTTPException(status_code=401, detail='Invalid or expired token')
+        return admin
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Auth validation error: {e}")
+        raise HTTPException(status_code=401, detail='Authentication error')
+
+
+# Health check
+@api_router.get('/health')
+async def health_check() -> Dict[str, Any]:
+    return { 'ok': True, 'status': 'running' }
+
+
+
 # ================== ADMINS (WEB USERS) ==================
 @api_router.get('/admins')
-async def get_admins() -> List[Dict[str, Any]]:
+async def get_admins(request: Request, admin_user: Dict[str, Any] = Depends(_get_admin_from_token)) -> List[Dict[str, Any]]:
     """Return a list of admin users configured for the web UI"""
     try:
         from src.web.auth import get_admin_users
@@ -468,7 +580,7 @@ async def get_admins() -> List[Dict[str, Any]]:
 
 
 @api_router.post('/admins')
-async def create_admin(request: Request) -> Dict[str, Any]:
+async def create_admin(request: Request, admin_user: Dict[str, Any] = Depends(_get_admin_from_token)) -> Dict[str, Any]:
     try:
         from src.web.auth import add_admin_user
         body = await request.json()
@@ -489,7 +601,7 @@ async def create_admin(request: Request) -> Dict[str, Any]:
 
 
 @api_router.put('/admins/{admin_id}')
-async def update_admin(admin_id: str, request: Request) -> Dict[str, Any]:
+async def update_admin(admin_id: str, request: Request, admin_user: Dict[str, Any] = Depends(_get_admin_from_token)) -> Dict[str, Any]:
     try:
         from src.web.auth import update_admin_user
         body = await request.json()
@@ -505,7 +617,7 @@ async def update_admin(admin_id: str, request: Request) -> Dict[str, Any]:
 
 
 @api_router.delete('/admins/{admin_id}')
-async def delete_admin(admin_id: str) -> Dict[str, Any]:
+async def delete_admin(admin_id: str, admin_user: Dict[str, Any] = Depends(_get_admin_from_token)) -> Dict[str, Any]:
     try:
         from src.web.auth import delete_admin_user
         success, message = delete_admin_user(admin_id)
@@ -520,7 +632,7 @@ async def delete_admin(admin_id: str) -> Dict[str, Any]:
 
 
 @api_router.put('/admins/{admin_id}/toggle-status')
-async def toggle_admin_status_api(admin_id: str) -> Dict[str, Any]:
+async def toggle_admin_status_api(admin_id: str, admin_user: Dict[str, Any] = Depends(_get_admin_from_token)) -> Dict[str, Any]:
     try:
         from src.web.auth import toggle_admin_status
         success, message, status = toggle_admin_status(admin_id)
@@ -535,7 +647,7 @@ async def toggle_admin_status_api(admin_id: str) -> Dict[str, Any]:
 
 
 @api_router.post('/admins/{admin_id}/change-password')
-async def change_admin_password_api(admin_id: str, request: Request) -> Dict[str, Any]:
+async def change_admin_password_api(admin_id: str, request: Request, admin_user: Dict[str, Any] = Depends(_get_admin_from_token)) -> Dict[str, Any]:
     try:
         from src.web.auth import change_admin_password
         body = await request.json()
@@ -971,4 +1083,23 @@ async def get_sync_status(master_id: str) -> Dict[str, Any]:
         }
     except Exception as e:
         logger.error(f"Error getting sync status: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ================== SCHEDULE MANAGEMENT ==================
+
+@api_router.put("/schedule/{entry_id}")
+async def update_schedule_entry(entry_id: str, request: Request) -> Dict[str, Any]:
+    from src.web.app import db_manager
+    if db_manager is None:
+        raise HTTPException(status_code=500, detail="Database not initialized")
+    try:
+        data = await request.json()
+        success, message = db_manager.update_schedule_entry(entry_id, data)
+        if success:
+            return {"success": True, "message": message}
+        else:
+            raise HTTPException(status_code=400, detail=message)
+    except Exception as e:
+        logger.error(f"Error updating schedule entry {entry_id}: {e}")
         raise HTTPException(status_code=500, detail=str(e))

@@ -527,8 +527,10 @@ class DatabaseManager:
             for row in data[1:]:
                 if search.lower() in str(row).lower():
                     clients.append({
+                        "client_id": row[0] if len(row) > 0 else "",
                         "id": row[0] if len(row) > 0 else "",
                         "telegram_id": row[1] if len(row) > 1 else "",
+                        "user_id": (int(row[1]) if len(row) > 1 and str(row[1]).strip().isdigit() else row[1] if len(row) > 1 else ""),
                         "name": row[2] if len(row) > 2 else "",
                         "phone": row[3] if len(row) > 3 else "",
                         "email": row[4] if len(row) > 4 else "",
@@ -545,7 +547,7 @@ class DatabaseManager:
             logger.error(f"Error getting clients: {e}")
             return {"error": str(e)}
     
-    def add_client(self, client_data: Dict[str, str]) -> Tuple[bool, str]:
+    def add_client(self, client_data: Dict[str, str], actor: str = 'web') -> Tuple[bool, str]:
         """Добавить нового клиента"""
         try:
             required_fields = ["name", "phone"]
@@ -569,13 +571,18 @@ class DatabaseManager:
             ]
             
             self.sheets.append_rows("Clients", [new_client])
+            # Audit log
+            try:
+                self.add_audit_log(actor or 'web', 'add_client', 'Clients', f"Added client {client_data.get('name')}")
+            except Exception:
+                pass
             return True, f"✅ Клиент {client_data['name']} добавлен!"
         
         except Exception as e:
             logger.error(f"Error adding client: {e}")
             return False, f"❌ Ошибка: {str(e)}"
     
-    def edit_client(self, client_id: str, updates: Dict[str, str]) -> Tuple[bool, str]:
+    def edit_client(self, client_id: str, updates: Dict[str, str], actor: str = 'web') -> Tuple[bool, str]:
         """Редактировать клиента"""
         try:
             data = self.sheets.get_sheet_values("Clients", "A:H")
@@ -604,6 +611,10 @@ class DatabaseManager:
                     row[idx] = value
             
             self.sheets.update_range("Clients", f"A{row_idx+1}:H{row_idx+1}", [row])
+            try:
+                self.add_audit_log(actor or 'web', 'edit_client', 'Clients', f"Edited client {client_id}")
+            except Exception:
+                pass
             return True, f"✅ Клиент обновлен!"
         
         except Exception as e:
@@ -640,7 +651,7 @@ class DatabaseManager:
     
     # ============ РАСПИСАНИЕ ============
     
-    def add_booking(self, booking_data: Dict[str, str]) -> Tuple[bool, str]:
+    def add_booking(self, booking_data: Dict[str, str], actor: str = 'web') -> Tuple[bool, str]:
         """Добавить новую запись"""
         try:
             required_fields = ["client_id", "master_id", "service_id", "date", "time"]
@@ -678,6 +689,10 @@ class DatabaseManager:
             ]
             
             self.sheets.append_rows("Bookings", [new_booking])
+            try:
+                self.add_audit_log(actor or 'web', 'add_booking', 'Bookings', f"Added booking {new_booking[0]} for client {new_booking[1]}")
+            except Exception:
+                pass
             return True, f"✅ Запись создана!"
         
         except Exception as e:
@@ -720,7 +735,7 @@ class DatabaseManager:
             logger.error(f"Error editing booking: {e}")
             return False, f"❌ Ошибка: {str(e)}"
     
-    def cancel_booking(self, booking_id: str, reason: str = "") -> Tuple[bool, str]:
+    def cancel_booking(self, booking_id: str, reason: str = "", actor: str = 'web') -> Tuple[bool, str]:
         """Отменить запись"""
         try:
             data = self.sheets.get_sheet_values("Bookings", "A:K")
@@ -743,13 +758,17 @@ class DatabaseManager:
                 row[9] = f"[ОТМЕНА: {reason}] " + (row[9] if row[9] else "")
             
             self.sheets.update_range("Bookings", f"A{row_idx+1}:K{row_idx+1}", [row])
+            try:
+                self.add_audit_log(actor or 'web', 'cancel_booking', 'Bookings', f"Cancelled booking {booking_id} reason={reason}")
+            except Exception:
+                pass
             return True, f"✅ Запись отменена!"
         
         except Exception as e:
             logger.error(f"Error canceling booking: {e}")
             return False, f"❌ Ошибка: {str(e)}"
     
-    def confirm_booking(self, booking_id: str) -> Tuple[bool, str]:
+    def confirm_booking(self, booking_id: str, actor: str = 'web') -> Tuple[bool, str]:
         """Подтвердить запись"""
         try:
             data = self.sheets.get_sheet_values("Bookings", "A:K")
@@ -770,13 +789,17 @@ class DatabaseManager:
             row[8] = "confirmed"  # status
             
             self.sheets.update_range("Bookings", f"A{row_idx+1}:K{row_idx+1}", [row])
+            try:
+                self.add_audit_log(actor or 'web', 'confirm_booking', 'Bookings', f"Confirmed booking {booking_id}")
+            except Exception:
+                pass
             return True, f"✅ Запись подтверждена!"
         
         except Exception as e:
             logger.error(f"Error confirming booking: {e}")
             return False, f"❌ Ошибка: {str(e)}"
     
-    def complete_booking(self, booking_id: str) -> Tuple[bool, str]:
+    def complete_booking(self, booking_id: str, actor: str = 'web') -> Tuple[bool, str]:
         """Отметить запись как выполненную"""
         try:
             data = self.sheets.get_sheet_values("Bookings", "A:K")
@@ -797,6 +820,10 @@ class DatabaseManager:
             row[8] = "completed"  # status
             
             self.sheets.update_range("Bookings", f"A{row_idx+1}:K{row_idx+1}", [row])
+            try:
+                self.add_audit_log(actor or 'web', 'complete_booking', 'Bookings', f"Completed booking {booking_id}")
+            except Exception:
+                pass
             
             # Обновить last_visit для клиента
             client_id = row[1]
@@ -1069,6 +1096,16 @@ class DatabaseManager:
             row = [datetime.now().isoformat(), str(admin_id), action, sheet, details]
             self.sheets.append_rows(self.audit_sheet, [row])
             return True
+            try:
+                # Ensure audit sheet exists
+                if not self.sheets.get_sheet_values(self.audit_sheet):
+                    headers = ["timestamp", "admin_id", "action", "sheet", "details"]
+                    self.sheets.append_rows(self.audit_sheet, [headers])
+                row = [datetime.now().isoformat(), str(admin_id), action, sheet, details]
+                self.sheets.append_rows(self.audit_sheet, [row])
+                return True
+            except Exception:
+                return False
         except Exception as e:
             logger.error(f"Error adding audit log: {e}")
             return False

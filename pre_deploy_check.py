@@ -341,8 +341,30 @@ def check_tests():
     """Run pytest suite and report status; return boolean"""
     print_section("Unit Tests")
     try:
-        result = subprocess.run('pytest -q', shell=True)
-        return result.returncode == 0
+        import sys
+        python_exec = sys.executable or "python3"
+        # Run pytest using the current Python executable; if missing deps error occurs,
+        # suggest running inside a virtualenv, or attempt to create a temp venv and install deps.
+        cmd = f"{python_exec} -m pytest -q"
+        result = subprocess.run(cmd, shell=True, capture_output=True, text=True)
+        if result.returncode == 0:
+            return True
+        # If import errors are due to missing packages like fastapi, attempt a temporary isolated venv
+        stderr = (result.stderr or "") + (result.stdout or "")
+        if 'ModuleNotFoundError' in stderr and 'fastapi' in stderr:
+            print(f"{Colors.YELLOW}⚠️  Missing dependencies when running pytest: attempting to run in temporary venv{Colors.ENDC}")
+            tmp_venv = '.venv_predeploy'
+            try:
+                # Create venv
+                subprocess.run(f"{python_exec} -m venv {tmp_venv}", shell=True, check=True)
+                venv_python = f"{tmp_venv}/bin/python"
+                subprocess.run(f"{venv_python} -m pip install -r requirements.txt", shell=True, check=True)
+                res2 = subprocess.run(f"{venv_python} -m pytest -q", shell=True)
+                return res2.returncode == 0
+            except Exception as e:
+                print(f"{Colors.YELLOW}⚠️  Temp venv pytest run failed: {e}{Colors.ENDC}")
+                return False
+        return False
     except Exception as e:
         print(f"{Colors.RED}❌ Error running pytest: {e}{Colors.ENDC}")
         return False

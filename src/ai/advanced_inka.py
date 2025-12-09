@@ -880,7 +880,8 @@ class AdvancedINKA:
                          filter_value: Optional[str] = None, limit: int = 50) -> Dict:
         """Получить информацию из базы данных с кэшированием расписания"""
         try:
-            if not self.sheets_client:
+            from src.web.app import db_manager as _db_manager
+            if not self.sheets_client and not _db_manager:
                 return {"error": "Database connection not available"}
             
             # Нормализуем названия таблиц (преобразуем английский/lowercase в русский)
@@ -905,7 +906,30 @@ class AdvancedINKA:
                     return self._services_cache
             
             # Получаем все данные из таблицы
-            data = self.sheets_client.get_all_rows(table)
+            # If there is no sheets_client but a DB manager (e.g., running under web app), use it
+            if not self.sheets_client and _db_manager:
+                table_lower = table.strip().lower()
+                if table_lower in ("мастера", "masters", "мастер", "master"):
+                    rows_dicts = _db_manager.get_all_masters()
+                elif table_lower in ("услуги", "services", "услуга", "service"):
+                    rows_dicts = _db_manager.get_all_services()
+                elif table_lower in ("записи", "bookings", "запись", "booking"):
+                    rows_dicts = _db_manager.get_all_bookings()
+                elif table_lower in ("клиенты", "clients", "client", "клиент"):
+                    rows_dicts = _db_manager.get_all_clients()
+                else:
+                    rows_dicts = []
+
+                if not rows_dicts:
+                    return {"data": [], "count": 0, "message": f"Таблица {table} пуста"}
+
+                # Build headers and matrix-compatible 'data' as expected by the rest of this method
+                headers = list(rows_dicts[0].keys())
+                data = [headers]
+                for d in rows_dicts:
+                    data.append([d.get(h, "") for h in headers])
+            else:
+                data = self.sheets_client.get_all_rows(table)
             
             if not data or len(data) < 2:
                 return {"data": [], "count": 0, "message": f"Таблица {table} пуста"}
@@ -1262,8 +1286,10 @@ class AdvancedINKA:
                      email: str = "", notes: str = "") -> Dict:
         """Создать или обновить клиента в БД. Автоматически создаёт если не существует."""
         try:
-            if not self.sheets_client:
-                logger.error("❌ Database connection not available")
+            # Accept either sheets_client or db_manager (if INKA is running in web app)
+            from src.web.app import db_manager as _db_manager
+            if not self.sheets_client and not _db_manager:
+                logger.error("❌ Database connection not available (no sheets_client or db_manager)")
                 return {"error": "Database connection not available"}
             
             # Нормализуем telegram_id
@@ -1288,7 +1314,7 @@ class AdvancedINKA:
                 return {
                     "success": True,
                     "message": f"✅ Профиль найден: {existing_client.get('name')}",
-                    "client": existing_client,
+                    "client": {**existing_client, "user_id": existing_client.get("telegram_id")},
                     "is_new": False
                 }
             
@@ -1312,8 +1338,24 @@ class AdvancedINKA:
             
             logger.info(f"📝 Creating new client with row: {client_row}")
             
-            # Добавляем в таблицу
-            success = self.sheets_client.append_row("Клиенты", client_row)
+            # Try to go through admin db manager if available (to keep behavior consistent)
+            success = False
+            try:
+                from src.web.app import db_manager
+                if db_manager:
+                    # db_manager.add_client expects keys like 'name', 'phone', 'telegram_id', 'email', 'notes'
+                            success, msg = db_manager.add_client({
+                        'name': name,
+                        'phone': phone or "",
+                        'telegram_id': telegram_id_str,
+                        'email': email or "",
+                        'notes': notes or ""
+                            }, actor='inka')
+            except Exception:
+                # Ignore and fallback to direct append
+                pass
+            if not success:
+                success = self.sheets_client.append_row("Клиенты", client_row)
             
             if success:
                 logger.info(f"✅ Client created: {client_id}, name={name}, telegram_id={telegram_id_str}")
@@ -1322,7 +1364,9 @@ class AdvancedINKA:
                     "message": f"✅ Создан новый профиль: {name}",
                     "client": {
                         "id": client_id,
+                        "client_id": client_id,
                         "telegram_id": telegram_id_str,
+                        "user_id": telegram_id_str,
                         "name": name,
                         "phone": phone,
                         "email": email,
@@ -1337,6 +1381,121 @@ class AdvancedINKA:
         except Exception as e:
             logger.error(f"Client creation error: {e}", exc_info=True)
             return {"error": str(e)}
+
+    # ------------------ ADMIN DB WRAPPERS (USED BY INKA) ------------------
+    def get_clients(self, search: str = None):
+        """Return list of clients via admin db manager or sheets directly"""
+        try:
+            from src.web.app import db_manager
+            if db_manager:
+                return db_manager.get_all_clients()
+        except Exception:
+            pass
+        # fallback
+        try:
+            rows = self.sheets_client.get_sheet_values("Clients")
+            if not rows:
+                return []
+            headers = rows[0]
+            data = []
+            for row in rows[1:]:
+                d = {headers[i]: row[i] if i < len(row) else '' for i in range(len(headers))}
+                data.append(d)
+            return data
+        except Exception as e:
+            logger.error(f"Error reading clients directly: {e}")
+            return []
+
+    def get_client_by_user_id(self, user_id: str):
+        """Find client by user_id (telegram ID) or by client id"""
+        try:
+            from src.web.app import db_manager
+            if db_manager:
+                clients = db_manager.get_all_clients()
+                for c in clients:
+                    if str(c.get('user_id') or c.get('telegram_id') or '') == str(user_id):
+                        return c
+            # Fallback - look in sheets
+            rows = self.sheets_client.get_sheet_values('Clients')
+            if rows and len(rows) > 1:
+                headers = rows[0]
+                for row in rows[1:]:
+                    # Telegram ID may be column 1 (index 1) per conventions
+                    if len(row) > 1 and str(row[1]).strip() == str(user_id).strip():
+                        return {headers[i]: row[i] if i < len(row) else '' for i in range(len(headers))}
+        except Exception as e:
+            logger.error(f"Error getting client by user_id: {e}")
+        return None
+
+    def edit_client_by_user_id(self, user_id: str, updates: Dict[str, str]) -> Dict:
+        """Edit client by user id using db_manager if present"""
+        try:
+            from src.web.app import db_manager
+            if db_manager:
+                clients = db_manager.get_all_clients()
+                for c in clients:
+                    if str(c.get('user_id') or c.get('telegram_id') or '') == str(user_id):
+                        client_id = c.get('client_id') or c.get('id')
+                        return {'success': bool(db_manager.edit_client(client_id, updates))}
+            return {'success': False, 'message': 'Client or DB Manager not found'}
+        except Exception as e:
+            logger.error(f"Error editing client by user id: {e}")
+            return {'success': False, 'message': str(e)}
+
+    def add_master(self, master_data: Dict[str, str]) -> Dict:
+        try:
+            from src.web.app import db_manager
+            if db_manager:
+                success, msg = db_manager.add_master(master_data)
+                return {"success": success, "message": msg}
+            return {"success": False, "message": "DB manager not available"}
+        except Exception as e:
+            logger.error(f"Error adding master: {e}")
+            return {"success": False, "message": str(e)}
+
+    def add_service(self, service_data: Dict[str, str]) -> Dict:
+        try:
+            from src.web.app import db_manager
+            if db_manager:
+                success, msg = db_manager.add_service(service_data)
+                return {"success": success, "message": msg}
+            return {"success": False, "message": "DB manager not available"}
+        except Exception as e:
+            logger.error(f"Error adding service: {e}")
+            return {"success": False, "message": str(e)}
+
+    def confirm_booking_by_id(self, booking_id: str) -> Dict:
+        try:
+            from src.web.app import db_manager
+            if db_manager:
+                success, msg = db_manager.confirm_booking(booking_id)
+                return {"success": success, "message": msg}
+            return {"success": False, "message": "DB manager not available"}
+        except Exception as e:
+            logger.error(f"Error confirming booking: {e}")
+            return {"success": False, "message": str(e)}
+
+    def complete_booking_by_id(self, booking_id: str) -> Dict:
+        try:
+            from src.web.app import db_manager
+            if db_manager:
+                success, msg = db_manager.complete_booking(booking_id)
+                return {"success": success, "message": msg}
+            return {"success": False, "message": "DB manager not available"}
+        except Exception as e:
+            logger.error(f"Error completing booking: {e}")
+            return {"success": False, "message": str(e)}
+
+    def cancel_booking_by_id(self, booking_id: str, reason: str = "") -> Dict:
+        try:
+            from src.web.app import db_manager
+            if db_manager:
+                success, msg = db_manager.cancel_booking(booking_id, reason)
+                return {"success": success, "message": msg}
+            return {"success": False, "message": "DB manager not available"}
+        except Exception as e:
+            logger.error(f"Error cancelling booking: {e}")
+            return {"success": False, "message": str(e)}
     
     def create_booking(self, user_id: str, master_id: str, date: str, 
                       time: str, service: str, notes: str = "",
@@ -1353,7 +1512,8 @@ class AdvancedINKA:
         - client_gender: Пол клиента
         """
         try:
-            if not self.sheets_client:
+            from src.web.app import db_manager as _db_manager
+            if not self.sheets_client and not _db_manager:
                 return {"error": "Database connection not available"}
             
             # ============================================================
@@ -1460,19 +1620,35 @@ class AdvancedINKA:
                             logger.info(f"Updating client {client_id} with: {update_data}")
                             # Реально обновляем клиента в БД
                             try:
-                                self.sheets_client.update_client(client_id, update_data)
+                                # prefer db_manager
+                                from src.web.app import db_manager as _db_manager
+                                if _db_manager:
+                                    _db_manager.edit_client(client_id, update_data, actor='inka')
+                                elif self.sheets_client:
+                                    self.sheets_client.update_client(client_id, update_data)
                                 logger.info(f"✅ Client {client_id} updated successfully")
                             except Exception as upd_e:
-                                logger.warning(f"Could not update client in sheets: {upd_e}")
+                                logger.warning(f"Could not update client in sheets/db manager: {upd_e}")
                     except Exception as e:
                         logger.warning(f"Could not update client: {e}")
             
-            # Получаем информацию о мастере
-            masters_data = self.get_database_info("masters", "id", master_id, limit=1)
-            if not masters_data.get("data"):
-                return {"error": f"Master {master_id} not found"}
-            
-            master_name = masters_data["data"][0].get("name", f"Master {master_id}")
+            # Получаем информацию о мастере — prefer db_manager if present
+            master = None
+            try:
+                from src.web.app import db_manager as _db_manager
+                if _db_manager:
+                    masters = _db_manager.get_all_masters()
+                    master = next((m for m in masters if m.get('id') == master_id), None)
+            except Exception:
+                master = None
+
+            if not master:
+                masters_data = self.get_database_info("masters", "id", master_id, limit=1)
+                if not masters_data.get("data"):
+                    return {"error": f"Master {master_id} not found"}
+                master = masters_data["data"][0]
+
+            master_name = master.get("name", f"Master {master_id}")
             
             # Создаём бронирование
             import uuid
@@ -1495,8 +1671,27 @@ class AdvancedINKA:
                 created_at           # created_at
             ]
             
-            # Добавляем запись в таблицу
-            success = self.sheets_client.append_row("Записи", booking_row)
+            # Добавляем запись в таблицу — prefer admin DB manager to enforce validation and audit
+            success = False
+            try:
+                from src.web.app import db_manager
+                if db_manager:
+                    success, msg = db_manager.add_booking({
+                        'client_id': client_id,
+                        'master_id': master_id,
+                        'service_id': service,
+                        'date': date,
+                        'time': time,
+                        'duration_min': '60',
+                        'price': '',
+                        'status': 'confirmed',
+                        'notes': full_notes,
+                        'created_at': created_at
+                    }, actor='inka')
+            except Exception:
+                pass
+            if not success:
+                success = self.sheets_client.append_row("Записи", booking_row)
             
             if success:
                 logger.info(f"Booking created: {booking_id}, client={client_id}, master={master_id}, date={date}, time={time}")

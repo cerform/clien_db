@@ -97,7 +97,8 @@ class GoogleSheetsClient:
             if range_spec:
                 range_name = f"{sheet_name_resolved}!{range_spec}"
             else:
-                range_name = sheet_name_resolved
+                # When no explicit range is provided, request a reasonable default (A1:Z)
+                range_name = f"{sheet_name_resolved}!A1:Z"
             
             result = self.service.spreadsheets().values().get(
                 spreadsheetId=self.spreadsheet_id,
@@ -167,6 +168,17 @@ class GoogleSheetsClient:
         except Exception as e:
             logger.debug(f"Failed to resolve sheet name {sheet_name}: {e}")
             return sheet_name
+
+    def _sheet_exists(self, sheet_name: str) -> bool:
+        """Returns True if a sheet with provided name exists (case-insensitive), False otherwise"""
+        try:
+            for s in self.get_sheets_list():
+                if s.strip().lower() == sheet_name.strip().lower():
+                    return True
+            return False
+        except Exception as e:
+            logger.debug(f"_sheet_exists check failed for '{sheet_name}': {e}")
+            return False
     
     def append_row(self, sheet_name: str, values: List[Any]) -> bool:
         """
