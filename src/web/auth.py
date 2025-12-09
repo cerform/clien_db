@@ -8,6 +8,8 @@ import logging
 from typing import Optional, List, Dict, Any, Tuple
 from datetime import datetime
 from pathlib import Path
+from fastapi import Header, Request, HTTPException, Depends
+from src.services.permissions import check_permission
 
 logger = logging.getLogger(__name__)
 
@@ -270,6 +272,32 @@ def validate_admin_token(token: str) -> Optional[Dict[str, Any]]:
         if (a['id'] == admin_id or a['id'].endswith(admin_id)) and a.get('is_active', True):
             return { 'id': a['id'], 'username': a['username'], 'role': a.get('role', 'admin') }
     return None
+
+
+def require_permission(action: str):
+    """FastAPI dependency to require permission for given action.
+
+    The dependency checks 'Authorization' header for admin tokens first
+    and falls back to X-Requester header (e.g., 'inka' or 'web').
+    """
+    async def dependency(request: Request, authorization: Optional[str] = Header(None), x_requester: Optional[str] = Header(None)):
+        actor = None
+        # Admin auth via Bearer token
+        if authorization:
+            admin = validate_admin_token(authorization)
+            if admin and admin.get('role'):
+                actor = admin.get('role')
+            elif admin and admin.get('id'):
+                actor = admin.get('id')
+        # Fallback to X-Requester
+        if actor is None and x_requester:
+            actor = x_requester
+        if actor is None:
+            raise HTTPException(status_code=403, detail="Missing actor for permission check")
+        if not check_permission(actor, action):
+            raise HTTPException(status_code=403, detail=f"Permission denied for actor '{actor}' to perform '{action}'")
+        return True
+    return Depends(dependency)
 
 
 def get_admin_password_hash() -> str:

@@ -9,6 +9,7 @@ import uuid
 logger = logging.getLogger(__name__)
 
 api_router = APIRouter(prefix="/api", tags=["api"])
+from src.web.auth import require_permission
 from collections import deque
 
 _monitor_history = deque(maxlen=50)
@@ -111,7 +112,7 @@ async def get_clients() -> List[dict]:
         raise HTTPException(status_code=500, detail=str(e))
 
 @api_router.post("/clients")
-async def create_client(request: Request) -> Dict[str, Any]:
+async def create_client(request: Request, _permission: bool = Depends(require_permission('add_client'))) -> Dict[str, Any]:
     from src.web.app import db_manager
     if db_manager is None:
         raise HTTPException(status_code=500, detail="Database not initialized")
@@ -128,7 +129,7 @@ async def create_client(request: Request) -> Dict[str, Any]:
         raise HTTPException(status_code=500, detail=str(e))
 
 @api_router.put("/clients/{client_id}")
-async def update_client(client_id: str, request: Request) -> Dict[str, Any]:
+async def update_client(client_id: str, request: Request, _permission: bool = Depends(require_permission('edit_client'))) -> Dict[str, Any]:
     from src.web.app import db_manager
     if db_manager is None:
         raise HTTPException(status_code=500, detail="Database not initialized")
@@ -144,7 +145,6 @@ async def update_client(client_id: str, request: Request) -> Dict[str, Any]:
         logger.error(f"Error updating client: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
-@api_router.delete("/clients/{client_id}")
 @api_router.get('/clients/{client_id_or_user}')
 async def get_client_by_id(client_id_or_user: str) -> Dict[str, Any]:
     from src.web.app import db_manager
@@ -171,7 +171,8 @@ async def get_client_by_id(client_id_or_user: str) -> Dict[str, Any]:
     except Exception as e:
         logger.error(f"Error getting client: {e}")
         raise HTTPException(status_code=500, detail=str(e))
-async def delete_client(client_id: str) -> Dict[str, Any]:
+@api_router.delete("/clients/{client_id}")
+async def delete_client(client_id: str, request: Request, _permission: bool = Depends(require_permission('delete_client'))) -> Dict[str, Any]:
     from src.web.app import db_manager
     if db_manager is None:
         raise HTTPException(status_code=500, detail="Database not initialized")
@@ -207,7 +208,7 @@ async def get_masters() -> List[dict]:
         raise HTTPException(status_code=500, detail=str(e))
 
 @api_router.post("/masters")
-async def create_master(request: Request) -> Dict[str, Any]:
+async def create_master(request: Request, _permission: bool = Depends(require_permission('add_master'))) -> Dict[str, Any]:
     from src.web.app import db_manager
     if db_manager is None:
         raise HTTPException(status_code=500, detail="Database not initialized")
@@ -223,7 +224,7 @@ async def create_master(request: Request) -> Dict[str, Any]:
         raise HTTPException(status_code=500, detail=str(e))
 
 @api_router.put("/masters/{master_id}")
-async def update_master(master_id: str, request: Request) -> Dict[str, Any]:
+async def update_master(master_id: str, request: Request, _permission: bool = Depends(require_permission('edit_master'))) -> Dict[str, Any]:
     from src.web.app import db_manager
     if db_manager is None:
         raise HTTPException(status_code=500, detail="Database not initialized")
@@ -239,7 +240,7 @@ async def update_master(master_id: str, request: Request) -> Dict[str, Any]:
         raise HTTPException(status_code=500, detail=str(e))
 
 @api_router.delete("/masters/{master_id}")
-async def delete_master(master_id: str) -> Dict[str, Any]:
+async def delete_master(master_id: str, _permission: bool = Depends(require_permission('delete_master'))) -> Dict[str, Any]:
     from src.web.app import db_manager
     if db_manager is None:
         raise HTTPException(status_code=500, detail="Database not initialized")
@@ -268,7 +269,7 @@ async def get_services() -> List[dict]:
         raise HTTPException(status_code=500, detail=str(e))
 
 @api_router.post("/services")
-async def create_service(request: Request) -> Dict[str, Any]:
+async def create_service(request: Request, _permission: bool = Depends(require_permission('add_service'))) -> Dict[str, Any]:
     from src.web.app import db_manager
     if db_manager is None:
         raise HTTPException(status_code=500, detail="Database not initialized")
@@ -284,7 +285,7 @@ async def create_service(request: Request) -> Dict[str, Any]:
         raise HTTPException(status_code=500, detail=str(e))
 
 @api_router.put("/services/{service_id}")
-async def update_service(service_id: str, request: Request) -> Dict[str, Any]:
+async def update_service(service_id: str, request: Request, _permission: bool = Depends(require_permission('edit_service'))) -> Dict[str, Any]:
     from src.web.app import db_manager
     if db_manager is None:
         raise HTTPException(status_code=500, detail="Database not initialized")
@@ -300,7 +301,7 @@ async def update_service(service_id: str, request: Request) -> Dict[str, Any]:
         raise HTTPException(status_code=500, detail=str(e))
 
 @api_router.delete("/services/{service_id}")
-async def delete_service(service_id: str) -> Dict[str, Any]:
+async def delete_service(service_id: str, _permission: bool = Depends(require_permission('delete_service'))) -> Dict[str, Any]:
     from src.web.app import db_manager
     if db_manager is None:
         raise HTTPException(status_code=500, detail="Database not initialized")
@@ -329,7 +330,7 @@ async def get_bookings() -> List[dict]:
         raise HTTPException(status_code=500, detail=str(e))
 
 @api_router.post("/bookings/{booking_id}/confirm")
-async def confirm_booking(booking_id: str, request: Request) -> Dict[str, Any]:
+async def confirm_booking(booking_id: str, request: Request, _permission: bool = Depends(require_permission('confirm_booking'))) -> Dict[str, Any]:
     from src.web.app import db_manager
     if db_manager is None:
         raise HTTPException(status_code=500, detail="Database not initialized")
@@ -345,7 +346,7 @@ async def confirm_booking(booking_id: str, request: Request) -> Dict[str, Any]:
         raise HTTPException(status_code=500, detail=str(e))
 
 @api_router.post("/bookings/{booking_id}/complete")
-async def complete_booking(booking_id: str, request: Request) -> Dict[str, Any]:
+async def complete_booking(booking_id: str, request: Request, _permission: bool = Depends(require_permission('complete_booking'))) -> Dict[str, Any]:
     from src.web.app import db_manager
     if db_manager is None:
         raise HTTPException(status_code=500, detail="Database not initialized")
@@ -361,7 +362,7 @@ async def complete_booking(booking_id: str, request: Request) -> Dict[str, Any]:
         raise HTTPException(status_code=500, detail=str(e))
 
 @api_router.delete("/bookings/{booking_id}")
-async def delete_booking(booking_id: str, request: Request) -> Dict[str, Any]:
+async def delete_booking(booking_id: str, request: Request, _permission: bool = Depends(require_permission('cancel_booking'))) -> Dict[str, Any]:
     from src.web.app import db_manager
     if db_manager is None:
         raise HTTPException(status_code=500, detail="Database not initialized")
