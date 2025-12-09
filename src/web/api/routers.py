@@ -55,6 +55,12 @@ async def monitoring_history() -> Dict[str, Any]:
     return { 'history': list(_monitor_history) }
 
 
+@api_router.get("/health")
+async def health_check() -> Dict[str, str]:
+    """Health check endpoint"""
+    return {"status": "ok", "service": "tattoo-bot-admin"}
+
+
 @api_router.post('/telemetry/events')
 async def telemetry_event(request: Request) -> Dict[str, Any]:
     """Accepts small frontend telemetry events (ui warnings, errors).
@@ -447,6 +453,106 @@ async def add_audit_log(request: Request) -> Dict[str, Any]:
     except Exception as e:
         logger.error(f"Error adding audit log: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+
+# ================== ADMINS (WEB USERS) ==================
+@api_router.get('/admins')
+async def get_admins() -> List[Dict[str, Any]]:
+    """Return a list of admin users configured for the web UI"""
+    try:
+        from src.web.auth import get_admin_users
+        return get_admin_users()
+    except Exception as e:
+        logger.error(f"Error getting admins: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@api_router.post('/admins')
+async def create_admin(request: Request) -> Dict[str, Any]:
+    try:
+        from src.web.auth import add_admin_user
+        body = await request.json()
+        username = body.get('username', '').strip()
+        password = body.get('password', '')
+        role = body.get('role', 'admin')
+        telegram_id = body.get('telegram_id')
+
+        success, message = add_admin_user(username=username, password=password, role=role, telegram_id=telegram_id)
+        if success:
+            return {"success": True, "message": message}
+        raise HTTPException(status_code=400, detail=message)
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error creating admin: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@api_router.put('/admins/{admin_id}')
+async def update_admin(admin_id: str, request: Request) -> Dict[str, Any]:
+    try:
+        from src.web.auth import update_admin_user
+        body = await request.json()
+        success, message = update_admin_user(admin_id, body)
+        if success:
+            return {"success": True, "message": message}
+        raise HTTPException(status_code=400, detail=message)
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error updating admin: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@api_router.delete('/admins/{admin_id}')
+async def delete_admin(admin_id: str) -> Dict[str, Any]:
+    try:
+        from src.web.auth import delete_admin_user
+        success, message = delete_admin_user(admin_id)
+        if success:
+            return {"success": True, "message": message}
+        raise HTTPException(status_code=400, detail=message)
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error deleting admin: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@api_router.put('/admins/{admin_id}/toggle-status')
+async def toggle_admin_status_api(admin_id: str) -> Dict[str, Any]:
+    try:
+        from src.web.auth import toggle_admin_status
+        success, message, status = toggle_admin_status(admin_id)
+        if success:
+            return {"success": True, "message": message, "is_active": status}
+        raise HTTPException(status_code=400, detail=message)
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error toggling admin status: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@api_router.post('/admins/{admin_id}/change-password')
+async def change_admin_password_api(admin_id: str, request: Request) -> Dict[str, Any]:
+    try:
+        from src.web.auth import change_admin_password
+        body = await request.json()
+        new_password = body.get('new_password')
+        current_password = body.get('current_password')
+        if not new_password:
+            raise HTTPException(status_code=400, detail='new_password required')
+        success, message = change_admin_password(admin_id, new_password, current_password)
+        if success:
+            return {"success": True, "message": message}
+        raise HTTPException(status_code=400, detail=message)
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error changing admin password: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
 
 
 # ================== INKA TRAINING ==================
