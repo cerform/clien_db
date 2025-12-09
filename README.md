@@ -275,6 +275,24 @@ cp env.example.yaml env.yaml
 
 For CI/CD and production, add secrets to your cloud provider's secret store (e.g. GCP Secret Manager, GitHub Secrets) rather than committing them to the repository.
 
+### 📡 Telemetry & Errors
+
+- The admin UI captures JS console warnings and errors and forwards them to the backend `/api/telemetry/events` endpoint.
+- A lightweight in-memory telemetry history is exposed by `/api/telemetry/history` which is available via the admin UI at `/admin/telemetry`.
+- For production, set `SENTRY_DSN` in your environment to forward events to Sentry. You may also enable Cloud Logging with `ENABLE_CLOUD_LOGGING=true` to forward logs to Google Cloud Logging.
+
+### ✅ Pre-commit checks (local)
+
+We include a local pre-commit configuration to prevent committing secrets and common mistakes. To set it up locally:
+
+```bash
+python -m pip install --user pre-commit
+pre-commit install
+pre-commit run --all-files
+```
+
+This runs the local `scripts/check_banned_files.sh` hook and other standard pre-commit hooks (trailing whitespace, EOF fixer, etc.).
+
 ## 🤝 Контакт
 
 - **Owner**: @cerform
