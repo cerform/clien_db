@@ -9,6 +9,7 @@ import sys
 import pytest
 from pathlib import Path
 from unittest.mock import Mock, patch, MagicMock
+from tests.mocks.google_sheets_client import MockGoogleSheetsClient
 
 # Add src directory to path for imports
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
@@ -41,6 +42,40 @@ def mock_google_sheets():
         ]
     }
     return mock
+
+
+@pytest.fixture
+def mock_sheets_client(monkeypatch, mock_sheet_data):
+    """Provide and patch the GoogleSheetsClient to use in-memory mock for tests."""
+    initial_data = {
+        'Masters': [
+            ['id','name','phone','telegram_id','specialization','rating','experience','instagram','status','bio','calendar_id'],
+            ['1','Anna','+1234567890','111','реализм','4.5','5','@anna','active','bio','cal_1']
+        ],
+        'Services': [
+            ['id','name','description','duration_min','price_from','price_to','category','active'],
+            ['1','Consultation','free',30,0,0,'other','TRUE']
+        ],
+        'Clients': [
+            ['id','telegram_id','name','phone','email','notes','created_at','last_visit'],
+        ],
+        'Bookings': [
+            ['id','client_id','master_id','service_id','date','time','duration_min','price','status','notes','created_at'],
+        ],
+        'Расписание': [
+            ['id','master_id','day_of_week','start_time','end_time','is_working','break_start','break_end','notes'],
+        ],
+        'Admin_Audit_Log': [
+            ['timestamp','admin_id','action','sheet','details'],
+        ],
+        'INKA_Training': [
+            ['id','timestamp','category','user_input','inka_response','admin_correction','improvement','tags','status'],
+        ]
+    }
+
+    mock_client = MockGoogleSheetsClient(initial_data=initial_data)
+    monkeypatch.setattr('src.db.sheets_client.GoogleSheetsClient', lambda credentials_file, spreadsheet_id: mock_client)
+    return mock_client
 
 
 @pytest.fixture

@@ -77,12 +77,28 @@ def create_app() -> FastAPI:
         allow_methods=["*"],
         allow_headers=["*"],
     )
+
+    # RBAC enforcement middleware (centralized permission checks)
+    try:
+        from src.web.middleware import RBACMiddleware
+        app.add_middleware(RBACMiddleware)
+        logger.info('✅ RBAC middleware added')
+    except Exception as e:
+        logger.warning(f'⚠️ Could not add RBAC middleware: {e}')
     
     # Static files
     static_dir = Path(__file__).parent / "static"
     if static_dir.exists():
         app.mount("/static", StaticFiles(directory=static_dir), name="static")
     
+    # Use custom APIRoute class to enforce RBAC at route level
+    try:
+        from src.web.rbac_route import RBACRoute
+        app.router.route_class = RBACRoute
+        logger.info('✅ RBAC route class applied')
+    except Exception as e:
+        logger.warning(f'⚠️ Could not apply RBAC route class: {e}')
+
     # Include API routers
     app.include_router(routers.api_router)
     

@@ -1003,6 +1003,7 @@ async def get_master_calendar(master_id: str, start_date: str, end_date: str) ->
         
         # Get calendar events if calendar_id exists
         calendar_events = []
+        calendar_fetch_ok = False
         if master.get("calendar_id"):
             try:
                 calendar = GoogleCalendarSync(
@@ -1010,14 +1011,19 @@ async def get_master_calendar(master_id: str, start_date: str, end_date: str) ->
                     master.get("calendar_id")
                 )
                 calendar_events = calendar.get_events(start_date, end_date) or []
+                calendar_fetch_ok = True
             except Exception as e:
                 logger.warning(f"Failed to load calendar events: {e}")
+                calendar_error = str(e)
+                calendar_fetch_ok = False
         
         return {
             "success": True,
             "master_id": master_id,
             "master_name": master.get("name", ""),
             "calendar_id": master.get("calendar_id", ""),
+            "calendar_fetch_ok": calendar_fetch_ok,
+            "calendar_error": calendar_error if 'calendar_error' in locals() else None,
             "schedule": schedule,
             "bookings": master_bookings,
             "calendar_events": calendar_events
@@ -1051,6 +1057,7 @@ async def get_sync_status(master_id: str) -> Dict[str, Any]:
         today_str = today.strftime("%Y-%m-%d")
         
         calendar_events = 0
+        calendar_fetch_ok = False
         if calendar_id:
             try:
                 from src.calendars.google_calendar_sync import GoogleCalendarSync
@@ -1062,9 +1069,12 @@ async def get_sync_status(master_id: str) -> Dict[str, Any]:
                 )
                 events = calendar.get_events(past_week, today_str) or []
                 calendar_events = len(events)
+                calendar_fetch_ok = True
             except Exception as e:
                 logger.error(f"Error getting calendar events: {e}")
                 calendar_events = 0
+                calendar_error = str(e)
+                calendar_fetch_ok = False
         
         # Get bookings for this master
         bookings = db_manager.get_all_bookings()
@@ -1074,7 +1084,9 @@ async def get_sync_status(master_id: str) -> Dict[str, Any]:
             "status": "synced",
             "master_id": master_id,
             "calendar_id": calendar_id,
-            "calendar_connected": bool(calendar_id),
+            "calendar_connected": bool(calendar_id) and calendar_fetch_ok,
+            "calendar_fetch_ok": calendar_fetch_ok,
+            "calendar_error": calendar_error if 'calendar_error' in locals() else None,
             "calendar_events": calendar_events,
             "db_schedule_entries": len(schedule),
             "db_bookings": len(master_bookings),

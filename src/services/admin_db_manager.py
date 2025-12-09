@@ -42,9 +42,13 @@ class DatabaseManager:
         
         # Кэш для ID
         self._masters_cache = None
+        self._masters_list_cache = None
         self._services_cache = None
         self._cache_time = 0
         self._cache_ttl = 60  # секунд
+        # Additional short-term cache for heavy sheet reads
+        self._bookings_cache = None
+        self._bookings_cache_time = 0
         # Audit sheet name
         self.audit_sheet = "Admin_Audit_Log"
         # Ensure audit sheet exists with headers
@@ -194,10 +198,28 @@ class DatabaseManager:
     
     def get_all_masters(self) -> List[Dict[str, Any]]:
         """Получить ВСЕ мастеров (для API)"""
+        # use cached list if available (avoid frequent Sheets reads)
+        import time
+        if self._masters_list_cache:
+            return self._masters_list_cache
         result = self.get_masters_list()
         if "error" in result:
             return []
-        return result.get("masters", [])
+        masters = result.get("masters", [])
+        # cache briefly to avoid rate limits
+        try:
+            self._masters_list_cache = masters
+            # schedule a simple TTL clear (non-blocking)
+            def _clear_cache():
+                import time
+                time.sleep(1)
+                self._masters_list_cache = None
+            import threading
+            t = threading.Thread(target=_clear_cache, daemon=True)
+            t.start()
+        except Exception:
+            pass
+        return masters
     
     def get_all_services(self) -> List[Dict[str, Any]]:
         """Получить ВСЕ услуги (для API)"""
@@ -215,6 +237,11 @@ class DatabaseManager:
     
     def get_all_bookings(self) -> List[Dict[str, Any]]:
         """Получить ВСЕ записи (для API)"""
+        import time
+        now = time.time()
+        # micro cache for bookings to avoid frequent Sheets reads
+        if getattr(self, '_bookings_cache', None) and (now - getattr(self, '_bookings_cache_time', 0)) < 1:
+            return self._bookings_cache
         try:
             data = self.sheets.get_sheet_values("Bookings", "A:K")
             if not data:
@@ -235,6 +262,8 @@ class DatabaseManager:
                     "notes": row[9] if len(row) > 9 else "",
                 })
             
+            self._bookings_cache = bookings
+            self._bookings_cache_time = now
             return bookings
         except Exception as e:
             logger.error(f"Error getting bookings: {e}")

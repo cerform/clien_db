@@ -34,6 +34,7 @@ class Config:
     # Application
     timezone: str = "Europe/Moscow"
     log_level: str = "INFO"
+    database_url: Optional[str] = None
     
     # Admin settings
     admin_ids: List[int] = None
@@ -61,6 +62,7 @@ class Config:
         
         google_calendar_id = os.getenv("GOOGLE_CALENDAR_ID")
         google_credentials_path = os.getenv("GOOGLE_CREDENTIALS_JSON", "credentials.json")
+        database_url = os.getenv("DATABASE_URL")
         
         return cls(
             telegram_bot_token=token,
@@ -71,6 +73,7 @@ class Config:
             openai_assistant_id=openai_assistant,
             timezone=os.getenv("TIMEZONE", "Europe/Moscow"),
             log_level=os.getenv("LOG_LEVEL", "INFO"),
+            database_url=database_url,
             admin_ids=admin_ids
         )
 

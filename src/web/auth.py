@@ -282,6 +282,14 @@ def require_permission(action: str):
     """
     async def dependency(request: Request, authorization: Optional[str] = Header(None), x_requester: Optional[str] = Header(None)):
         actor = None
+        # Attach required permission to endpoint for middleware enforcement
+        try:
+            endpoint = request.scope.get('endpoint')
+            if endpoint is not None:
+                setattr(endpoint, '__required_permission__', action)
+        except Exception:
+            # not critical if we can't set the attribute
+            pass
         # Admin auth via Bearer token
         if authorization:
             admin = validate_admin_token(authorization)
@@ -297,7 +305,19 @@ def require_permission(action: str):
         if not check_permission(actor, action):
             raise HTTPException(status_code=403, detail=f"Permission denied for actor '{actor}' to perform '{action}'")
         return True
-    return Depends(dependency)
+    return dependency
+
+
+def permission_required(action: str):
+    """Decorator to attach required permission metadata to endpoints.
+
+    Use as `@permission_required('add_client')` on route handlers. It does not replace
+    `Depends(require_permission('...'))` but it helps the middleware pick up the required permission.
+    """
+    def decorator(func):
+        setattr(func, '__required_permission__', action)
+        return func
+    return decorator
 
 
 def get_admin_password_hash() -> str:

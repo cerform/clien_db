@@ -12,6 +12,7 @@ BANNED_PATTERNS=(
   "(^|/)(\.venv|venv|\.deploy_venv)/"
   "\\.pem$"
   "\\.key$"
+  "(^|/)credentials\.json$"
 )
 
 found=()

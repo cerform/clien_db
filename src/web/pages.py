@@ -3231,12 +3231,18 @@ async def schedule_page():
                     const data = await res.json();
                     
                     // Update Calendar Status
-                    document.getElementById('calendarStatus').innerHTML = (data.calendar_connected && data.calendar_id)
+                    const calendar_is_connected = data.calendar_connected && data.calendar_id;
+                    const calendar_ok_to_fetch = data.calendar_fetch_ok !== undefined ? data.calendar_fetch_ok : true;
+                    document.getElementById('calendarStatus').innerHTML = (calendar_is_connected && calendar_ok_to_fetch)
                         ? `<p style="color:green">✅ Подключен</p>
                            <p style="font-size:12px;color:#666">ID: ${data.calendar_id?.substring(0, 30)}...</p>
                            <p>📅 События (7 дней): <strong>${data.calendar_events || 0}</strong></p>`
                         : `<p style="color:red">❌ Не подключен</p>
                            <p style="font-size:12px">Настройте Calendar ID в профиле мастера</p>`;
+                    if (data.calendar_id && !calendar_ok_to_fetch) {
+                        // Show the specific error when we have a calendar but couldn't fetch events
+                        document.getElementById('calendarStatus').innerHTML += `<p style="color:orange;font-size:12px">Ошибка при получении событий: ${data.calendar_error || 'Неизвестная ошибка'}</p>`;
+                    }
                     
                     // Update DB Schedule Status
                     const scheduleCount = data.db_schedule_entries || 0;
@@ -3676,7 +3682,12 @@ async def schedule_page():
                     
                     html += '</div>';
                     
-                    document.getElementById('masterCalendar').innerHTML = html;
+                    // If calendar exists but fetch failed, show a warning
+                    if (data.calendar_id && !data.calendar_fetch_ok) {
+                        document.getElementById('masterCalendar').innerHTML = `<p style="color:orange;text-align:center">Ошибка получения событий календаря: ${data.calendar_error || 'Неизвестная ошибка'}</p>`;
+                    } else {
+                        document.getElementById('masterCalendar').innerHTML = html;
+                    }
                     
                 } catch (e) {
                     console.error('Error loading master calendar:', e);
