@@ -33,6 +33,8 @@ venv/
 # Local virtual environments and caches
 .venv/
 venv/
+.env
+venv_test/
 .deploy_venv/
 .env
 .pytest_cache/
