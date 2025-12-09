@@ -199,6 +199,24 @@ def check_database():
         print(f"{Colors.YELLOW}⚠️  Could not verify database: {str(e)[:100]}{Colors.ENDC}")
         return True  # Not critical for deploy
 
+    # Ensure important sheets exist
+    try:
+        important_sheets = ['Admin_Audit_Log', 'INKA_Training']
+        existing = client.get_sheets_list()
+        for s in important_sheets:
+            if s not in existing:
+                print(f"{Colors.YELLOW}⚠️  Sheet '{s}' not found. Attempting to create...{Colors.ENDC}")
+                try:
+                    created = client.create_sheet(s)
+                    if created:
+                        print(f"{Colors.GREEN}✅ Created sheet: {s}{Colors.ENDC}")
+                    else:
+                        print(f"{Colors.RED}❌ Failed to create sheet: {s}{Colors.ENDC}")
+                except Exception as e:
+                    print(f"{Colors.RED}❌ Failed to create sheet {s}: {e}{Colors.ENDC}")
+    except Exception:
+        pass
+
 def check_openai():
     """Проверить подключение к OpenAI"""
     print_section("OpenAI API Check")

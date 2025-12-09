@@ -30,6 +30,16 @@ class GoogleSheetsClient:
         self.credentials_file = credentials_file
         self.credentials = self._load_credentials()
         self.service = self._build_service()
+        # Aliases to try for sheet names when a provided sheet name doesn't exist.
+        self.sheet_aliases = {
+            'clients': ['Clients', 'Клиенты'],
+            'masters': ['Masters', 'Мастера'],
+            'bookings': ['Bookings', 'Записи'],
+            'services': ['Services', 'Услуги'],
+            'schedule': ['Schedule', 'Расписание'],
+            'pricing': ['Pricing', 'Прайс-лист'],
+            'reviews': ['Reviews', 'Отзывы'],
+        }
     
     def _load_credentials(self):
         """Load credentials from file or Cloud Run's native Service Account"""
@@ -83,10 +93,11 @@ class GoogleSheetsClient:
             List of rows with values
         """
         try:
+            sheet_name_resolved = self._resolve_sheet_name(sheet_name)
             if range_spec:
-                range_name = f"{sheet_name}!{range_spec}"
+                range_name = f"{sheet_name_resolved}!{range_spec}"
             else:
-                range_name = sheet_name
+                range_name = sheet_name_resolved
             
             result = self.service.spreadsheets().values().get(
                 spreadsheetId=self.spreadsheet_id,
@@ -123,6 +134,39 @@ class GoogleSheetsClient:
         except Exception as e:
             logger.error(f"❌ Failed to get sheets list: {e}")
             return []
+
+    def _resolve_sheet_name(self, sheet_name: str) -> str:
+        """
+        Resolve a sheet name to an existing sheet name by trying aliases.
+        If the passed sheet_name exists, return it. Otherwise try common aliases (EN/RU).
+        """
+        try:
+            # If it exists as provided, just return
+            if self._sheet_exists(sheet_name):
+                return sheet_name
+            key = sheet_name.strip().lower()
+            # Try known aliases if key exists
+            if key in self.sheet_aliases:
+                for alt in self.sheet_aliases[key]:
+                    if self._sheet_exists(alt):
+                        logger.info(f"Resolved sheet name '{sheet_name}' -> '{alt}'")
+                        return alt
+            # Try to find any sheet that case-insensitively matches
+            for s in self.get_sheets_list():
+                if s.strip().lower() == key:
+                    return s
+            # As a fallback, if the original has Cyrillic -> English translations
+            for names in self.sheet_aliases.values():
+                for alt in names:
+                    if alt.strip().lower() == key:
+                        # find the counterpart that's present
+                        for cand in names:
+                            if self._sheet_exists(cand):
+                                return cand
+            return sheet_name
+        except Exception as e:
+            logger.debug(f"Failed to resolve sheet name {sheet_name}: {e}")
+            return sheet_name
     
     def append_row(self, sheet_name: str, values: List[Any]) -> bool:
         """
@@ -148,13 +192,14 @@ class GoogleSheetsClient:
                 logger.error("❌ values list is empty!")
                 return False
             
+            sheet_name_resolved = self._resolve_sheet_name(sheet_name)
             body = {'values': [values]}
             logger.debug(f"   Request body: {body}")
             
             logger.info(f"📤 Sending append request to {sheet_name}...")
             response = self.service.spreadsheets().values().append(
                 spreadsheetId=self.spreadsheet_id,
-                range=sheet_name,
+                range=sheet_name_resolved,
                 valueInputOption='USER_ENTERED',
                 body=body
             ).execute()
@@ -189,10 +234,11 @@ class GoogleSheetsClient:
             True if successful
         """
         try:
+            sheet_name_resolved = self._resolve_sheet_name(sheet_name)
             body = {'values': rows}
             self.service.spreadsheets().values().append(
                 spreadsheetId=self.spreadsheet_id,
-                range=sheet_name,
+                range=sheet_name_resolved,
                 valueInputOption='USER_ENTERED',
                 body=body
             ).execute()
@@ -216,7 +262,8 @@ class GoogleSheetsClient:
             True if successful
         """
         try:
-            range_name = f"{sheet_name}!{cell}"
+            sheet_name_resolved = self._resolve_sheet_name(sheet_name)
+            range_name = f"{sheet_name_resolved}!{cell}"
             body = {'values': [[value]]}
             self.service.spreadsheets().values().update(
                 spreadsheetId=self.spreadsheet_id,
@@ -243,7 +290,8 @@ class GoogleSheetsClient:
             True if successful
         """
         try:
-            range_name = f"{sheet_name}!{range_spec}"
+            sheet_name_resolved = self._resolve_sheet_name(sheet_name)
+            range_name = f"{sheet_name_resolved}!{range_spec}"
             body = {'values': values}
             self.service.spreadsheets().values().update(
                 spreadsheetId=self.spreadsheet_id,
@@ -291,7 +339,8 @@ class GoogleSheetsClient:
             True if successful
         """
         try:
-            range_name = f"{sheet_name}!{row_index}:{row_index}"
+            sheet_name_resolved = self._resolve_sheet_name(sheet_name)
+            range_name = f"{sheet_name_resolved}!{row_index}:{row_index}"
             self.service.spreadsheets().values().clear(
                 spreadsheetId=self.spreadsheet_id,
                 range=range_name
@@ -300,6 +349,26 @@ class GoogleSheetsClient:
             return True
         except Exception as e:
             logger.error(f"❌ Failed to delete row {row_index} from {sheet_name}: {e}")
+            return False
+
+    def create_sheet(self, sheet_name: str) -> bool:
+        """
+        Create a new sheet/tab in the spreadsheet if it doesn't already exist.
+        """
+        try:
+            if self._sheet_exists(sheet_name):
+                logger.info(f"Sheet '{sheet_name}' already exists")
+                return True
+            body = {
+                'requests': [
+                    { 'addSheet': { 'properties': { 'title': sheet_name } } }
+                ]
+            }
+            self.service.spreadsheets().batchUpdate(spreadsheetId=self.spreadsheet_id, body=body).execute()
+            logger.info(f"✅ Sheet '{sheet_name}' created successfully")
+            return True
+        except Exception as e:
+            logger.error(f"❌ Failed to create sheet '{sheet_name}': {e}")
             return False
 
     def update_client(self, client_id: str, update_data: Dict[str, Any]) -> bool:

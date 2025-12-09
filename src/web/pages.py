@@ -496,7 +496,7 @@ async def db_manager_page():
                 const url = URL.createObjectURL(blob);
                 const a = document.createElement('a');
                 a.href = url;
-                a.download = `${name.replace(/\s+/g,'_')}.json`;
+                a.download = `${name.replace(/\\s+/g,'_')}.json`;
                 a.click();
             }
 
@@ -4020,7 +4020,10 @@ async def admins_page():
             
             async function loadAdmins() {
                 try {
-                    const response = await fetch('/api/admins');
+                    const token = localStorage.getItem('admin_token');
+                    const headers = token ? { 'Authorization': 'Bearer ' + token } : {};
+                    const response = await fetch('/api/admins', { headers });
+                    if (!response.ok) throw new Error('Unauthorized');
                     allAdmins = await response.json();
                     renderAdmins(allAdmins);
                 } catch (error) {
@@ -4132,9 +4135,11 @@ async def admins_page():
                     const url = id ? `/api/admins/${id}` : '/api/admins';
                     const method = id ? 'PUT' : 'POST';
                     
+                    const token = localStorage.getItem('admin_token');
+                    const headers = token ? { 'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json' } : { 'Content-Type': 'application/json' };
                     const response = await fetch(url, {
                         method: method,
-                        headers: { 'Content-Type': 'application/json' },
+                        headers: headers,
                         body: JSON.stringify(data)
                     });
                     
@@ -4166,9 +4171,11 @@ async def admins_page():
                 }
                 
                 try {
+                    const token = localStorage.getItem('admin_token');
+                    const headers = token ? { 'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json' } : { 'Content-Type': 'application/json' };
                     const response = await fetch(`/api/admins/${adminId}/change-password`, {
                         method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
+                        headers: headers,
                         body: JSON.stringify({ new_password: newPassword })
                     });
                     
@@ -4194,7 +4201,9 @@ async def admins_page():
                 if (!confirm(`${action.charAt(0).toUpperCase() + action.slice(1)} админа "${admin.username}"?`)) return;
                 
                 try {
-                    const response = await fetch(`/api/admins/${id}/toggle-status`, { method: 'PUT' });
+                    const token = localStorage.getItem('admin_token');
+                    const headers = token ? { 'Authorization': 'Bearer ' + token } : {};
+                    const response = await fetch(`/api/admins/${id}/toggle-status`, { method: 'PUT', headers });
                     const result = await response.json();
                     
                     if (response.ok && result.success) {
@@ -4213,7 +4222,9 @@ async def admins_page():
                 if (!confirm(`Удалить админа "${name}"? Это действие нельзя отменить!`)) return;
                 
                 try {
-                    const response = await fetch(`/api/admins/${id}`, { method: 'DELETE' });
+                    const token = localStorage.getItem('admin_token');
+                    const headers = token ? { 'Authorization': 'Bearer ' + token } : {};
+                    const response = await fetch(`/api/admins/${id}`, { method: 'DELETE', headers });
                     const result = await response.json();
                     
                     if (response.ok && result.success) {

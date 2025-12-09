@@ -241,6 +241,37 @@ def authenticate_admin(username: str, password: str) -> Tuple[bool, Optional[Dic
     return False, None
 
 
+def validate_admin_token(token: str) -> Optional[Dict[str, Any]]:
+    """Validate a bearer token such as 'admin_token_{id}' and return admin info if valid."""
+    if not token:
+        return None
+    # allow both raw token or 'Bearer ' prefix
+    if token.startswith('Bearer '):
+        token = token.split(' ', 1)[1]
+    # Token format: admin_token_{id} or admin_token_123
+    if not token.startswith('admin_token_'):
+        return None
+
+    admin_id = token[len('admin_token_'):]
+
+    # Special case: the compatibility token 'admin_token_123' doesn't encode an id
+    if admin_id == '123':
+        # return a fallback superadmin user info
+        admins = _load_admins()
+        # return the first active admin
+        for a in admins:
+            if a.get('is_active', True):
+                return { 'id': a['id'], 'username': a['username'], 'role': a.get('role', 'admin') }
+        return None
+
+    # Match admin id directly - token may include full id (admin_default) or short suffix
+    admins = _load_admins()
+    for a in admins:
+        if (a['id'] == admin_id or a['id'].endswith(admin_id)) and a.get('is_active', True):
+            return { 'id': a['id'], 'username': a['username'], 'role': a.get('role', 'admin') }
+    return None
+
+
 def get_admin_password_hash() -> str:
     """Get hashed admin password for storage"""
     admin_password = os.getenv('ADMIN_WEB_PASSWORD', 'admin123')

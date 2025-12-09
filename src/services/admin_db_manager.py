@@ -52,7 +52,10 @@ class DatabaseManager:
             values = self.sheets.get_sheet_values(self.audit_sheet)
             if not values or len(values) == 0:
                 headers = ["timestamp", "admin_id", "action", "sheet", "details"]
-                self.sheets.append_rows(self.audit_sheet, [headers])
+                # If append fails because sheet doesn't exist, try to create the sheet first
+                created = self.sheets.create_sheet(self.audit_sheet)
+                if created:
+                    self.sheets.append_rows(self.audit_sheet, [headers])
         except Exception:
             # Not critical if the sheet can't be initialized; will attempt on first log
             pass
