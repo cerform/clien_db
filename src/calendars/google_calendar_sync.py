@@ -90,8 +90,21 @@ class GoogleCalendarSync:
                 singleEvents=True,
                 orderBy='startTime'
             ).execute()
-            
+
             return events_result.get('items', [])
         except Exception as e:
-            logger.error(f"Failed to get calendar events: {e}")
-            return []
+            # Try to extract HTTP error details when available
+            try:
+                from googleapiclient.errors import HttpError
+                if isinstance(e, HttpError):
+                    # attempt to get structured message
+                    try:
+                        error_content = e.content.decode('utf-8') if hasattr(e, 'content') else str(e)
+                    except Exception:
+                        error_content = str(e)
+                    logger.error(f"Failed to get calendar events: HttpError: {error_content}")
+                    raise Exception(f"Google Calendar API error: {error_content}")
+            except Exception:
+                # fallback to generic error
+                logger.error(f"Failed to get calendar events: {e}")
+                raise

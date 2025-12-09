@@ -22,6 +22,10 @@ except Exception:
     _sentry_enabled = False
 
 
+# Simple per-master calendar cache to reduce Google API calls
+_master_calendar_cache = {}
+
+
 @api_router.get('/monitoring/checks')
 async def monitoring_checks() -> Dict[str, Any]:
     """Run quick health checks for important endpoints and return the summary"""
@@ -1004,18 +1008,31 @@ async def get_master_calendar(master_id: str, start_date: str, end_date: str) ->
         # Get calendar events if calendar_id exists
         calendar_events = []
         calendar_fetch_ok = False
-        if master.get("calendar_id"):
-            try:
-                calendar = GoogleCalendarSync(
-                    getattr(config, 'google_credentials_file', 'credentials.json'),
-                    master.get("calendar_id")
-                )
-                calendar_events = calendar.get_events(start_date, end_date) or []
-                calendar_fetch_ok = True
-            except Exception as e:
-                logger.warning(f"Failed to load calendar events: {e}")
-                calendar_error = str(e)
-                calendar_fetch_ok = False
+        # Check local in-memory cache (short TTL) to avoid frequent Google API calls
+        cache_key = f"master_calendar:{master_id}:{start_date}:{end_date}"
+        cache_entry = _master_calendar_cache.get(cache_key)
+        if cache_entry and (datetime.now().timestamp() - cache_entry.get('ts', 0)) < 3:
+            calendar_events = cache_entry.get('events', [])
+            calendar_fetch_ok = cache_entry.get('ok', False)
+            calendar_error = cache_entry.get('err')
+        else:
+            if master.get("calendar_id"):
+                try:
+                    calendar = GoogleCalendarSync(
+                        getattr(config, 'google_credentials_file', 'credentials.json'),
+                        master.get("calendar_id")
+                    )
+                    calendar_events = calendar.get_events(start_date, end_date) or []
+                    calendar_fetch_ok = True
+                    calendar_error = None
+                    # store in cache
+                    _master_calendar_cache[cache_key] = {"ts": datetime.now().timestamp(), "events": calendar_events, "ok": True, "err": None}
+                except Exception as e:
+                    logger.warning(f"Failed to load calendar events: {e}")
+                    calendar_error = str(e)
+                    calendar_fetch_ok = False
+                    # cache the failure briefly
+                    _master_calendar_cache[cache_key] = {"ts": datetime.now().timestamp(), "events": [], "ok": False, "err": calendar_error}
         
         return {
             "success": True,
