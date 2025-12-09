@@ -30,3 +30,6 @@ starlette>=0.27.0
 
 # Production dependencies for Cloud Run
 gunicorn>=21.2.0
+# Optional monitoring & logging
+sentry-sdk>=1.31.0
+google-cloud-logging>=3.12.0

@@ -89,6 +89,28 @@ def create_app() -> FastAPI:
     # Include admin pages router
     from src.web.pages import admin_router
     app.include_router(admin_router)
+
+    # Initialize Sentry (optional) if env provided
+    sentry_dsn = os.getenv('SENTRY_DSN')
+    if sentry_dsn:
+        try:
+            from sentry_sdk import init as sentry_init
+            from sentry_sdk.integrations.logging import LoggingIntegration
+            sentry_logging = LoggingIntegration(level=logging.INFO, event_level=logging.ERROR)
+            sentry_init(dsn=sentry_dsn, integrations=[sentry_logging], traces_sample_rate=0.05)
+            logger.info('✅ Sentry initialized')
+        except Exception as se:
+            logger.warning(f'⚠️ Failed to initialize Sentry: {se}')
+
+    # Initialize Google Cloud Logging if configured
+    if os.getenv('ENABLE_CLOUD_LOGGING', 'false').lower() in ['1', 'true', 'yes']:
+        try:
+            from google.cloud import logging as cloud_logging
+            client = cloud_logging.Client()
+            client.setup_logging()
+            logger.info('✅ Cloud Logging initialized')
+        except Exception as ce:
+            logger.warning(f'⚠️ Cloud Logging init error: {ce}')
     
     @app.get("/", response_class=HTMLResponse)
     async def root():
@@ -1125,6 +1147,18 @@ def get_console_html() -> str:
                     endpointsContainer.innerHTML = endpoints.map(ep => `<button class="endpoint-btn" onclick="testEndpoint({name: '${ep.name}', url: '${ep.url}'})">${ep.name} → ${ep.url}</button>`).join('');
                 }
             }
+
+            async function sendTelemetry(payload) {
+                try {
+                    await fetch('/api/telemetry/events', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(payload)
+                    });
+                } catch (e) {
+                    console.warn('Telemetry send failed', e);
+                }
+            }
             
             function initLogging() {
                 logsContainer = document.getElementById('logs');
@@ -1140,11 +1174,13 @@ def get_console_html() -> str:
                 console.error = function(...args) {
                     originalError(...args);
                     addLog(`❌ ${args.join(' ')}`, 'error');
+                    try { sendTelemetry({event_type: 'ui_error', message: args.join(' '), meta: { source: 'dashboard' }}); } catch(e) {}
                 };
                 
                 console.warn = function(...args) {
                     originalWarn(...args);
                     addLog(`⚠️ ${args.join(' ')}`, 'warning');
+                    try { sendTelemetry({event_type: 'ui_warning', message: args.join(' '), meta: { source: 'dashboard' }}); } catch(e) {}
                 };
                 
                 const originalFetch = window.fetch;

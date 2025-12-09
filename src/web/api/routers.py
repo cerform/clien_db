@@ -13,6 +13,12 @@ from collections import deque
 
 _monitor_history = deque(maxlen=50)
 _telemetry_history = deque(maxlen=500)
+_sentry_enabled = False
+try:
+    import sentry_sdk  # type: ignore
+    _sentry_enabled = True
+except Exception:
+    _sentry_enabled = False
 
 
 @api_router.get('/monitoring/checks')
@@ -67,6 +73,13 @@ async def telemetry_event(request: Request) -> Dict[str, Any]:
         # Log low-volume telemetry
         logger.info(f"Telemetry event: {event_type} {message} {meta}")
         _telemetry_history.append(payload)
+        # Optionally send to Sentry as a message if configured
+        try:
+            if _sentry_enabled:
+                sentry_sdk.capture_message(f"Telemetry: {event_type} - {message}")
+        except Exception:
+            # Don't fail if Sentry call fails
+            logger.debug('Sentry capture failed')
         return {'success': True}
     except Exception as e:
         logger.error(f"Failed to process telemetry event: {e}")

@@ -194,6 +194,16 @@ async def masters_page():
         </div>
         
         <script>
+            // Global sendTelemetry helper for this page
+            async function sendTelemetry(payload) {
+                try {
+                    await fetch('/api/telemetry/events', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(payload)
+                    });
+                } catch (e) { console.warn('Telemetry send failed', e); }
+            }
             let allMasters = [];
             async function sendTelemetry(payload) {
                 try {
@@ -756,6 +766,7 @@ async def services_page():
                     renderServices(allServices);
                 } catch (error) {
                     console.error('Error loading services:', error);
+                    try { sendTelemetry({event_type: 'ui_error', message: 'Error loading services', meta: {error: (error && error.message) || String(error)}}); } catch(e) {}
                     showAlert('Ошибка загрузки', 'error');
                 }
             }
@@ -1085,6 +1096,7 @@ async def clients_page():
                     renderClients(allClients);
                 } catch (error) {
                     console.error('Error loading clients:', error);
+                    try { sendTelemetry({event_type: 'ui_error', message: 'Error loading clients', meta: {error: (error && error.message) || String(error)}}); } catch(e) {}
                     showAlert('Ошибка загрузки', 'error');
                 }
             }
@@ -1243,6 +1255,7 @@ async def clients_page():
                     document.getElementById('viewClientModal').style.display = 'block';
                 } catch (error) {
                     console.error('Error viewing client:', error);
+                    try { sendTelemetry({event_type: 'ui_error', message: 'Error viewing client', meta: {error: (error && error.message) || String(error)}}); } catch(e) {}
                     showAlert('Ошибка загрузки данных клиента', 'error');
                 }
             }
@@ -1558,6 +1571,7 @@ async def bookings_page():
                     await loadBookings();
                 } catch (error) {
                     console.error('Error loading data:', error);
+                    try { sendTelemetry({event_type: 'ui_error', message: 'Error loading data', meta: {error: (error && error.message) || String(error)}}); } catch(e) {}
                     showAlert('Ошибка загрузки данных', 'error');
                 }
             }
@@ -1570,6 +1584,7 @@ async def bookings_page():
                     filterBookings();
                 } catch (error) {
                     console.error('Error loading bookings:', error);
+                    try { sendTelemetry({event_type: 'ui_error', message: 'Error loading bookings', meta: {error: (error && error.message) || String(error)}}); } catch(e) {}
                     document.getElementById('bookingsList').innerHTML = '<tr><td colspan="9">Ошибка загрузки</td></tr>';
                 }
             }
@@ -2207,6 +2222,7 @@ async def inka_training_page():
                     document.getElementById('totalCorrections').textContent = data.total_corrections || 0;
                 } catch (e) {
                     console.error('Error loading stats:', e);
+                    try { sendTelemetry({event_type: 'ui_error', message: 'Error loading stats', meta: {error: (e && e.message) || String(e)}}); } catch(e2) {}
                 }
             }
             
@@ -2675,6 +2691,7 @@ async def analytics_page():
                     
                 } catch (error) {
                     console.error('Error loading analytics:', error);
+                    try { sendTelemetry({event_type: 'ui_error', message: 'Error loading analytics', meta: {error: (error && error.message) || String(error)}}); } catch(e) {}
                     document.getElementById('loading').innerHTML = 'Ошибка загрузки данных. <a href="javascript:loadAnalytics()">Попробовать снова</a>';
                 }
             }
@@ -3326,6 +3343,7 @@ async def schedule_page():
                     }
                 } catch (e) {
                     console.error('Error saving schedule:', e);
+                    try { sendTelemetry({event_type: 'ui_error', message: 'Error saving schedule', meta: {error: (e && e.message) || String(e)}}); } catch(e2) {}
                     alert('Ошибка сохранения');
                 }
             }
@@ -3662,6 +3680,7 @@ async def schedule_page():
                     
                 } catch (e) {
                     console.error('Error loading master calendar:', e);
+                    try { sendTelemetry({event_type: 'ui_error', message: 'Error loading master calendar', meta: {error: (e && e.message) || String(e)}}); } catch(e2) {}
                     document.getElementById('masterCalendar').innerHTML = '<p style="color:red;text-align:center">Ошибка загрузки календаря</p>';
                 }
             }
@@ -3703,6 +3722,7 @@ async def schedule_page():
                     
                 } catch (e) {
                     console.error('Error checking availability:', e);
+                    try { sendTelemetry({event_type: 'ui_error', message: 'Error checking availability', meta: {error: (e && e.message) || String(e)}}); } catch(e2) {}
                     document.getElementById('availabilityGrid').innerHTML = '<p style="color:red">Ошибка проверки</p>';
                 }
             }
@@ -3752,6 +3772,7 @@ async def schedule_page():
                     }
                 } catch (e) {
                     console.error('Error saving event:', e);
+                    try { sendTelemetry({event_type: 'ui_error', message: 'Error saving event', meta: {error: (e && e.message) || String(e)}}); } catch(e2) {}
                     alert('Ошибка сохранения');
                 }
             }
@@ -4229,6 +4250,57 @@ async def admins_page():
             
             // Load data on page load
             loadAdmins();
+        </script>
+    </body>
+    </html>
+    """
+
+
+@admin_router.get("/telemetry", response_class=HTMLResponse)
+async def telemetry_page():
+    """Admin page to view recent telemetry events"""
+    return """
+    <!DOCTYPE html>
+    <html lang="ru">
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Telemetry — Admin Panel</title>
+        <style>
+            body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; padding: 20px; }
+            table { width: 100%; border-collapse: collapse; }
+            th, td { padding: 8px; border-bottom: 1px solid #ddd; text-align: left; }
+        </style>
+    </head>
+    <body>
+        <div style="max-width:1200px;margin:0 auto;background:white;padding:20px;border-radius:10px;">
+            <h1>Telemetry Events</h1>
+            <p>Shows the last telemetry events captured by the admin UI.</p>
+            <div>
+                <button class="btn" onclick="loadTelemetry()">Refresh</button>
+                <button class="btn" onclick="clearTable()">Clear</button>
+            </div>
+
+            <table id="telemetryTable">
+                <thead><tr><th>Time</th><th>Type</th><th>Message</th><th>Meta</th></tr></thead>
+                <tbody></tbody>
+            </table>
+        </div>
+
+        <script>
+            async function loadTelemetry() {
+                try {
+                    const res = await fetch('/api/telemetry/history');
+                    const data = await res.json();
+                    const rows = data.history || [];
+                    const tbody = document.querySelector('#telemetryTable tbody');
+                    tbody.innerHTML = rows.map(r => `<tr><td>${new Date(r.ts * 1000).toLocaleString()}</td><td>${r.type}</td><td>${r.message}</td><td><pre>${JSON.stringify(r.meta || {}, null, 2)}</pre></td></tr>`).join('');
+                } catch (e) {
+                    console.error('Error loading telemetry history', e);
+                }
+            }
+            function clearTable() { document.querySelector('#telemetryTable tbody').innerHTML = ''; }
+            loadTelemetry();
         </script>
     </body>
     </html>
