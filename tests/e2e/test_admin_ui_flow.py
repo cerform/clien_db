@@ -61,32 +61,36 @@ def test_admin_create_and_delete_client_flow(mock_sheets_client):
         page.fill('#password', 'admin123')
         page.click('#submitBtn')
         page.wait_for_url('http://127.0.0.1:8002/')
+        # Debug: ensure token stored in localStorage
+        token_value = page.evaluate("() => localStorage.getItem('admin_token')")
+        print('DEBUG login token:', token_value)
 
         # Go to clients page
-        page.goto('http://127.0.0.1:8002/clients')
+        page.goto('http://127.0.0.1:8002/admin/clients')
         page.wait_for_selector('.btn')
 
         # Click add client
         page.click('button:has-text("Добавить клиента")')
         page.fill('#name', 'E2E Test Client')
-        page.fill('#phone', '+10000000001')
+        page.fill('#phone', '0501234567')
         page.fill('#email', 'e2e@example.com')
-        page.click('.btn-save')
-        page.wait_for_selector('text=E2E Test Client')
 
-        # Ensure the client is present
-        assert page.locator('text=E2E Test Client').count() >= 1
+        with page.expect_response(lambda r: "/api/clients" in r.url and r.status == 200):
+            page.click('.btn-save')
 
-        # Delete the client
-        # Find the row and click delete button next to it
-        # (we'll click first delete button in the row containing the name)
-        row = page.locator('tr', has_text='E2E Test Client').first
-        with page.expect_dialog() as dialog_info:
-            row.locator('button.btn-delete').click()
-        dialog = dialog_info.value
-        dialog.accept()
-        # Wait for success alert
-        page.wait_for_selector('text=Клиент удален!')
+        page.wait_for_timeout(500)
+        page.wait_for_selector('tr:has-text("E2E Test Client")', timeout=10000)
+
+        assert page.locator('tr:has-text("E2E Test Client")').count() >= 1
+
+        # Delete
+        row = page.locator('tr:has-text("E2E Test Client")').first
+
+        page.on("dialog", lambda dialog: dialog.accept())
+
+        row.locator('button.btn-delete').click()
+
+        page.wait_for_selector('text=Клиент удален!', timeout=5000)
 
         # Check audit logs via API: we expect add_client & delete_client entries
         # Page has `page.request` to do HTTP requests
