@@ -61,3 +61,6 @@ tmp/
 
 # Documentation (keep main docs, ignore temp)
 *.tmp.md
+
+__pycache__/
+.venv_predeploy/
