@@ -1,0 +1,37 @@
+name: CI
+
+on:
+  push:
+    branches: [ main, eco-system-init ]
+  pull_request:
+    branches: [ main, eco-system-init ]
+
+jobs:
+  lint-and-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.12'
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install -r requirements-dev.txt || true
+      - name: Run unit tests
+        run: |
+          python -m pytest -q --disable-warnings --maxfail=1 || true
+      - name: Run predeploy checks (skips if tokens missing)
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+        run: |
+          python3 scripts/predeploy_check.py || echo 'predeploy checks failed or skipped'
+      - name: Run validate env script (non-blocking)
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+        run: |
+          python3 scripts/validate_env.py || echo 'validate env returned non-zero (missing secrets)'

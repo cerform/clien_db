@@ -242,6 +242,9 @@ resource "google_cloudbuild_trigger" "backend_trigger" {
     push {
       branch = var.repo_branch
     }
+    pull_request {
+      branch = var.repo_branch
+    }
   }
 }
 
@@ -251,6 +254,9 @@ resource "google_cloudbuild_trigger" "bot_trigger" {
     owner = var.repo_owner
     name  = var.repo_name
     push {
+      branch = var.repo_branch
+    }
+    pull_request {
       branch = var.repo_branch
     }
   }
@@ -264,6 +270,9 @@ resource "google_cloudbuild_trigger" "ai_trigger" {
     push {
       branch = var.repo_branch
     }
+    pull_request {
+      branch = var.repo_branch
+    }
   }
 }
 
@@ -273,6 +282,9 @@ resource "google_cloudbuild_trigger" "frontend_trigger" {
     owner = var.repo_owner
     name  = var.repo_name
     push {
+      branch = var.repo_branch
+    }
+    pull_request {
       branch = var.repo_branch
     }
   }

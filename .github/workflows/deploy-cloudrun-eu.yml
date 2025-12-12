@@ -1,0 +1,39 @@
+name: Deploy to Cloud Run (Europe)
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v1
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+      - name: Set up gcloud CLI
+        uses: google-github-actions/setup-gcloud@v1
+        with:
+          project_id: ${{ secrets.GCP_PROJECT_ID }}
+          service_account_key: ${{ secrets.GCP_SA_KEY }}
+
+      - name: Submit Cloud Build and deploy to EU Cloud Run
+        env:
+          REGION: europe-west1
+          SERVICE_NAME: tattoo-bot
+          CLOUDSQL_INSTANCE: tattoo-bot-db
+          PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
+        run: |
+          gcloud builds submit --tag gcr.io/${PROJECT_ID}/${SERVICE_NAME}:$GITHUB_SHA --project=${PROJECT_ID} --substitutions=_REGION=${REGION},_SERVICE_NAME=${SERVICE_NAME},_CLOUDSQL_INSTANCE=${CLOUDSQL_INSTANCE}
+
+      - name: Print Service URL
+        run: |
+          REGION=europe-west1
+          SERVICE_NAME=tattoo-bot
+          PROJECT_ID=${{ secrets.GCP_PROJECT_ID }}
+          gcloud run services describe ${SERVICE_NAME} --project=${PROJECT_ID} --region=${REGION} --format='value(status.url)'
