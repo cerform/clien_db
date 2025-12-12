@@ -25,6 +25,11 @@ terraform apply -var='project_id=YOUR_PROJECT_ID' -var='region=us-central1'
 ```
 
 3) After apply, Terraform prints outputs with Service URLs and Cloud SQL connection name.
+Jenkins setup and secrets
+-------------------------
+1) Add your GitHub OAuth App values to `terraform.tfvars` or pass them as environment variables in your CI. For example, set `jenkins_github_oauth_client_id` and `jenkins_github_oauth_client_secret`.
+2) Add a `github_token` variable with limited scope token for Jenkins to access the repository. Alternatively, store the token in GCP Secret Manager and fetch it in CI to create the Kubernetes secret or use a dynamic retrieval.
+3) Run terraform apply, verify Jenkins is running and reachable (LoadBalancer IP), then set the OAuth application settings to match the callback URL (e.g., `https://<jenkins-url>/securityRealm/finishLogin`).
 
 Customization
 -------------

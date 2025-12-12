@@ -160,6 +160,26 @@ $(file("infra/jenkins/jobs/seed.groovy"))
   JCasC:
     config: |
 $(file("infra/jenkins/jcasc.yaml"))
+  installPlugins:
+    - git
+    - workflow-aggregator
+    - workflow-job
+    - pipeline-stage-view
+    - credentials
+    - cloudbees-folder
+    - workflow-multibranch
+    - github-branch-source
+    - kubernetes
+    - job-dsl
+    - configuration-as-code
+    - google-oauth-plugin
+    - google-login
+    - gcp-credentials-provider
+    - pipeline-github-lib
+    - matrix-auth
+    - promoted-builds
+    - blueocean
+    - github-oauth
   env:
     - name: GITHUB_CLIENT_ID
       valueFrom:
