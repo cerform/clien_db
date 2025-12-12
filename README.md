@@ -11,6 +11,11 @@ Notes:
 - This will attempt to create Cloud SQL instance if needed and create secrets from `.env`.
 - For production, prefer reviewing `scripts/deploy_cloudrun_multi.sh` and using Terraform for infra-as-code.
 
+Jenkins on GKE (optional):
+- You can provision Jenkins on GKE using the Terraform module (`infra/terraform/jenkins.tf`). This sets up a small GKE cluster, installs Jenkins via Helm, configures Workload Identity, and seeds pipelines via Job DSL.
+- Add `jenkins_github_oauth_client_id` and `jenkins_github_oauth_client_secret` to `infra/terraform/terraform.tfvars` and a `github_token` for seeding jobs.
+- After terraform apply completes, note the LoadBalancer IP and set up your GitHub OAuth app with callback `https://<LB_IP>/securityRealm/finishLogin`.
+
 # 🎨 Tattoo Appointment Bot
 
 Complete Telegram bot for tattoo studio appointment booking with Google Sheets database and Google Calendar sync.
