@@ -1,0 +1,64 @@
+jenkins:
+  systemMessage: "Jenkins for Tattoo Bot (managed by Terraform/JCasC)"
+  numExecutors: 2
+  disabledAdministrativeMonitors:
+    - "hudson.diagnosis.RedeployNowMonitor"
+
+credentials:
+  system:
+  - domainCredentials:
+    - credentials:
+      - basicUsernamePassword:
+          scope: GLOBAL
+          id: "github-token"
+          description: "GitHub token (create as Kubernetes secret)"
+          username: "__GITHUB_TOKEN__"
+          password: "__GITHUB_TOKEN__"
+
+unclassified:
+  location:
+    url: "http://jenkins.tattoo.local"
+
+tool:
+  git:
+    installations:
+      - name: "Default"
+
+credentialsProvider:
+  unclassified:
+    domainCredentials:
+      - name: "global"
+
+jenkins.model.SecurityRealm:
+  local:
+    allowsSignup: false
+    users:
+      - id: "admin"
+        password: "admin_password" # change/rotate
+
+authorizationStrategy:
+  globalMatrix:
+    grantedPermissions:
+      - sid: "anonymous"
+        permission: "hudson.model.Hudson.Read"
+      - sid: "authenticated"
+        permission: "hudson.model.Hudson.Read"
+      - sid: "admin"
+        permission: "hudson.model.Hudson.Administer"
+
+jenkins:
+  systemMessage: "Jenkins (configured by JCasC)"
+
+jenkins.model.JenkinsLocationConfiguration:
+  adminAddress: "admin@tattoo.bot"
+
+jenkins.security.GlobalMatrixAuthorizationStrategy:
+  grantedPermissions: []
+
+org.jenkinsci.plugins.GithubSecurityRealm:
+  clientID: "${GITHUB_CLIENT_ID}"
+  clientSecret: "${GITHUB_CLIENT_SECRET}"
+  githubWebUri: "https://github.com"
+  githubApiUri: "https://api.github.com"
+  oauthScopes: "user"
+  owner: "cerform"
