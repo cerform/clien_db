@@ -47,6 +47,25 @@ Security
 --------
 - Least-privilege: scope service account permissions only to what they need (Secret Manager access + Cloud SQL client where needed).
 - Keep secrets in Secret Manager only, rotate keys regularly.
+# Jenkins & Workload Identity
+---------------------------
+This repo includes an optional Jenkins installation on GKE via Terraform+Helm.
+
+Steps to enable Jenkins with GitHub OAuth and Workload Identity:
+
+1. Create GitHub OAuth App in your GitHub Organization to use for Jenkins SSO. Set the callback URL to your Jenkins URL after a LoadBalancer IP or domain (e.g., https://jenkins.yourdomain.com/securityRealm/finishLogin).
+2. Add `jenkins_github_oauth_client_id` and `jenkins_github_oauth_client_secret` to Terraform variables or make them available in CI. The terraform module will populate a Kubernetes secret `github-oauth` in the `jenkins` namespace and Jenkins will use this for OAuth.
+3. After Jenkins is deployed, configure GitHub OAuth in Jenkins if not already configured via JCasC.
+4. For GCP permissions, we create a GCP service account (`${var.env_prefix}-jenkins-sa`) and grant roles: `roles/secretmanager.secretAccessor`, `roles/run.admin`, `roles/iam.serviceAccountUser`, `roles/cloudsql.client`. Use least privilege: reduce roles as needed.
+
+Workload Identity:
+- The Terraform module configures a Kubernetes service account `jenkins` in namespace `jenkins` annotated with `iam.gke.io/gcp-service-account` linking to the GCP service account. This way Jenkins can access GCP resources without using service account keys.
+
+Credentials and Secrets
+----------------------
+- Jenkins needs a GitHub token to seed jobs and to set up webhooks; add it to the `github-token` Kubernetes secret or configure Jenkins credentials via the UI.
+- For secret management, prefer to create secrets in Secret Manager and grant the Jenkins GSA `roles/secretmanager.secretAccessor` so Jenkins can fetch secrets dynamically.
+
 # Terraform setup for Tattoo Bot
 
 This Terraform configuration sets up the basic infrastructure for Tattoo Bot on Google Cloud:
