@@ -1,0 +1,32 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:15
+    container_name: clien_db_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${CLOUDSQL_USER:-postgres}
+      POSTGRES_PASSWORD: ${CLOUDSQL_PASSWORD:-password}
+      POSTGRES_DB: ${CLOUDSQL_DB:-admin_messages}
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+
+  # Optional pgAdmin for local DB management
+  pgadmin:
+    image: dpage/pgadmin4:7
+    container_name: clien_db_pgadmin
+    restart: unless-stopped
+    environment:
+      PGADMIN_DEFAULT_EMAIL: admin@example.com
+      PGADMIN_DEFAULT_PASSWORD: admin
+    ports:
+      - "5050:80"
+    depends_on:
+      - postgres
+
+volumes:
+  pgdata:
+    name: clien_db_pgdata

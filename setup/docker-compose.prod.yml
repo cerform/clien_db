@@ -1,0 +1,50 @@
+version: '3.8'
+
+services:
+  web:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+    container_name: clien_db_web
+    restart: unless-stopped
+    environment:
+      - ENV=production
+      - PORT=8080
+      - DATABASE_URL=${DATABASE_URL}
+    env_file:
+      - ../.env
+    depends_on:
+      - postgres
+
+  postgres:
+    image: postgres:15
+    container_name: clien_db_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${CLOUDSQL_USER}
+      POSTGRES_PASSWORD: ${CLOUDSQL_PASSWORD}
+      POSTGRES_DB: ${CLOUDSQL_DB}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+
+  nginx:
+    image: nginx:stable-alpine
+    container_name: clien_db_nginx
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    depends_on:
+      - web
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - web_static:/usr/share/nginx/html:ro
+
+volumes:
+  pgdata:
+  web_static:
+
+# Security: for production, prefer using Docker Secrets (not env_file) and take care to put .env outside of repo
+# Example to create secrets:
+# echo -n "super-secret" | docker secret create CLOUDSQL_PASSWORD -
+# Then modify service to use 'secrets:' and env vars from secrets
