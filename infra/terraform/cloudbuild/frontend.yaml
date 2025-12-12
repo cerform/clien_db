@@ -1,0 +1,19 @@
+steps:
+  - name: 'gcr.io/cloud-builders/docker'
+    args: ['build', '-t', 'gcr.io/$PROJECT_ID/tattoo-frontend:$SHORT_SHA', '.']
+    dir: 'services/frontend'
+  - name: 'gcr.io/cloud-builders/docker'
+    args: ['push', 'gcr.io/$PROJECT_ID/tattoo-frontend:$SHORT_SHA']
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    entrypoint: 'bash'
+    args:
+      - '-c'
+      - |
+        gcloud run deploy tattoo-frontend \
+          --image=gcr.io/$PROJECT_ID/tattoo-frontend:$SHORT_SHA \
+          --region=${_REGION} --platform=managed --allow-unauthenticated \
+          --service-account=${_FE_SA}
+substitutions:
+  _REGION: "us-central1"
+  _FE_SA: "tattoo-frontend-sa@${PROJECT_ID}.iam.gserviceaccount.com"
+timeout: '1200s'
