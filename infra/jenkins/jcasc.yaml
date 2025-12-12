@@ -29,12 +29,14 @@ credentialsProvider:
     domainCredentials:
       - name: "global"
 
-jenkins.model.SecurityRealm:
-  local:
-    allowsSignup: false
-    users:
-      - id: "admin"
-        password: "admin_password" # change/rotate
+securityRealm:
+  github:
+    clientID: "${GITHUB_CLIENT_ID}"
+    clientSecret: "${GITHUB_CLIENT_SECRET}"
+    githubWebUri: "https://github.com"
+    githubApiUri: "https://api.github.com"
+    oauthScopes: "read:user,user:email"
+    owner: "cerform"
 
 authorizationStrategy:
   globalMatrix:
@@ -55,10 +57,4 @@ jenkins.model.JenkinsLocationConfiguration:
 jenkins.security.GlobalMatrixAuthorizationStrategy:
   grantedPermissions: []
 
-org.jenkinsci.plugins.GithubSecurityRealm:
-  clientID: "${GITHUB_CLIENT_ID}"
-  clientSecret: "${GITHUB_CLIENT_SECRET}"
-  githubWebUri: "https://github.com"
-  githubApiUri: "https://api.github.com"
-  oauthScopes: "user"
-  owner: "cerform"
+# GitHub Security Realm is configured above as the JCasC `securityRealm` block
