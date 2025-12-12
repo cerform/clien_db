@@ -216,6 +216,8 @@ parse_args() {
         ADMIN_USER_IDS="$2"; shift 2; ;;
       --env)
         ENV="$2"; shift 2; ;;
+      --auto-env-restart)
+        AUTO_ENV_RESTART=true; shift ;;
       -h|--help)
         usage; exit 0 ;;
       *)
@@ -248,6 +250,10 @@ main() {
     echo "Generated .env"
   else
     generate_env
+  fi
+  # If user requested auto-env + restart compose
+  if [[ ${AUTO_ENV_RESTART:-false} == true ]]; then
+    auto_env_and_restart_compose
   fi
   start_postgres
   create_google_spreadsheet
