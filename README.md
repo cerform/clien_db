@@ -1,3 +1,16 @@
+### One-line deploy to Google Cloud
+
+You can run everything (create secrets from .env, build, deploy multiple services, Cloud SQL provisioning, webhook setup) locally from repo with a single command:
+
+```bash
+# Example one-liner (customize PROJECT_ID and REGION then run)
+PROJECT_ID=tattoo-480007 REGION=us-central1 bash -c "./scripts/deploy_all.sh --yes"
+```
+
+Notes:
+- This will attempt to create Cloud SQL instance if needed and create secrets from `.env`.
+- For production, prefer reviewing `scripts/deploy_cloudrun_multi.sh` and using Terraform for infra-as-code.
+
 # 🎨 Tattoo Appointment Bot
 
 Complete Telegram bot for tattoo studio appointment booking with Google Sheets database and Google Calendar sync.
