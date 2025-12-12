@@ -8,4 +8,4 @@ COPY . /app
 ENV PYTHONUNBUFFERED=1
 ENV CLOUD_RUN_ENV=false
 EXPOSE 8080
-CMD ["python", "src/web/app.py"]
+CMD ["uvicorn", "src.web.app:create_app", "--host", "0.0.0.0", "--port", "8080", "--loop", "auto"]
