@@ -19,6 +19,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'src'))
 from dotenv import load_dotenv
 from fastapi import FastAPI
 from aiogram import Bot, Dispatcher
+from aiogram.utils.token import TokenValidationError
 from aiogram.fsm.storage.memory import MemoryStorage
 from aiogram.types import Update, BotCommand
 import uvicorn
@@ -63,6 +64,11 @@ async def setup_webhook():
     global bot, webhook_url, _webhook_setup_done
 
     if _webhook_setup_done:
+        return
+    # If bot is not configured (invalid or missing token) skip webhook setup
+    if bot is None:
+        logger.warning("⚠️ Bot not configured or token invalid; skipping webhook setup")
+        _webhook_setup_done = True
         return
 
     try:
@@ -127,10 +133,15 @@ def main():
         logger.info(f"   BOT_TOKEN: {'установлен' if config.BOT_TOKEN else 'отсутствует'}")
         logger.info(f"   OPENAI_API_KEY: {'установлен' if config.OPENAI_API_KEY else 'отсутствует'}")
         
-        # Инициализация бота
+        # Инициализация бота — не прерываем запуск приложения, если токен неверен
         storage = MemoryStorage()
-        bot = Bot(token=config.BOT_TOKEN)
-        dp = Dispatcher(storage=storage)
+        try:
+            bot = Bot(token=config.BOT_TOKEN)
+            dp = Dispatcher(storage=storage)
+        except TokenValidationError as e:
+            logger.error(f"❌ Bot token invalid; running in web-only mode: {e}")
+            bot = None
+            dp = Dispatcher(storage=storage)
         
         # Register handlers based on BOT_MODE. Default to INKA-only for safety.
         bot_mode = os.getenv('BOT_MODE', 'inka').lower()
