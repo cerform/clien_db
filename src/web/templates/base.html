@@ -136,6 +136,7 @@
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"/>
                         </svg>
                     </button>
+                    <button id="admin-tools-btn" class="btn" title="Admin tools">Admin</button>
                 </div>
             </header>
 
@@ -149,6 +150,37 @@
     <!-- JavaScript -->
     <script src="/static/js/theme-manager.js"></script>
     <script src="/static/js/app.js"></script>
+    <!-- Admin tools modal -->
+    <div class="modal-overlay" id="adminToolsModal" style="display:none">
+        <div class="modal">
+            <div class="modal-header">
+                <h2>Admin Tools</h2>
+                <button class="modal-close" data-modal-close>&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="form-group"><label class="form-label">Admin token</label><input id="admin-token-input" class="form-input" placeholder="admin_token_local"/></div>
+                <div class="form-group"><button id="save-admin-token" class="btn btn-primary">Save token (localStorage)</button></div>
+                <hr/>
+                <div class="form-group"><button id="clear-admin-token" class="btn">Clear token</button></div>
+                <hr/>
+                <div class="form-group"><button id="run-services-seed" class="btn btn-warning">Run services seed (admin)</button></div>
+                <div id="admin-tools-result" style="margin-top:12px; font-size:0.9rem"></div>
+            </div>
+        </div>
+    </div>
+    <script>
+        document.getElementById('admin-tools-btn').addEventListener('click', ()=>{ app.openModal('adminToolsModal'); document.getElementById('admin-token-input').value = localStorage.getItem('inka_admin_token') || ''; document.getElementById('admin-tools-result').innerText = ''; });
+        document.getElementById('save-admin-token').addEventListener('click', ()=>{ const v = document.getElementById('admin-token-input').value; localStorage.setItem('inka_admin_token', v); document.getElementById('admin-tools-result').innerText = 'Saved token locally'; });
+        document.getElementById('clear-admin-token').addEventListener('click', ()=>{ localStorage.removeItem('inka_admin_token'); document.getElementById('admin-tools-result').innerText = 'Cleared token'; });
+        document.getElementById('run-services-seed').addEventListener('click', async ()=>{
+            const token = localStorage.getItem('inka_admin_token'); const headers = {'Content-Type':'application/json'}; if (token) headers['Authorization'] = 'Bearer ' + token;
+            document.getElementById('admin-tools-result').innerText = 'Running...';
+            try{
+                const res = await fetch('/api/admin/run_services_seed', {method:'POST', headers});
+                if (res.ok) document.getElementById('admin-tools-result').innerText = 'Seed completed successfully'; else { const txt = await res.text(); document.getElementById('admin-tools-result').innerText = 'Failed: ' + txt }
+            }catch(e){ document.getElementById('admin-tools-result').innerText = 'Error: '+e.message }
+        });
+    </script>
     {% block extra_js %}{% endblock %}
 </body>
 </html>

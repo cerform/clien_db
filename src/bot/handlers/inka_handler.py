@@ -227,11 +227,11 @@ def create_inka_router() -> Router:
         from src.config.env_loader import load_env
         load_env()
         cfg = Config.from_env()
-        is_admin = is_admin(message.from_user.id)
+        user_is_admin = is_admin(message.from_user.id)
 
         # Admin commands should be handled by admin handlers, not INKA
         admin_triggers = ["👨‍💼 Админ", "👨‍💼 Admin", "👨‍💼 מנהל", "/admin"]
-        if is_admin and message.text in admin_triggers:
+        if user_is_admin and message.text in admin_triggers:
             # Skip INKA processing for admin commands
             return
 

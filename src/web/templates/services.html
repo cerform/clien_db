@@ -82,12 +82,15 @@ async function loadServices(){
     const currency = await getCurrencySymbol();
     services.forEach(s => {
         const tr = document.createElement('tr');
+        tr.dataset.serviceId = s.id;
         tr.innerHTML = `
             <td>${s.name || ''}</td>
             <td>${formatPrice(s.price || s.price_from || 0, currency)}</td>
             <td>${s.duration_minutes || s.duration_min || ''} мин</td>
             <td style="display:flex;gap:8px"><button class="btn edit-service" data-service-id="${s.id}">Edit</button><button class="btn btn-danger delete-service" data-service-id="${s.id}">Delete</button></td>
         `;
+        // Open edit modal when clicking the row (except clicks on buttons)
+        tr.addEventListener('click', (e) => { if (e.target.closest('button')) return; openEditService(s.id); });
         body.appendChild(tr);
     });
 }
@@ -98,7 +101,7 @@ document.getElementById('add-service-form').addEventListener('submit', async (e)
     const form = e.target; const token = localStorage.getItem('inka_admin_token'); const headers = {'Content-Type':'application/json'}; if (token) headers['Authorization'] = 'Bearer ' + token;
     const body = { name: form.name.value, price: parseInt(form.price.value, 10), duration_minutes: parseInt(form.duration.value,10) };
     const res = await fetch('/api/services', {method:'POST', headers, body: JSON.stringify(body)});
-    if (res.ok) { closeAddServiceModal(); await loadServices(); } else { alert('Failed to add service'); }
+    if (res.ok) { closeAddServiceModal(); await loadServices(); app.showAlert('Service added', 'success'); } else { app.showAlert('Failed to add service', 'error'); }
 });
 
 // Edit modal
@@ -119,11 +122,30 @@ const editServiceModalHtml = `
     </div>
 </div>`;
 if (!document.getElementById('editServiceModal')) document.body.insertAdjacentHTML('beforeend', editServiceModalHtml);
-    function openEditService(id) { fetch(`/api/services/${id}`).then(r=>r.json()).then(s=>{ const form = document.getElementById('edit-service-form'); form.id.value = s.id; form.name.value = s.name || ''; form.price.value = s.price || s.price_from || 0; form.duration.value = s.duration_minutes || s.duration_min || 60; app.openModal('editServiceModal'); }).catch(e=>alert('Failed to load service')) }
+    function openEditService(id) { fetch(`/api/services/${id}`).then(r=>r.json()).then(s=>{ const form = document.getElementById('edit-service-form'); form.id.value = s.id; form.name.value = s.name || ''; form.price.value = s.price || s.price_from || 0; form.duration.value = s.duration_minutes || s.duration_min || 60; app.openModal('editServiceModal'); }).catch(e=>app.showAlert('Failed to load service', 'error')) }
     function closeEditServiceModal() { app.closeModal(document.getElementById('editServiceModal')); }
-document.getElementById('edit-service-form').addEventListener('submit', async (e)=>{ e.preventDefault(); const form = e.target; const id = form.id.value; const token = localStorage.getItem('inka_admin_token'); const headers = {'Content-Type':'application/json'}; if (token) headers['Authorization'] = 'Bearer ' + token; const body = { name: form.name.value, price: parseInt(form.price.value,10), duration_minutes: parseInt(form.duration.value,10) }; const res = await fetch(`/api/services/${id}`, {method:'PUT', headers, body: JSON.stringify(body)}); if (res.ok) { closeEditServiceModal(); await loadServices(); } else { alert('Failed to update service'); } });
+document.getElementById('edit-service-form').addEventListener('submit', async (e)=>{
+    e.preventDefault();
+    const form = e.target;
+    const id = form.id.value;
+    const token = localStorage.getItem('inka_admin_token');
+    const headers = {'Content-Type':'application/json'};
+    if (token) headers['Authorization'] = 'Bearer ' + token;
+    const body = { name: form.name.value, price: parseInt(form.price.value,10), duration_minutes: parseInt(form.duration.value,10) };
+    const res = await fetch(`/api/services/${id}`, {method:'PUT', headers, body: JSON.stringify(body)});
+    if (res.ok) { closeEditServiceModal(); await loadServices(); app.showAlert('Service updated', 'success'); }
+    else { app.showAlert('Failed to update service', 'error'); }
+});
 
-async function deleteService(id) { if (!confirm('Are you sure?')) return; const token = localStorage.getItem('inka_admin_token'); const headers = {}; if (token) headers['Authorization'] = 'Bearer ' + token; const res = await fetch(`/api/services/${id}`, {method:'DELETE', headers}); if (res.ok) { await loadServices(); } else { alert('Failed to delete service'); } }
+async function deleteService(id) {
+    if (!confirm('Удалить услугу?')) return;
+    const token = localStorage.getItem('inka_admin_token');
+    const headers = {};
+    if (token) headers['Authorization'] = 'Bearer ' + token;
+    const res = await fetch(`/api/services/${id}`, {method:'DELETE', headers});
+    if (res.ok) { await loadServices(); app.showAlert('Service deleted', 'success'); }
+    else { app.showAlert('Failed to delete service', 'error'); }
+}
 
 document.addEventListener('DOMContentLoaded', ()=>{ loadServices(); });
 

@@ -425,6 +425,22 @@ async def api_admin_refresh_availability(request: Request):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+
+@api_router.post('/api/admin/run_services_seed')
+async def api_admin_run_services_seed(request: Request):
+    """Admin-only endpoint to run the services seed script (idempotent upsert).
+    Useful for admin UI to re-sync/add default services programmatically.
+    """
+    if not _is_admin(request):
+        raise HTTPException(status_code=403, detail='Forbidden')
+    try:
+        # Run the seed script logic directly
+        import scripts.seed_services as seed_services
+        seed_services.main()
+        return { 'ok': True }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f'Failed to run services seed: {str(e)}')
+
 @api_router.put('/api/services/{service_id}')
 async def update_service(service_id: str, request: Request):
     """Update a service - PRODUCTION READY"""

@@ -168,5 +168,4 @@ async def installer_complete(request: Request):
 
 # Expose name expected by src.web.app
 installer_router = router
-# Stub for installer_router
-installer_router = None
+# Ensure `installer_router` exposes the real router instance used by the app

@@ -163,7 +163,7 @@ async def cmd_start(message: types.Message, state: FSMContext):
     # Check if user is admin
     load_env()
     cfg = Config.from_env()
-    is_admin = is_admin(message.from_user.id)
+    user_is_admin = is_admin(message.from_user.id)
     
     # Welcome messages in different languages
     welcome_messages = {
@@ -174,7 +174,7 @@ async def cmd_start(message: types.Message, state: FSMContext):
     
     await message.answer(
         welcome_messages.get(user_lang, welcome_messages[LANG_RU]),
-        reply_markup=main_menu(user_lang, is_admin)
+        reply_markup=main_menu(user_lang, user_is_admin)
     )
     await state.clear()
 

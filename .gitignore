@@ -3,6 +3,7 @@ credentials.json
 credential.json
 token.json
 .env
+.env.deploy 
 
 # Python
 __pycache__/
@@ -54,6 +55,8 @@ htmlcov/
 .tox/
 
 # Project specific
+# allow explicit unit tests (not globbed by test_*.py) used by CI and dev
+# keep previous patterns but allow files with prefix 'web_installer' and 'installer'
 test_*.py
 *_test.py
 temp/
