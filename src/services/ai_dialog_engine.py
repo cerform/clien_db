@@ -7,13 +7,19 @@ AI Dialog Engine - Полноценный диалоговый движок на
 import logging
 import json
 from typing import Dict, List, Optional, Any
-from datetime import datetime, timedelta
+from datetime import datetime
 from enum import Enum
 
-try:
-    from openai import OpenAI
-except ImportError:
-    OpenAI = None
+from src.services.openai_service import OpenAIService
+from src.ai.advanced_inka import get_advanced_inka
+from src.ai.inka_learning import get_inka_learning
+from src.services.service_factory import (
+    get_admin_service,
+    get_booking_service,
+    get_client_service,
+    get_master_service,
+    get_calendar_service
+)
 
 logger = logging.getLogger(__name__)
 
@@ -63,46 +69,23 @@ class AIDialogEngine:
             default_language: Язык по умолчанию (ru, en, he)
         """
         self.api_enabled = False
-        self.client = None
+        self.openai_service: Optional[OpenAIService] = None
         
         # Определяем провайдера по ключу
         is_groq = api_key and api_key.startswith("gsk_")
         self.provider = "Groq" if is_groq else "OpenAI"
-        
-        # Пробуем инициализировать AI клиент (OpenAI или Groq)
-        if api_key and api_key != "YOUR_OPENAI_API_KEY" and OpenAI:
-            try:
-                import httpx
-                import ssl
-                
-                # Create custom HTTP client with SSL disabled
-                http_client = httpx.Client(
-                    verify=False,  # Disable SSL verification
-                    timeout=30.0
-                )
-                
-                client_kwargs = {
-                    "api_key": api_key,
-                    "http_client": http_client,
-                    "timeout": 30.0,
-                    "max_retries": 2
-                }
-                
-                # Groq использует OpenAI-совместимый API
-                if is_groq:
-                    client_kwargs["base_url"] = "https://api.groq.com/openai/v1"
-                    self.model = "llama-3.3-70b-versatile"  # Быстрая модель Groq
-                else:
-                    self.model = "gpt-4o-mini"  # Быстрая и экономичная модель OpenAI
-                
-                self.client = OpenAI(**client_kwargs)
-                self.api_enabled = True
-                logger.info(f"✅ {self.provider} API enabled (model: {self.model})")
-            except Exception as e:
-                logger.warning(f"⚠️ {self.provider} API disabled: {e}")
-                self.client = None
-                self.api_enabled = False
-                self.model = "gpt-4o-mini"
+
+        # Initialize OpenAIService
+        try:
+            self.openai_service = OpenAIService(api_key=api_key, model=None)
+            self.api_enabled = bool(self.openai_service and self.openai_service.api_enabled)
+            if self.openai_service and getattr(self.openai_service, 'model', None):
+                self.model = self.openai_service.model
+        except Exception as e:
+            logger.warning(f"⚠️ Failed to init OpenAIService: {e}")
+            self.openai_service = None
+            self.api_enabled = False
+            self.model = "gpt-4o-mini"
         else:
             logger.info("ℹ️ Running in fallback mode (no AI API)")
             self.model = "gpt-4o-mini"
@@ -113,6 +96,23 @@ class AIDialogEngine:
         
         # Максимальная длина истории
         self.max_history_length = 20
+        # Advanced INKA config (function definitions mapping)
+        try:
+            admin_services = {
+                "admin_service": get_admin_service(),
+                "booking_service": get_booking_service(),
+                "clients_service": get_client_service(),
+                "masters_service": get_master_service(),
+                "calendar_service": get_calendar_service(),
+            }
+            self.advanced_inka = get_advanced_inka(admin_services=admin_services)
+        except Exception:
+            self.advanced_inka = get_advanced_inka({})
+        # Load INKA learning system for context injection (optional)
+        try:
+            self.inka_learning = get_inka_learning()
+        except Exception:
+            self.inka_learning = None
         
     def _get_system_prompt(self, user_role: UserRole, user_info: Dict) -> str:
         """
@@ -135,7 +135,7 @@ class AIDialogEngine:
 - Можешь выполнять административные функции"""
 
         if user_role == UserRole.CLIENT:
-            return f"""{base_personality}
+            prompt = f"""{base_personality}
 
 КАК КЛИЕНТСКИЙ АССИСТЕНТ ты можешь:
 
@@ -165,7 +165,7 @@ class AIDialogEngine:
 Предпочитаемый язык: {user_info.get('language', 'ru')}"""
 
         elif user_role == UserRole.ADMIN:
-            return f"""{base_personality}
+            prompt = f"""{base_personality}
 
 КАК АДМИНИСТРАТИВНЫЙ АССИСТЕНТ ты можешь:
 
@@ -192,7 +192,7 @@ class AIDialogEngine:
 Администратор: {user_info.get('name', 'Admin')}"""
 
         elif user_role == UserRole.MASTER:
-            return f"""{base_personality}
+            prompt = f"""{base_personality}
 
 КАК АССИСТЕНТ МАСТЕРА ты можешь:
 
@@ -213,7 +213,15 @@ class AIDialogEngine:
 
 Мастер: {user_info.get('name', 'Master')}"""
 
-        return base_personality
+        # Append learning context if present
+        try:
+            if getattr(self, 'inka_learning', None):
+                learning_ctx = self.inka_learning.build_prompt_context()
+                prompt = prompt + "\n\n" + learning_ctx
+        except Exception:
+            pass
+
+        return prompt
 
     def _build_function_definitions(self, user_role: UserRole) -> List[Dict]:
         """
@@ -456,7 +464,15 @@ class AIDialogEngine:
                     }
                 }
             ])
-        
+        # Merge in AdvancedINKA tools to be compatible with remote branch tool names
+        try:
+            if hasattr(self, 'advanced_inka') and self.advanced_inka:
+                tools = self.advanced_inka.create_tools_config(is_admin=(user_role == UserRole.ADMIN))
+                for t in tools:
+                    # Each tool is already a dict of type/function
+                    functions.append(t['function'] if t.get('type') == 'function' and t.get('function') else t)
+        except Exception as e:
+            logger.debug(f"Failed to add advanced INKA tools: {e}")
         return functions
 
     async def process_message(
@@ -515,6 +531,14 @@ class AIDialogEngine:
             if context:
                 context_str = f"\n\nТЕКУЩИЙ КОНТЕКСТ:\n{json.dumps(context, ensure_ascii=False, indent=2)}"
                 system_prompt += context_str
+
+            # Append INKA learning prompt context (admin-approved rules)
+            try:
+                if getattr(self, 'inka_learning', None):
+                    learning_ctx = self.inka_learning.build_prompt_context()
+                    system_prompt += f"\n\n{learning_ctx}"
+            except Exception:
+                pass
             
             # Получаем определения функций
             functions = self._build_function_definitions(user_role)
@@ -524,7 +548,7 @@ class AIDialogEngine:
             logger.info(f"🌐 Detected language: {detected_language}")
             
             # Проверяем, доступен ли AI API
-            if not self.api_enabled or not self.client:
+            if not self.api_enabled or not self.openai_service:
                 logger.warning("⚠️ AI API not enabled, using fallback")
                 # Fallback: используем rule-based ответы
                 return self._fallback_response(message, user_role, detected_language)
@@ -540,13 +564,13 @@ class AIDialogEngine:
             logger.info(f"   Functions count: {len(functions)}")
             
             try:
-                response = self.client.chat.completions.create(
-                    model=self.model,
+                response = self.openai_service.chat_completion(
                     messages=messages,
                     functions=functions,
                     function_call="auto",
                     temperature=0.7,
-                    max_tokens=1000
+                    max_tokens=1000,
+                    model=self.model
                 )
                 logger.info(f"✅ {self.provider} API responded successfully")
             except Exception as api_error:
@@ -835,12 +859,11 @@ class AIDialogEngine:
 - Что хочет клиент
 - Какие действия были выполнены
 - Что нужно сделать дальше"""
-            
-            response = self.client.chat.completions.create(
-                model=self.model,
+            response = self.openai_service.chat_completion(
                 messages=messages + [{"role": "user", "content": summary_prompt}],
                 temperature=0.5,
-                max_tokens=200
+                max_tokens=200,
+                model=self.model
             )
             
             return response.choices[0].message.content

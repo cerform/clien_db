@@ -1,0 +1,6 @@
+# ADMIN_PANEL
+# Structure: backend, frontend, containers
+backend/
+frontend/
+containers/
+README.md

@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+
+{% block title %}DB Manager — Admin Panel{% endblock %}
+
+{% block content %}
+<div class="container mt-xxl">
+    <div class="section card">
+        <div class="card-header flex space-between align-center">
+            <h1 class="card-title">DB Manager</h1>
+            <div class="flex gap-md">
+                <button class="btn btn-outline" onclick="exportDB()">Export</button>
+                <button class="btn btn-danger" onclick="clearDB()">Clear</button>
+            </div>
+        </div>
+        <div class="card-body">
+            <p>Здесь вы можете управлять резервными копиями, экспортом и восстановлением данных.</p>
+            <input type="file" id="restoreFile" style="display:none" onchange="restoreDB(this.files[0])">
+        </div>
+    </div>
+</div>
+
+<script>
+function exportDB() { alert('Экспорт базы (placeholder)'); }
+function clearDB() { if (!confirm('Очистить базу?')) return; alert('Очистка базы (placeholder)'); }
+function restoreDB(file) { alert('Восстановление: ' + file.name); }
+</script>
+{% endblock %}

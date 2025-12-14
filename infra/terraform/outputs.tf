@@ -22,10 +22,4 @@ output "frontend_url" {
   value       = google_cloud_run_service.frontend.status[0].url
   description = "Frontend Cloud Run service URL"
 }
-output "cloudsql_connection_name" {
-  value = google_sql_database_instance.postgres_instance.connection_name
-}
-
-output "cloudrun_url" {
-  value = google_cloud_run_service.service.status[0].url
-}
+## Removed outputs for non-existent resources (postgres_instance, service)

@@ -3,17 +3,45 @@ variable "project_id" {
   type        = string
 }
 
-variable "region" {
-  description = "GCP region (eg us-central1)"
-  type        = string
-  default     = "us-central1"
-}
+// ...existing code...
 
 variable "env_prefix" {
   description = "Prefix used for resource names"
   type        = string
   default     = "tattoo"
 }
+
+variable "jenkins" {
+  description = "Jenkins infrastructure options"
+  type = object({
+    enabled = bool
+    cluster_name = string
+    node_count = number
+  })
+  default = { enabled = false, cluster_name = "tattoo-jenkins-cluster", node_count = 2 }
+}
+
+variable "jenkins_github_oauth_client_id" {
+  description = "GitHub OAuth app client ID for Jenkins UI login"
+  type        = string
+  default     = ""
+}
+
+variable "jenkins_github_oauth_client_secret" {
+  description = "GitHub OAuth app client secret for Jenkins (stored as secret)"
+  type        = string
+  default     = ""
+  sensitive   = true
+}
+
+variable "github_token" {
+  description = "Token used by Jenkins to access GitHub API for seed jobs and webhooks (optional)"
+  type        = string
+  default     = ""
+  sensitive   = true
+}
+
+
 
 variable "images" {
   description = "Container images for deployment (backend, bot, ai, frontend)"
@@ -50,17 +78,7 @@ variable "github_app_installation_id" {
   default     = ""
 }
 
-variable "db_user" {
-  description = "Database user name"
-  type        = string
-  default     = "tattoo_user"
-}
-
-variable "db_name" {
-  description = "Database name"
-  type        = string
-  default     = "tattoo_salon"
-}
+// ...existing code...
 
 variable "db_tier" {
   description = "Cloud SQL tier"

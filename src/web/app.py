@@ -4,17 +4,22 @@ FastAPI Web Interface для управления БД
 
 import os
 import logging
-from fastapi import FastAPI, HTTPException, Depends, Request
-from fastapi.responses import HTMLResponse, FileResponse, JSONResponse
+from fastapi import FastAPI, Request
+from fastapi.responses import HTMLResponse, FileResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from pathlib import Path
-from typing import Optional, List, Dict
+from typing import Optional
+from fastapi.templating import Jinja2Templates
 
-from src.config import get_config
+from src.config.config import Config
+from src.services.admin_manager import get_admin_ids as get_runtime_admin_ids
 from src.services.admin_db_manager import DatabaseManager, InkaLearningSystem
-from src.web.auth import check_admin_password
 from src.web.api import routers
+from src.web.routes.setup import router as setup_router
+from src.bot.telegram_webhook import router as telegram_webhook_router
+from src.core.llm_client import LLMClient
 
 logger = logging.getLogger(__name__)
 
@@ -26,14 +31,29 @@ sheets_client = None  # Global sheets client for API access
 def create_app() -> FastAPI:
     """Create and configure FastAPI application"""
     global db_manager, learning_system, sheets_client
-    
-    config = get_config()
+
+    config = Config.from_env()
+    # Merge configuration from config_manager if present (allows using secret manager + config.json)
+    try:
+        from src.core.config_manager import get_config as get_aggregate_config, get_secret
+        ag_cfg = get_aggregate_config()
+        if ag_cfg.get("spreadsheet_id"):
+            config.SPREADSHEET_ID = ag_cfg.get("spreadsheet_id")
+        if ag_cfg.get("master_calendar_id"):
+            config.MASTER_CALENDAR_ID = ag_cfg.get("master_calendar_id")
+        # If secret for bot token exists in secret manager, ensure Config uses it
+        bot_token_secret = get_secret("TELEGRAM_BOT_TOKEN")
+        if bot_token_secret:
+            config.BOT_TOKEN = bot_token_secret
+    except Exception:
+        pass
     
     app = FastAPI(
         title="Tattoo Bot Admin",
         description="Веб-интерфейс для управления БД тату-салона",
         version="1.0.0"
     )
+    app.state.config = config
 
     # Disallow caching on admin web pages so clients always fetch latest JS/HTML
     @app.middleware("http")
@@ -46,14 +66,15 @@ def create_app() -> FastAPI:
     
     # Initialize managers
     try:
-        from src.db.sheets_client import GoogleSheetsClient
-        
+        from src.db.sheets_client import SheetsClient
+
         # Get credentials file path from env or use default
         creds_file = os.getenv("GOOGLE_CREDENTIALS_JSON", "credentials.json")
-        
-        sheets_client = GoogleSheetsClient(
-            credentials_file=creds_file,
-            spreadsheet_id=config.google_spreadsheet_id
+        token_path = os.getenv("GOOGLE_TOKEN_PATH", "token.json")
+
+        sheets_client = SheetsClient(
+            creds_path=creds_file,
+            token_path=token_path,
         )
         db_manager = DatabaseManager(sheets_client)
         
@@ -90,26 +111,127 @@ def create_app() -> FastAPI:
         allow_headers=["*"],
     )
 
-    # RBAC enforcement middleware (centralized permission checks)
-    try:
-        from src.web.middleware import RBACMiddleware
-        app.add_middleware(RBACMiddleware)
-        logger.info('✅ RBAC middleware added')
-    except Exception as e:
-        logger.warning(f'⚠️ Could not add RBAC middleware: {e}')
+    # Simulation middleware: intercept non-GET requests with 'X-Simulate' header and return simulated response
+    @app.middleware('http')
+    async def simulate_middleware(request: Request, call_next):
+        # header case-insensitive
+        if request.headers.get('x-simulate') and request.method != 'GET':
+            # Attempt to produce a smarter simulated response based on OpenAPI specification
+            try:
+                openapi = request.app.openapi()
+            except Exception:
+                openapi = None
+            mock = None
+            status = 200
+            if openapi:
+                # find matching path in openapi
+                from re import compile as re_compile
+                pmap = openapi.get('paths', {})
+                matched_op = None
+                matched_path_template = None
+                for tmpl, meta in pmap.items():
+                    # build regex from template
+                    regex = '^' + tmpl.replace('{', '(?P<').replace('}', '>[^/]+)') + '$'
+                    try:
+                        rx = re_compile(regex)
+                        if rx.match(str(request.url.path)):
+                            matched_op = meta
+                            matched_path_template = tmpl
+                            break
+                    except Exception:
+                        continue
+                if matched_op:
+                    method_lower = request.method.lower()
+                    op = matched_op.get(method_lower)
+                    if op:
+                        # pick response code
+                        resp_map = op.get('responses', {})
+                        # prefer 200, 201 else take first key
+                        code = '200' if '200' in resp_map else ('201' if '201' in resp_map else (list(resp_map.keys())[0] if resp_map else '200'))
+                        resp_def = resp_map.get(code, {})
+                        # content -> try find application/json
+                        content = resp_def.get('content', {})
+                        if 'application/json' in content:
+                            schema = content['application/json'].get('schema', {})
+                            example = content['application/json'].get('example') or content['application/json'].get('examples')
+                            if example:
+                                # example may be dict or having 'value'
+                                if isinstance(example, dict) and 'value' in example:
+                                    mock = example['value']
+                                else:
+                                    mock = example
+                            elif schema:
+                                from src.web.utils import schema_to_example
+                                components = openapi.get('components', {}) if openapi else {}
+                                mock = schema_to_example(schema, components)
+                        else:
+                            # Try any content type and return simple info
+                            mock = {'simulated': True, 'notes': 'no json content, returning basic response'}
+                        try:
+                            status = int(code)
+                        except Exception:
+                            status = 200
+            # fallback basic response
+            if mock is None:
+                try:
+                    raw = await request.body()
+                    body_text = raw.decode('utf-8') if raw else ''
+                except Exception:
+                    body_text = ''
+                mock = {'simulated': True, 'path': str(request.url.path), 'method': request.method, 'query': dict(request.query_params), 'body': body_text}
+            return JSONResponse(mock, status_code=status)
+        return await call_next(request)
+
+    # Auth token parsing middleware: parse Bearer admin token and expose request.state.admin_id
+    @app.middleware('http')
+    async def parse_admin_token(request: Request, call_next):
+        auth = request.headers.get('Authorization') or request.headers.get('authorization')
+        if auth and auth.startswith('Bearer '):
+            token = auth.split(' ', 1)[1].strip()
+            # Recognize tokens like admin_token_<id>
+            if token.startswith('admin_token_'):
+                try:
+                    admin_id = int(token.split('_')[-1])
+                    request.state.admin_id = admin_id
+                    request.state.admin_token = token
+                except Exception:
+                    request.state.admin_id = None
+            else:
+                # Try JWT decode
+                try:
+                    from src.web.auth import verify_jwt
+                    v = verify_jwt(token)
+                    if v:
+                        request.state.admin_id = v
+                        request.state.admin_token = token
+                except Exception:
+                    # ignore invalid tokens
+                    request.state.admin_id = None
+        return await call_next(request)
+
+    # RBAC middleware: set a role on the request for downstream handlers
+    from src.security.rbac_middleware import rbac_middleware
+    app.middleware('http')(rbac_middleware)
+
+    # RBAC enforcement is handled at endpoint level via _is_admin() helper function
+    # Each protected endpoint checks admin status using Bearer token or admin_id
+    # See src/web/api.py:_is_admin() for implementation details
+    logger.info('✅ RBAC handled at endpoint level via admin token validation')
     
     # Static files
     static_dir = Path(__file__).parent / "static"
     if static_dir.exists():
         app.mount("/static", StaticFiles(directory=static_dir), name="static")
     
-    # Use custom APIRoute class to enforce RBAC at route level
-    try:
-        from src.web.rbac_route import RBACRoute
-        app.router.route_class = RBACRoute
-        logger.info('✅ RBAC route class applied')
-    except Exception as e:
-        logger.warning(f'⚠️ Could not apply RBAC route class: {e}')
+    # Templates
+    templates_dir = Path(__file__).parent / "templates"
+    if templates_dir.exists():
+        app.templates = Jinja2Templates(directory=str(templates_dir))
+    else:
+        app.templates = Jinja2Templates(directory="src/web/templates")
+
+    # Authorization is enforced at endpoint level using admin token middleware
+    # Protected endpoints use _is_admin(request) helper to check permissions
 
     # Include API routers
     app.include_router(routers.api_router)
@@ -125,6 +247,26 @@ def create_app() -> FastAPI:
         logger.info('✅ Installer router added')
     except Exception as ie:
         logger.warning(f'⚠️ Could not include installer router: {ie}')
+
+    # Setup page router
+    app.include_router(setup_router)
+    # System settings router (admin accessible)
+    try:
+        from src.web.routes.system_settings import router as system_settings_router
+        app.include_router(system_settings_router)
+        logger.info('✅ System settings router added')
+    except Exception as se:
+        logger.warning(f'⚠️ Could not add system settings router: {se}')
+    # Telegram webhook router
+    app.include_router(telegram_webhook_router)
+
+    # Monitoring and health check router
+    try:
+        from src.web.monitoring import router as monitoring_router
+        app.include_router(monitoring_router)
+        logger.info('✅ Monitoring router added')
+    except Exception as me:
+        logger.warning(f'⚠️ Could not add monitoring router: {me}')
 
     # Initialize Sentry (optional) if env provided
     sentry_dsn = os.getenv('SENTRY_DSN')
@@ -149,10 +291,19 @@ def create_app() -> FastAPI:
             logger.warning(f'⚠️ Cloud Logging init error: {ce}')
     
     @app.get("/", response_class=HTMLResponse)
-    async def root():
-        """Главная страница"""
-        return get_dashboard_html()
-    
+    async def root(request: Request):
+        """Главная страница - SPA Dashboard"""
+        return app.templates.TemplateResponse("dashboard_spa.html", {"request": request})
+
+    @app.get("/calendar", response_class=HTMLResponse)
+    async def calendar_page(request: Request):
+        """Calendar page"""
+        calendar_id = config.MASTER_CALENDAR_ID if hasattr(config, 'MASTER_CALENDAR_ID') else None
+        return app.templates.TemplateResponse("calendar.html", {
+            "request": request,
+            "calendar_id": calendar_id
+        })
+
     @app.get("/login", response_class=HTMLResponse)
     async def login_page():
         """Страница входа"""
@@ -162,7 +313,7 @@ def create_app() -> FastAPI:
     async def login(request: Request):
         """Вход в систему"""
         try:
-            from src.web.auth import authenticate_admin, check_admin_password
+            from src.web.auth import authenticate_admin, check_admin_password, create_jwt_for_admin
             
             body = await request.json()
             username = body.get("username", "").strip()
@@ -172,9 +323,14 @@ def create_app() -> FastAPI:
             if username:
                 success, admin_info = authenticate_admin(username, password)
                 if success:
+                    admin_id = admin_info.get('id', 1)
+                    jwt_token = create_jwt_for_admin(admin_id)
+                    # For backward compatibility also return legacy token
+                    legacy = f"admin_token_{admin_id}"
                     return {
                         "success": True,
-                        "token": f"admin_token_{admin_info['id']}",
+                        "token": jwt_token,
+                        "legacy_token": legacy,
                         "user": admin_info,
                         "message": "Успешный вход"
                     }
@@ -183,12 +339,22 @@ def create_app() -> FastAPI:
                         "success": False,
                         "message": "Неверный логин или пароль"
                     }
-            else:
-                # Fallback: password-only login (backward compatibility)
-                if check_admin_password(password):
+                else:
+                    # Fallback: password-only login (backward compatibility)
+                    if check_admin_password(password):
+                        try:
+                            admin_ids = get_runtime_admin_ids()
+                            admin_id = admin_ids[0] if admin_ids else 123
+                        except Exception:
+                            from src.config.config import Config
+                            cfg = Config.from_env()
+                            admin_id = cfg.ADMIN_USER_IDS[0] if cfg.ADMIN_USER_IDS else 123
+                    jwt_token = create_jwt_for_admin(admin_id)
+                    legacy = f"admin_token_{admin_id}"
                     return {
                         "success": True,
-                        "token": "admin_token_123",
+                        "token": jwt_token,
+                        "legacy_token": legacy,
                         "message": "Успешный вход"
                     }
                 else:
@@ -231,8 +397,7 @@ def get_dashboard_html() -> str:
         <meta charset="UTF-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
         <title>Admin Panel - Tattoo Bot</title>
-        <link rel="stylesheet" href="/static/blackwork.css">
-        <script src="/static/theme-switcher.js"></script>
+        <!-- Move to unified base styles; no inline blackwork or theme-switch scripts -->
         <style>
             * {
                 margin: 0;

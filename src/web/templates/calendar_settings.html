@@ -1,0 +1,94 @@
+{% extends "base.html" %}
+
+{% block title %}Calendar Settings — Tattoo Salon{% endblock %}
+
+{% block content %}
+<div class="container mt-xl">
+  <div class="card">
+    <div class="card-header"><h1>Настройки календарей</h1></div>
+    <div class="card-body">
+      <div class="form-group">
+        <label>Salon Calendar ID</label>
+        <input id="main-calendar-id" class="form-input" placeholder="Calendar ID">
+      </div>
+      <div style="display:flex; gap:8px; align-items:center">
+        <input id="admin-token" class="form-input" placeholder="Admin token (Bearer or admin_token_X)">
+        <button id="save-main-calendar" class="btn btn-primary">Save Main Calendar</button>
+      </div>
+      <hr/>
+      <h3>Masters Calendars</h3>
+      <div id="masters-list">Loading masters...</div>
+    </div>
+  </div>
+  <div class="hint mt-md text-secondary">
+    <p>Инструкция: добавьте сервисный аккаунт как редактора Google Sheets и календарей;<br/>Для мастеров можно указать кастомный calendar ID, чтобы события мастера писались в его собственный календарь.</p>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+async function loadMasters(){
+  const res = await fetch('/api/admin/masters');
+  const masters = await res.json();
+  const container = document.getElementById('masters-list');
+  if (!masters || !masters.length) {
+    container.innerHTML = '<div>No masters found</div>';
+    return;
+  }
+  container.innerHTML = masters.map(m => `
+    <div class="card" style="padding:8px; margin-bottom:8px">
+      <div style="display:flex; align-items:center; justify-content:space-between">
+        <div><strong>${m.name}</strong> <div class="text-muted">id: ${m.id}</div></div>
+        <div style="display:flex; gap:8px; align-items:center">
+          <input class="form-input master-cal-input" data-mid="${m.id}" placeholder="calendar id" value="${m.calendar_id || ''}" />
+          <button class="btn btn-outline master-save" data-mid="${m.id}">Save</button>
+        </div>
+      </div>
+    </div>`).join('');
+  // Wire up save buttons
+  document.querySelectorAll('.master-save').forEach(btn => {
+    btn.addEventListener('click', async (e) => {
+      const mid = btn.getAttribute('data-mid');
+      const input = document.querySelector(`.master-cal-input[data-mid="${mid}"]`);
+      const calendar_id = input.value.trim();
+      const token = document.getElementById('admin-token').value.trim();
+      const headers = {'Content-Type':'application/json'};
+      if (token) headers['Authorization'] = 'Bearer ' + token;
+      const r = await fetch(`/api/admin/masters/${mid}/calendar`, {method:'POST', headers, body: JSON.stringify({calendar_id})});
+      if (r.ok) {
+        btn.textContent = 'Saved';
+        setTimeout(()=>btn.textContent='Save', 1500);
+      } else {
+        const j = await r.json();
+        alert(j.detail || 'Error');
+      }
+    })
+  })
+}
+
+document.getElementById('save-main-calendar').addEventListener('click', async () => {
+  const token = document.getElementById('admin-token').value.trim();
+  const cal = document.getElementById('main-calendar-id').value.trim();
+  const headers = {'Content-Type':'application/json'};
+  if (token) headers['Authorization'] = 'Bearer ' + token;
+  const r = await fetch('/api/settings', {method:'POST', headers, body: JSON.stringify({calendar_id: cal})});
+  if (r.ok) {
+    alert('Saved');
+  } else {
+    const j = await r.json();
+    alert(j.detail || 'Error');
+  }
+});
+
+// Prefill main calendar and masters
+async function loadMainCalendar(){
+  try{
+    const s = await (await fetch('/api/status')).json();
+    if (s.config && s.config.calendar_id) document.getElementById('main-calendar-id').value = s.config.calendar_id;
+  }catch(e){}
+}
+
+document.addEventListener('DOMContentLoaded', async ()=>{ await loadMainCalendar(); await loadMasters()})
+</script>
+{% endblock %}

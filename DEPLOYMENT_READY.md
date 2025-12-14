@@ -166,6 +166,24 @@ gcloud run deploy tattoo-bot \
     --set-secrets "BOT_TOKEN=TELEGRAM_BOT_TOKEN:latest,OPENAI_API_KEY=OPENAI_API_KEY:latest"
 ```
 
+Alternatively, use `scripts/prepare_deploy.sh` to run tests, apply migrations, and rbac before deploying:
+
+```bash
+# Example: run tests, apply migrations and RBAC, then deploy (non-dry-run)
+export DATABASE_URL=postgresql+psycopg2://tattoo_user:password@/tattoo_salon?host=/cloudsql/your-connection-name
+chmod +x scripts/prepare_deploy.sh
+./scripts/prepare_deploy.sh --run-tests --migrate --rbac --deploy --no-dry-run
+```
+
+Note: In CI (Cloud Build) you can enable DB migrations to be executed as a one-off job in the build pipeline by setting `_DATABASE_URL` in the trigger substitutions — Cloud Build will run migrations and RBAC creation using the built image:
+
+```yaml
+# Example substitution for Cloud Build trigger
+_DATABASE_URL: 'postgresql+psycopg2://tattoo_user:password@/tattoo_salon?host=/cloudsql/your-connection'
+```
+
+
+
 ### Шаг 4: Настроить webhook
 
 ```bash

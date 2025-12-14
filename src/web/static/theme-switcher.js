@@ -64,8 +64,8 @@
     imgs.forEach(img => {
       const name = img.getAttribute('data-icon');
       if (!name) return;
-      const themedFile = `/static/icons/icon-${name}-${theme}.svg`;
-      const baseFile = `/static/icons/icon-${name}.svg`;
+      const themedFile = '/static/icons/icon-' + name + '-' + theme + '.svg';
+      const baseFile = '/static/icons/icon-' + name + '.svg';
       // Probe themed file and fall back to base file if it doesn't exist
       const probe = new Image();
       probe.onload = function () { img.src = themedFile; };

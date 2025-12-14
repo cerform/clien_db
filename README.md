@@ -196,6 +196,10 @@ SPREADSHEET_ID=your-id         # create_google_sheets_structure.py
 ADMIN_USER_IDS=12345,67890     # Your Telegram ID
 DEFAULT_TIMEZONE=Asia/Jerusalem # Locale
 ENV=development                 # or production
+AI_ONLY_MODE=true               # Run bot in 'AI-only' mode (no buttons / menus) [true|false]
+
+# Admin rights and DB access
+The bot automatically uses the Google Sheets service account credentials provided by `GOOGLE_CREDENTIALS_PATH` for reading and writing the spreadsheet. Assign `ADMIN_USER_IDS` in the `.env` to grant the Telegram user(s) administrative privileges. Admin users can view, edit and manage bookings, see master schedules, and run exploratory INKA admin functions.
 ```
 
 ### credentials.json

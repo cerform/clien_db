@@ -157,12 +157,35 @@ create_google_spreadsheet() {
     echo "Google credentials not found at ${GOOGLE_CREDENTIALS_PATH:-credentials.json}. Skipping spreadsheet creation."
     return
   fi
+  # Detect credentials type (service account vs oauth client) to inform the user
+  CREDS_TYPE=$(python3 - <<PY
+import json, os
+path = os.getenv('GOOGLE_CREDENTIALS_PATH', 'credentials.json')
+try:
+    data = json.load(open(path))
+    if data.get('type') == 'service_account':
+        print('SERVICE_ACCOUNT')
+    elif 'installed' in data or 'web' in data:
+        print('OAUTH_CLIENT')
+    else:
+        print('UNKNOWN')
+except Exception:
+    print('NONE')
+PY
+)
+  if [[ "$CREDS_TYPE" == "SERVICE_ACCOUNT" ]]; then
+    echo "Detected service account credentials. A service account will be used for Google API calls.
+If you want to use the OAuth desktop flow instead, replace credentials.json with an OAuth client secret file of type 'installed' or 'web'."
+  fi
 
   read -p "Create Google Sheets spreadsheet from template now? Y/n: " -r
   if [[ $REPLY =~ ^[Yy] || -z $REPLY ]]; then
-    python3 create_google_sheets_structure.py
-    echo "If the script printed a SPREADSHEET_ID, paste it into .env as SPREADSHEET_ID"
-    ${EDITOR:-nano} .env
+    if python3 create_google_sheets_structure.py --yes; then
+      echo "If the script printed a SPREADSHEET_ID, paste it into .env as SPREADSHEET_ID"
+      ${EDITOR:-nano} .env
+    else
+      echo "Google Sheets creation failed — continuing setup. Please check the logs and if needed, create a spreadsheet manually and set SPREADSHEET_ID in .env"
+    fi
   fi
 }
 

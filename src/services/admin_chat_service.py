@@ -5,22 +5,58 @@ Supports multilingual conversations and automatic message categorization
 Integrated with INKA AI for intelligent client interaction classification
 """
 
-from openai import OpenAI
+from src.services.openai_service import OpenAIService
 from datetime import datetime
 from typing import Optional, Dict
 from src.services.inka_ai import INKA, INKAClassifier
 
 
 class AdminChatService:
-    """Chat service for admin communication with AI that acts as studio admin"""
+    """
+    Admin Chat Service - AI-powered chat for studio administration
+    Supports multilingual conversations and automatic message categorization
 
-    def __init__(self, api_key: str):
-        self.client = OpenAI(api_key=api_key)
+    Integrated with INKA AI for intelligent client interaction classification
+    """
+
+    def __init__(self, api_key: str = None, repo=None, test_mode=False):
         self.model = "gpt-3.5-turbo"
-        # Store conversation history per admin user
         self.conversations = {}
-        # Initialize INKA for client message classification
-        self.inka = INKA(api_key=api_key)
+        self.repo = repo
+        self.test_mode = test_mode
+        if not test_mode:
+            if api_key:
+                self.openai_service = OpenAIService(api_key=api_key)
+                self.inka = INKA(api_key=api_key)
+            else:
+                self.openai_service = None
+                self.inka = None
+        else:
+            self.client = None
+            self.inka = None
+
+    def redact_pii(self, message: dict) -> dict:
+        """Redact PII fields in admin message"""
+        redacted = message.copy()
+        redacted["user_id"] = None
+        redacted["username"] = None
+        # Можно добавить доп. логику для message
+        redacted["message"] = "[REDACTED]"
+        return redacted
+
+    def delete_old_messages(self, messages: list, months: int = 12) -> list:
+        """Delete messages older than N months (default: 12)"""
+        cutoff = datetime.now().timestamp() - months * 30 * 24 * 3600
+        filtered = []
+        for msg in messages:
+            ts = msg.get("timestamp")
+            try:
+                msg_time = datetime.fromisoformat(ts).timestamp() if ts else 0
+            except Exception:
+                msg_time = 0
+            if msg_time >= cutoff:
+                filtered.append(msg)
+        return filtered
 
     def _get_system_prompt(self) -> str:
         """Create system prompt for admin persona"""
@@ -68,21 +104,18 @@ Respond in a natural, conversational way without being too formal."""
         # Add user message to history
         self.conversations[user_id].append({"role": "user", "content": message})
 
-        # Get AI response
-        response = self.client.chat.completions.create(
-            model=self.model,
-            messages=[
-                {"role": "system", "content": self._get_system_prompt()},
-                *self.conversations[user_id],
-            ],
-            temperature=0.7,
-            max_tokens=500,
-        )
-
-        ai_response = response.choices[0].message.content
-
-        # Add AI response to history
-        self.conversations[user_id].append({"role": "assistant", "content": ai_response})
+        if self.test_mode:
+            ai_response = f"[MOCK AI RESPONSE] {message}"
+            self.conversations[user_id].append({"role": "assistant", "content": ai_response})
+        else:
+            response = self.openai_service.chat_completion(
+                messages=[{"role": "system", "content": self._get_system_prompt()}, *self.conversations[user_id]],
+                temperature=0.7,
+                max_tokens=500,
+                model=self.model
+            )
+            ai_response = response.choices[0].message.content if getattr(response, 'choices', None) else str(response)
+            self.conversations[user_id].append({"role": "assistant", "content": ai_response})
 
         # Keep only last 10 messages to avoid token limits
         if len(self.conversations[user_id]) > 20:
@@ -99,6 +132,68 @@ Respond in a natural, conversational way without being too formal."""
             "timestamp": datetime.now().isoformat(),
             "admin_user_id": admin_user_id,
         }
+
+    def save_message(self, user_id: int, username: str, message: str, category: str = None, data: dict = None, inka_category: str = None) -> int:
+        """
+        Save admin message to database
+
+        Args:
+            user_id: Telegram user ID
+            username: Username
+            message: Message text
+            category: Message category (auto-detected if None)
+            data: Additional structured data
+            inka_category: INKA classification category
+
+        Returns:
+            Message ID if saved, None otherwise
+        """
+        if not self.repo:
+            return None
+
+        # Auto-detect category if not provided
+        if not category:
+            category = self.categorize_message(message)
+
+        msg = {
+            "timestamp": datetime.now().isoformat(),
+            "user_id": str(user_id),
+            "username": username,
+            "message": message,
+            "category": category,
+            "data": data or {},
+            "inka_category": inka_category or "",
+            "sheet_row": 0
+        }
+
+        return self.repo.save_message(msg)
+
+    def categorize_message(self, message: str) -> str:
+        """
+        Categorize message based on content
+
+        Args:
+            message: Message text
+
+        Returns:
+            Category name
+        """
+        cats = self._extract_categories(message, message)
+        if cats:
+            return cats[0]
+        return "Other"
+
+    def get_user_messages(self, user_id: int, limit: int = 50):
+        """Get messages for specific user"""
+        if not self.repo:
+            return []
+        return self.repo.get_messages_by_user(str(user_id), limit)
+
+    def get_messages_by_category(self, category: str, limit: int = 100):
+        """Get messages by category"""
+        if not self.repo:
+            return []
+        return self.repo.get_messages_by_category(category, limit)
 
     def _extract_categories(self, message: str, ai_response: str) -> list:
         """Detect message categories based on content"""

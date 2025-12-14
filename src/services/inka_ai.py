@@ -20,10 +20,7 @@ from typing import Dict, List, Optional
 from datetime import datetime
 from enum import Enum
 
-try:
-    from openai import OpenAI
-except ImportError:
-    OpenAI = None
+from src.services.openai_service import OpenAIService
 
 from src.services.inka_booking_engine import INKABookingEngine, BookingEngineStage
 
@@ -315,10 +312,16 @@ class INKAConsultant:
     - Guides to booking when ready
     """
 
-    def __init__(self, api_key: Optional[str] = None):
+    def __init__(self, api_key: Optional[str] = None, openai_service: Optional[OpenAIService] = None):
         """Initialize consultant with optional OpenAI integration"""
         self.api_key = api_key
-        self.client = OpenAI(api_key=api_key) if api_key and OpenAI else None
+        self.openai_service = openai_service
+        # If no service provided and key is present, create it
+        if not self.openai_service and api_key:
+            try:
+                self.openai_service = OpenAIService(api_key=api_key)
+            except Exception:
+                self.openai_service = None
         self.model = "gpt-3.5-turbo"
 
     def get_system_prompt(self) -> str:
@@ -482,7 +485,7 @@ Booking type: {booking_type}
         Returns:
             Text response from consultant in user's language
         """
-        if not self.client:
+        if not self.openai_service or not self.openai_service.api_enabled:
             # Fallback: rule-based response
             return self._rule_based_response(message, context, language)
 
@@ -492,14 +495,11 @@ Booking type: {booking_type}
 
             user_prompt = self._get_user_prompt(message, booking_type, language)
 
-            response = self.client.chat.completions.create(
-                model=self.model,
-                messages=[
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": user_prompt},
-                ],
+            response = self.openai_service.chat_completion(
+                messages=[{"role": "system", "content": system_prompt}, {"role": "user", "content": user_prompt}],
                 temperature=0.7,
                 max_tokens=300,
+                model=self.model
             )
 
             return response.choices[0].message.content

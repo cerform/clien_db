@@ -1,0 +1,409 @@
+{% extends "base.html" %}
+
+{% block title %}Endpoints — Explorer{% endblock %}
+
+{% block content %}
+<div class="container">
+  <div class="section card card-interactive">
+    <div class="card-header">
+      <h1 class="card-title">🔌 API Explorer — Endpoints</h1>
+    </div>
+    <div class="card-body">
+        <!-- STATUS PANEL -->
+        <div class="status-grid" style="display:grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap:12px; margin-bottom:12px;">
+          <div class="card" id="status-telegram">Telegram Bot: Loading...</div>
+          <div class="card" id="status-webhook">Webhook: Loading...</div>
+          <div class="card" id="status-sheets">Google Sheets: Loading...</div>
+          <div class="card" id="status-db">DB/Manager: Loading...</div>
+          <div class="card" id="status-llm">LLM: Loading...</div>
+        </div>
+        <!-- KEYS & HELP -->
+        <div class="card" id="keys-panel" style="padding:12px; margin-bottom:12px">
+          <h3>🔑 Keys & Connectors</h3>
+          <div id="sa-email" class="text-muted">Service account: <strong id="sa-email-val">Loading...</strong></div>
+          <p class="text-secondary">Добавьте этот сервисный аккаунт в список редакторов Google Sheets и календарей, чтобы обеспечить доступ.</p>
+          <form id="keys-form" style="margin-top:8px; display:grid; gap:8px">
+            <div class="form-group"><label>Spreadsheet ID</label><input id="cfg-spreadsheet_id" class="form-input" placeholder="Spreadsheet ID"></div>
+            <div class="form-group"><label>Salon (main) Calendar ID</label><input id="cfg-calendar_id" class="form-input" placeholder="Calendar ID"></div>
+            <div class="form-group"><label>Telegram Bot Token</label><input id="cfg-telegram_token" class="form-input" placeholder="Bot token"></div>
+            <div class="form-group"><label>LLM API Key</label><input id="cfg-llm_api_key" class="form-input" placeholder="OpenAI / Anthropic key"></div>
+            <div class="form-group"><label>Currency</label>
+              <select id="cfg-currency" class="form-input">
+                <option value="NIS">NIS</option>
+                <option value="USD">USD</option>
+                <option value="EUR">EUR</option>
+              </select>
+            </div>
+            <div class="form-group" style="display:flex; gap:8px; align-items:center"><input id="cfg-admin-token" class="form-input" placeholder="Admin token (Bearer or admin_token_X)"> <button id="cfg-save-btn" class="btn btn-primary" type="button">Save</button></div>
+          </form>
+            <div style="margin-top:8px">
+              <h4>Administrators</h4>
+              <div id="admin-list" class="text-muted">Loading...</div>
+              <div style="display:flex; gap:8px; margin-top:8px;">
+                <input id="admin-new-id" class="form-input" placeholder="Telegram admin ID">
+                <button id="admin-add-btn" class="btn btn-primary">Add</button>
+              </div>
+            </div>
+          <div style="margin-top:8px" id="cfg-save-result"></div>
+          <hr/>
+          <div>
+            <h4>Инструкция</h4>
+            <ol>
+              <li>Создайте или используйте существующий Google Service Account JSON и добавьте email как редактор в Google Sheets и Google Calendar.</li>
+              <li>Задайте Spreadsheet ID и Calendar ID в полях выше и нажмите Save.</li>
+              <li>Установите Telegram Bot token (получите его у BotFather) и нажмите Save.</li>
+              <li>Для локальной разработки положите credentials.json в корень проекта (или задайте переменную GOOGLE_CREDENTIALS_JSON).</li>
+              <li>В Cloud Run используйте сервисный аккаунт и сохраните секреты через Secret Manager.</li>
+            </ol>
+          </div>
+        </div>
+      <div style="margin-bottom:10px; display:flex; gap:12px; align-items:center">
+        <div style="flex:1"><input id="endpointsSearch" placeholder="Search endpoints (path, summary, tag)" class="form-input" style="width:100%"></div>
+        <div><button class="btn" onclick="refresh()">Refresh</button></div>
+      </div>
+      <div class="tabs" id="endpointTabs">
+        <!-- tabs will be inserted here -->
+      </div>
+      <div id="endpointContent" style="margin-top:16px">
+        <div id="endpointList">Loading...</div>
+      </div>
+    </div>
+  </div>
+<script>
+async function refresh(){
+  await loadEndpoints();
+  await loadStatus();
+}
+</script>
+  </div>
+</div>
+
+<script>
+async function loadEndpoints() {
+  const res = await fetch('/api/endpoints');
+  const data = await res.json();
+  // Group by tags - fallback to 'ungrouped'
+  const groups = {};
+  data.forEach(e => {
+    const t = (e.tags && e.tags.length) ? e.tags[0] : '(no-tag)';
+    if (!groups[t]) groups[t] = [];
+    groups[t].push(e);
+  });
+
+  // Render tab buttons
+  const tabsEl = document.getElementById('endpointTabs');
+  tabsEl.innerHTML = '';
+  let firstTag = null;
+  Object.keys(groups).forEach((tag, idx) => {
+    if (idx === 0) firstTag = tag;
+    const btn = document.createElement('button');
+    btn.className = 'btn';
+    btn.textContent = tag;
+    btn.style.marginRight = '8px';
+    btn.onclick = () => {
+      // Mark active class
+      document.querySelectorAll('#endpointTabs .btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      renderGroup(tag)
+    };
+    tabsEl.appendChild(btn);
+  });
+  // mark active for first
+  if (firstTag) {
+    const firstBtn = tabsEl.querySelector('.btn');
+    if (firstBtn) firstBtn.classList.add('active');
+    renderGroup(firstTag);
+  }
+
+  let methodFilter = 'ALL';
+
+  function renderGroup(tag) {
+    const list = groups[tag] || [];
+    const q = (document.getElementById('endpointsSearch').value || '').toLowerCase();
+    const filtered = list.filter(e => (e.path || '').toLowerCase().includes(q) || (e.summary || '').toLowerCase().includes(q) || (e.tags && e.tags.join(',').toLowerCase().includes(q)));
+    const container = document.getElementById('endpointList');
+    if (!filtered.length) {
+      container.innerHTML = '<div>No endpoints</div>';
+      return;
+    }
+    container.innerHTML = filtered.map(e => {
+      const methodsList = (e.methods || []);
+      const methods = methodsList.map(m => `<span class=\"badge\">${m}</span>`).join(' ');
+      const displayMethods = (methodFilter === 'ALL') ? methodsList : methodsList.filter(m => m === methodFilter);
+      if (!displayMethods || displayMethods.length === 0) return '';
+      const summary = e.summary || '';
+      return `
+        <div class=\"card\" style=\"padding:12px; margin-bottom:8px\"> 
+          <div style=\"display:flex; justify-content:space-between\">
+            <div><strong>${e.path}</strong> ${methods} <div class=\"text-muted\" style=\"font-size:0.9em; margin-top:6px\">${summary}</div></div>
+            <div style=\"display:flex; align-items:center; gap:8px\">
+              ${ displayMethods.map(m => `<button class=\\\"btn\\\" onclick=\\\"openDetails('` + e.path.replace(/'/g, "\\'") + `', '${m}')\\\">${m}</button>`).join(' ') }
+            </div>
+          </div>
+          <div id=\\\"details-` + escapeForId(e.path) + `\\\" style=\\\"margin-top:8px;display:none\\\"></div>
+        </div>`;
+    }).join('\n');
+  }
+
+  // wire up search input inside closure
+  document.getElementById('endpointsSearch').addEventListener('input', () => {
+    const activeBtn = document.querySelector('#endpointTabs .btn.active');
+    if (activeBtn) {
+      const tag = activeBtn.textContent;
+      renderGroup(tag);
+    } else {
+      renderGroup(Object.keys(groups)[0]);
+    }
+  });
+
+  window.setMethodFilter = function(filter) {
+    methodFilter = filter;
+    // Deactivate any selected tag buttons (we keep their active state separate)
+    document.querySelectorAll('#endpointTabs .btn').forEach(b => b.classList.remove('active'));
+    // Deactivate other method buttons
+    document.querySelectorAll('[id^="filter-"]').forEach(b => b.classList.remove('active'));
+    const activeBtn = document.getElementById('filter-' + filter.toLowerCase());
+    if (activeBtn) activeBtn.classList.add('active');
+    const activeTab = document.querySelector('#endpointTabs .btn.active');
+    if (activeTab) renderGroup(activeTab.textContent);
+  }
+
+  function escapeForId(path) {
+    return path.replace(/[\{\}\/]/g, '_').replace(/[^a-zA-Z0-9_\-]/g, '_');
+  }
+
+  window.openDetails = function(path, method) {
+    const id = 'details-' + escapeForId(path);
+    const el = document.getElementById(id);
+    const endpoint = data.find(d => d.path === path);
+    if (!endpoint) return;
+    const op = (endpoint.operations && endpoint.operations[method]) || {};
+    // Build detail HTML
+    let html = `<div class=\\\"card\\\">`;
+    html += `<div style=\\\"padding:8px\\\"><strong>${method} ${path}</strong> - ${op.summary || ''}</div>`;
+    // Parameters
+    const params = op.parameters || [];
+    if (params.length) {
+      html += `<div style=\\\"padding:8px\\\"><h4>Parameters</h4>`;
+      params.forEach(p => {
+        html += `<div><strong>${p.name}</strong> <em>${p.in}</em> ${p.required ? '<span style=\\\"color:crimson\\\">(required)</span>' : ''}<div class=\\\"text-muted\\\">${p.description || ''}</div></div>`;
+      });
+      html += `</div>`;
+    }
+    // Request body
+    const rb = op.requestBody || {};
+    if (rb && Object.keys(rb).length) {
+      html += `<div style=\\\"padding:8px\\\"><h4>Request Body</h4>`;
+      if (rb.content) {
+        Object.keys(rb.content).forEach(mt => {
+          html += `<div><strong>Media: ${mt}</strong><pre style=\\\"white-space:pre-wrap;max-height:200px;overflow:auto\\\">${JSON.stringify(rb.content[mt].schema, null, 2)}</pre></div>`;
+        });
+      }
+      html += `</div>`;
+    }
+    // Responses
+    const responses = op.responses || {};
+    if (responses && Object.keys(responses).length) {
+      html += `<div style=\\\"padding:8px\\\"><h4>Responses</h4>`;
+      Object.keys(responses).forEach(code => {
+        const r = responses[code];
+        html += `<div><strong>${code}</strong> ${r.description || ''}`;
+        if (r.content) {
+          Object.keys(r.content).forEach(mt => {
+            html += `<div class=\\\"text-muted\\\"><pre style=\\\"white-space:pre-wrap;max-height:160px;overflow:auto\\\">${JSON.stringify(r.content[mt].schema, null, 2)}</pre></div>`;
+          });
+        }
+        html += `</div>`;
+      });
+      html += `</div>`;
+    }
+
+    // Add test form
+    html += `<div style=\\\"padding:8px\\\"><h4>Test</h4>`;
+    // path params
+    const pathParams = (params || []).filter(p => p.in === 'path');
+    const queryParams = (params || []).filter(p => p.in === 'query');
+    pathParams.forEach(pp => {
+      html += `<div class=\\\"form-group\\\"><label>${pp.name}</label><input class=\\\"form-input\\\" id=\\\"param-${escapeForId(path)}-${pp.name}\\\" placeholder=\\\"${pp.name}\\\"></div>`;
+    });
+    // Query params inputs
+    if (queryParams && queryParams.length) {
+      html += `<div style=\\\"padding:8px\\\"><h4>Query Parameters</h4>`;
+      queryParams.forEach(qp => {
+        html += `<div class=\\\"form-group\\\"><label>${qp.name} ${qp.required ? '<span style=\\\"color:crimson\\\">(required)</span>' : ''}</label><input class=\\\"form-input\\\" id=\\\"query-${escapeForId(path)}-${qp.name}\\\" placeholder=\\\"${qp.name}\\\"></div>`;
+      });
+      html += `</div>`;
+    }
+    html += `<div class=\\\"form-group\\\"><label>Request Body (JSON)</label><textarea class=\\\"form-input\\\" id=\\\"body-${escapeForId(path)}-${method}\\\" rows=\\\"6\\\">{}</textarea></div>`;
+    html += `<div class=\\\"form-group\\\"><label>Admin Token (optional)</label><input class=\\\"form-input\\\" id=\\\"token-${escapeForId(path)}-${method}\\\" placeholder=\\\"admin token\\\"></div>`;
+    html += `<div style=\\\"display:flex;gap:8px;margin-top:8px\\\">`;
+    html += `<label style=\\\"display:flex;align-items:center;gap:8px\\\"><input type=\\\"checkbox\\\" id=\\\"simulate-${escapeForId(path)}-${method}\\\" checked> Simulate</label>`;
+    html += `<button class=\\\"btn\\\" onclick=\\\"tryMethod('${path}', '${method}')\\\">Try ${method}</button>`;
+    html += `</div>`;
+    html += `</div>`;
+    html += `</div>`;
+    // Toggle open/close
+    if (el.style.display === 'none' || !el.style.display) {
+      el.innerHTML = html;
+      el.style.display = 'block';
+    } else {
+      el.style.display = 'none';
+      el.innerHTML = '';
+    }
+  }
+
+  window.tryMethod = async function(path, method) {
+    const idPath = escapeForId(path);
+    const bodyArea = document.getElementById('body-' + idPath + '-' + method);
+    const tokenArea = document.getElementById('token-' + idPath + '-' + method);
+    const simulateControl = document.getElementById('simulate-' + idPath + '-' + method);
+    // gather path params
+    const pathParamsInputs = document.querySelectorAll(`#details-${escapeForId(path)} input[id^='param-` + idPath + `-']`);
+    let finalPath = path;
+    pathParamsInputs.forEach(inp => {
+      const parts = inp.id.split('-');
+      const pname = parts.slice(-1)[0];
+      const val = inp.value || '';
+      finalPath = finalPath.replace('{' + pname + '}', encodeURIComponent(val));
+    });
+    const headers = {};
+    const token = tokenArea ? tokenArea.value : '';
+    if (token) headers['Authorization'] = 'Bearer ' + token;
+    if (simulateControl && simulateControl.checked) headers['X-Simulate'] = '1';
+    // Build query params
+    const queryInputs = document.querySelectorAll(`#details-${escapeForId(path)} input[id^='query-` + idPath + `-']`);
+    const qp = new URLSearchParams();
+    queryInputs.forEach(qi => {
+      const parts = qi.id.split('-');
+      const pname = parts.slice(-1)[0];
+      if (qi.value) qp.append(pname, qi.value);
+    });
+    if (qp && qp.toString()) {
+      finalPath = finalPath + (finalPath.includes('?') ? '&' : '?') + qp.toString();
+    }
+    const opts = {method: method, headers: {...headers}};
+    if (method !== 'GET') {
+      try { opts.body = bodyArea.value; } catch (e) { opts.body = '{}'; }
+      if (!opts.headers['Content-Type']) opts.headers['Content-Type'] = 'application/json';
+    }
+    try {
+      const res = await fetch(finalPath, opts);
+      const text = await res.text();
+      const w = window.open('', '_blank');
+      w.document.write('<pre>' + escapeHtml(text) + '</pre>');
+    } catch (e) {
+      alert('Request failed: ' + e);
+    }
+  }
+
+  window.setMethodFilter('ALL');
+}
+
+async function tryGet(path, btn) {
+  try {
+    btn.disabled = true;
+    const res = await fetch(path);
+    const data = await res.text(); // attempt to fetch text
+    const win = window.open('', '_blank');
+    win.document.write('<pre>' + escapeHtml(data) + '</pre>');
+    btn.disabled = false;
+  } catch (e) {
+    alert('Request failed: ' + e);
+    btn.disabled = false;
+  }
+}
+
+function escapeHtml(text){
+  return text.replace(/[&"<>]/g, function(a){
+    return { '&': '&amp;', '"': '&quot;', '<': '&lt;', '>': '&gt;' }[a];
+  });
+}
+
+  loadEndpoints();
+  loadStatus();
+  loadAdminsOnPanel();
+
+  async function loadStatus(){
+    try{
+      const res = await fetch('/api/status');
+      const s = await res.json();
+      document.getElementById('status-telegram').innerHTML = `<strong>Telegram</strong><div>${s.telegram.ok ? '✅ connected' : '❌ not configured'} ${s.telegram.me ? ('@'+s.telegram.me.username) : ''}</div>`;
+      document.getElementById('status-webhook').innerHTML = `<strong>Webhook</strong><div>${s.webhook.ok ? '✅ set' : '❌ not set'}</div><div class='text-muted'>${s.webhook.url || ''}</div>`;
+      document.getElementById('status-sheets').innerHTML = `<strong>Google Sheets</strong><div>${s.sheets.ok ? '✅ connected' : '❌ not connected'}</div><div class='text-muted'>${s.sheets.spreadsheet_id || ''}</div>`;
+      document.getElementById('status-db').innerHTML = `<strong>DB</strong><div>${s.db && s.db.ok ? '✅ available' : '❌ unavailable'}</div>`;
+      document.getElementById('status-llm').innerHTML = `<strong>LLM</strong><div>${s.llm.ok ? '✅ available' : '❌ unavailable'}</div>`;
+      document.getElementById('sa-email-val').textContent = s.service_account_email || 'Не обнаружен (Cloud Run service account?)';
+      // Pre-fill the form
+      if (s.sheets.spreadsheet_id) document.getElementById('cfg-spreadsheet_id').value = s.sheets.spreadsheet_id;
+      if (s.config && s.config.calendar_id) document.getElementById('cfg-calendar_id').value = s.config.calendar_id;
+      if (s.config && s.config.currency) document.getElementById('cfg-currency').value = s.config.currency;
+      // Prefill admin token if stored locally
+      try { if (localStorage.getItem('inka_admin_token')) document.getElementById('cfg-admin-token').value = localStorage.getItem('inka_admin_token'); } catch(e){}
+    }catch(e){
+      console.warn('Failed to load status', e);
+    }
+  }
+
+  async function loadAdminsOnPanel(){
+    try{
+      const res = await fetch('/api/admin/admins');
+      const j = await res.json();
+      const list = j.admins || [];
+      const el = document.getElementById('admin-list');
+      if (!list.length) { el.innerHTML = '<div>No admins</div>'; return; }
+      el.innerHTML = list.map(a => `<div style="display:flex; align-items:center; gap:8px">${a}<button class='btn btn-sm btn-danger' onclick='deleteAdminFromPanel(${a})'>Remove</button></div>`).join('');
+    }catch(e){ console.warn('Failed to load admins', e); }
+  }
+
+  document.getElementById('admin-add-btn').addEventListener('click', async ()=>{
+    const id = parseInt(document.getElementById('admin-new-id').value, 10);
+    if (!id) return alert('Invalid admin ID');
+    const token = document.getElementById('cfg-admin-token').value.trim() || localStorage.getItem('inka_admin_token');
+    const headers = {'Content-Type': 'application/json'}; if (token) headers['Authorization'] = 'Bearer ' + token;
+    try{
+      const res = await fetch('/api/admin/admins', {method:'POST', headers, body: JSON.stringify({admin_id: id})});
+      if (res.ok) { document.getElementById('admin-new-id').value=''; await loadAdminsOnPanel(); } else { const j = await res.json(); alert('Error: ' + (j.detail || 'Failed to add admin')); }
+    }catch(e){ alert('Request failed: '+e);}  
+  });
+
+  window.deleteAdminFromPanel = async function(id){
+    if (!confirm('Удалить администратора?')) return;
+    const token = document.getElementById('cfg-admin-token').value.trim() || localStorage.getItem('inka_admin_token');
+    const headers = {}; if (token) headers['Authorization'] = 'Bearer ' + token;
+    const res = await fetch(`/api/admin/admins/${id}`, {method:'DELETE', headers});
+    if (res.ok) { await loadAdminsOnPanel(); } else { alert('Failed to remove admin'); }
+  }
+
+  // Save settings
+  document.getElementById('cfg-save-btn').addEventListener('click', async () => {
+    const payload = {
+      spreadsheet_id: document.getElementById('cfg-spreadsheet_id').value.trim(),
+      calendar_id: document.getElementById('cfg-calendar_id').value.trim(),
+      telegram_token: document.getElementById('cfg-telegram_token').value.trim(),
+      llm_api_key: document.getElementById('cfg-llm_api_key').value.trim(),
+      currency: document.getElementById('cfg-currency').value
+    };
+    const token = document.getElementById('cfg-admin-token').value.trim();
+    const headers = {'Content-Type':'application/json'};
+    if (token) headers['Authorization'] = 'Bearer ' + token;
+    try{
+      const res = await fetch('/api/settings', {method:'POST', headers, body: JSON.stringify(payload)});
+      const j = await res.json();
+      if (res.ok) {
+        document.getElementById('cfg-save-result').innerHTML = '<div class="text-success">Saved</div>';
+        loadStatus();
+        // Persist admin token and currency in localStorage for use in admin pages
+        if (token) {
+          try { localStorage.setItem('inka_admin_token', token); } catch(e){}
+        }
+        try { localStorage.setItem('inka_currency', document.getElementById('cfg-currency').value); } catch(e){}
+      } else {
+        document.getElementById('cfg-save-result').innerHTML = `<div class="text-error">${j.detail || 'Error'}</div>`;
+      }
+    }catch(e){
+      document.getElementById('cfg-save-result').innerHTML = `<div class="text-error">${e}</div>`;
+    }
+  });
+</script>
+
+{% endblock %}

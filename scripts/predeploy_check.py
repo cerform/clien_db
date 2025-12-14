@@ -105,6 +105,16 @@ if spreadsheet_id:
             logger.info('Calendar API access ok (events found=%d)', len(cal_events.get('items', [])))
         except Exception:
             logger.warning('Calendar query failed; calendar access might not be configured or calendar ID missing')
+        # If requested via environment, try to auto-fix sheet structure
+        auto_fix = os.getenv('AUTO_FIX_SHEETS', '') in ('1', 'true', 'True')
+        overwrite_headers = os.getenv('OVERWRITE_SHEET_HEADERS', '') in ('1', 'true', 'True')
+        if auto_fix:
+            logger.info('AUTO_FIX_SHEETS enabled - attempting to ensure sheet structure and headers...')
+            try:
+                summary = sc.ensure_sheet_format(spreadsheet_id, overwrite_headers=overwrite_headers)
+                logger.info('AUTO_FIX_SHEETS done: %s', summary)
+            except Exception as e:
+                logger.exception('Failed to auto-fix Sheets: %s', e)
     except Exception as e:
         logger.exception('Failed to initialize Google API client: %s', e)
         # Do not strictly fail here; warn and proceed so that Cloud Build container without deps can still run

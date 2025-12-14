@@ -7,16 +7,18 @@ services:
       dockerfile: Dockerfile
     container_name: clien_db_web_dev
     command: sh -c "python -m pip install --upgrade pip && pip install -r requirements.txt && python -m uvicorn src.web.app:create_app --factory --host 0.0.0.0 --port 8081 --reload"
-    volumes:
-      - ..:/app:rw
     ports:
       - "8081:8081"
     env_file:
       - ../.env
+    volumes:
+      - ..:/app:rw
+      - ../credentials.json:/var/secrets/google/credentials.json:ro
     environment:
       - ENV=development
       - PORT=8081
       - DATABASE_URL=postgresql+psycopg2://postgres:password@postgres:5432/admin_messages
+      - GOOGLE_APPLICATION_CREDENTIALS=/var/secrets/google/credentials.json
     depends_on:
       - postgres
 

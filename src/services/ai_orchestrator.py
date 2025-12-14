@@ -13,8 +13,12 @@ from src.services.service_factory import (
     get_calendar_service,
     get_client_service,
     get_master_service,
-    get_admin_service
+    get_admin_service,
+    get_sheets_client
 )
+from src.db.repositories.services_repo import ServicesRepo
+from src.config.config import Config
+from src.ai.inka_admin_tools import get_admin_tools, ADMIN_FUNCTIONS
 
 logger = logging.getLogger(__name__)
 
@@ -38,6 +42,26 @@ class AIOrchestrator:
         self.client_service = get_client_service()
         self.master_service = get_master_service()
         self.admin_service = get_admin_service()
+        # prepare admin tools adapter
+        try:
+            admin_services = {
+                "admin_service": self.admin_service,
+                "booking_service": self.booking_service,
+                "clients_service": self.client_service,
+                "masters_service": self.master_service,
+                "calendar_service": self.calendar_service,
+                "services_service": getattr(self, 'services_repo', None)
+            }
+            self.inka_admin_tools = get_admin_tools(admin_services)
+        except Exception:
+            self.inka_admin_tools = get_admin_tools({})
+        # Create a ServicesRepo instance (for 'services' sheet access)
+        try:
+            sheets_client = get_sheets_client()
+            cfg = Config.from_env()
+            self.services_repo = ServicesRepo(sheets_client, cfg.SPREADSHEET_ID)
+        except Exception:
+            self.services_repo = None
     
     async def process_user_message(
         self,
@@ -244,8 +268,14 @@ class AIOrchestrator:
             
             if action == "show_available_slots":
                 return await self._show_available_slots(params)
+            elif action == "get_calendar_slots":
+                # alias for show_available_slots (compatibility with Assistant tools)
+                return await self._show_available_slots(params)
             
             elif action == "create_booking":
+                # Only clients and admins/masters can request booking creation
+                if user_role not in [UserRole.CLIENT, UserRole.ADMIN, UserRole.MASTER]:
+                    return {"success": False, "error": "Access denied"}
                 return await self._create_booking(params, user_id)
             
             elif action == "show_my_bookings":
@@ -256,6 +286,15 @@ class AIOrchestrator:
             
             elif action == "reschedule_booking":
                 return await self._reschedule_booking(params, user_id)
+
+            elif action == "get_database_info":
+                return await self._get_database_info(params)
+
+            elif action == "create_client":
+                return await self._create_client(params)
+
+            elif action == "search_web":
+                return await self._search_web(params)
             
             # === АДМИНИСТРАТИВНЫЕ ДЕЙСТВИЯ ===
             
@@ -288,6 +327,16 @@ class AIOrchestrator:
                 if user_role not in [UserRole.ADMIN, UserRole.MASTER]:
                     return {"success": False, "error": "Access denied"}
                 return await self._send_message_to_client(params)
+            # INKA admin-specific functions (bridge to INKA admin tools adapter)
+            elif action in [f['name'] for f in ADMIN_FUNCTIONS]:
+                if user_role != UserRole.ADMIN:
+                    return {"success": False, "error": "Access denied"}
+                try:
+                    res = self.inka_admin_tools.execute_function(action, params or {})
+                    return {"success": True, "result": res}
+                except Exception as e:
+                    logger.error(f"Failed running INKA admin function {action}: {e}")
+                    return {"success": False, "error": str(e)}
             
             else:
                 return {
@@ -414,29 +463,106 @@ class AIOrchestrator:
     
     async def _cancel_booking(self, params: Dict, user_id: int) -> Dict:
         """Отменить бронирование"""
-        # TODO: реализовать метод cancel в BookingsRepo
         booking_id = params.get("booking_id")
-        
-        return {
-            "success": True,
-            "booking_id": booking_id,
-            "message": "Booking cancelled (TODO: implement in repo)"
-        }
+        reason = params.get("reason", "Cancelled by user")
+
+        try:
+            # Use BookingsRepo cancel method
+            from src.db.sheets_client import SheetsClient
+            from src.db.repositories.bookings_repo import BookingsRepo
+            from src.config.config import Config
+
+            config = Config.from_env()
+            if not config.SPREADSHEET_ID:
+                return {
+                    "success": False,
+                    "booking_id": booking_id,
+                    "message": "Spreadsheet not configured"
+                }
+
+            sheets_client = SheetsClient()
+            bookings_repo = BookingsRepo(sheets_client, config.SPREADSHEET_ID)
+
+            success = bookings_repo.cancel_booking(booking_id, reason)
+
+            if success:
+                return {
+                    "success": True,
+                    "booking_id": booking_id,
+                    "message": f"Booking {booking_id} cancelled successfully",
+                    "reason": reason
+                }
+            else:
+                return {
+                    "success": False,
+                    "booking_id": booking_id,
+                    "message": "Booking not found"
+                }
+
+        except Exception as e:
+            logger.error(f"Failed to cancel booking: {e}")
+            return {
+                "success": False,
+                "booking_id": booking_id,
+                "message": f"Error cancelling booking: {str(e)}"
+            }
     
     async def _reschedule_booking(self, params: Dict, user_id: int) -> Dict:
         """Перенести бронирование"""
-        # TODO: реализовать метод reschedule в BookingsRepo
         booking_id = params.get("booking_id")
         new_date = params.get("new_date")
         new_time = params.get("new_time")
-        
-        return {
-            "success": True,
-            "booking_id": booking_id,
-            "new_date": new_date,
-            "new_time": new_time,
-            "message": "Booking rescheduled (TODO: implement in repo)"
-        }
+        new_end_time = params.get("new_end_time")
+
+        try:
+            # Use BookingsRepo reschedule method
+            from src.db.sheets_client import SheetsClient
+            from src.db.repositories.bookings_repo import BookingsRepo
+            from src.config.config import Config
+
+            config = Config.from_env()
+            if not config.SPREADSHEET_ID:
+                return {
+                    "success": False,
+                    "booking_id": booking_id,
+                    "message": "Spreadsheet not configured"
+                }
+
+            sheets_client = SheetsClient()
+            bookings_repo = BookingsRepo(sheets_client, config.SPREADSHEET_ID)
+
+            # If end time not provided, assume 2-hour slot
+            if not new_end_time:
+                from datetime import datetime, timedelta
+                start = datetime.strptime(new_time, "%H:%M")
+                end = start + timedelta(hours=2)
+                new_end_time = end.strftime("%H:%M")
+
+            success = bookings_repo.reschedule_booking(booking_id, new_date, new_time, new_end_time)
+
+            if success:
+                return {
+                    "success": True,
+                    "booking_id": booking_id,
+                    "new_date": new_date,
+                    "new_time": new_time,
+                    "new_end_time": new_end_time,
+                    "message": f"Booking {booking_id} rescheduled successfully"
+                }
+            else:
+                return {
+                    "success": False,
+                    "booking_id": booking_id,
+                    "message": "Booking not found"
+                }
+
+        except Exception as e:
+            logger.error(f"Failed to reschedule booking: {e}")
+            return {
+                "success": False,
+                "booking_id": booking_id,
+                "message": f"Error rescheduling booking: {str(e)}"
+            }
     
     async def _view_all_bookings(self, params: Dict) -> Dict:
         """Просмотр всех бронирований (админ)"""
@@ -481,20 +607,56 @@ class AIOrchestrator:
     
     async def _add_available_slot(self, params: Dict) -> Dict:
         """Добавить доступный слот (админ)"""
-        # TODO: реализовать метод add_slot в CalendarRepo
-        return {
-            "success": True,
-            "message": "Slot added (TODO: implement in repo)",
-            "slot_id": "new_slot_id"
-        }
+        date = params.get("date")
+        start_time = params.get("start_time")
+        end_time = params.get("end_time")
+        master_id = params.get("master_id")
+
+        try:
+            # Use calendar service to add slot
+            slot_id = self.calendar_service.add_slot(
+                master_id=master_id,
+                date=date,
+                start_time=start_time,
+                end_time=end_time
+            )
+
+            return {
+                "success": True,
+                "message": f"Slot added for {date} {start_time}-{end_time}",
+                "slot_id": slot_id
+            }
+        except Exception as e:
+            logger.error(f"Failed to add slot: {e}")
+            return {
+                "success": False,
+                "message": f"Error adding slot: {str(e)}"
+            }
     
     async def _remove_slot(self, params: Dict) -> Dict:
         """Удалить слот (админ)"""
-        # TODO: реализовать метод remove_slot в CalendarRepo
-        return {
-            "success": True,
-            "message": "Slot removed (TODO: implement in repo)"
-        }
+        slot_id = params.get("slot_id")
+
+        try:
+            # Use calendar service to remove slot
+            success = self.calendar_service.remove_slot(slot_id)
+
+            if success:
+                return {
+                    "success": True,
+                    "message": f"Slot {slot_id} removed successfully"
+                }
+            else:
+                return {
+                    "success": False,
+                    "message": "Slot not found"
+                }
+        except Exception as e:
+            logger.error(f"Failed to remove slot: {e}")
+            return {
+                "success": False,
+                "message": f"Error removing slot: {str(e)}"
+            }
     
     async def _view_statistics(self, params: Dict) -> Dict:
         """Просмотр статистики (админ)"""
@@ -524,6 +686,79 @@ class AIOrchestrator:
             "client_id": params.get("client_id"),
             "text": params.get("message")
         }
+
+    async def _get_database_info(self, params: Dict) -> Dict:
+        """Fetch data from database for a given table (compat layer for remote tools)"""
+        table = params.get("table")
+        filter_field = params.get("filter_field")
+        filter_value = params.get("filter_value")
+        limit = params.get("limit", 50)
+        try:
+            table_lower = (table or "").lower()
+            if table_lower in ("masters", "мастера"):
+                data = self.master_service.list_masters()
+            elif table_lower in ("clients", "клиенты"):
+                data = self.client_service.repo.list_clients()
+            elif table_lower in ("bookings", "записи"):
+                data = self.booking_service.bookings_repo.list_bookings() if hasattr(self.booking_service, 'bookings_repo') else self.admin_service.list_bookings()
+            elif table_lower in ("services", "услуги"):
+                if getattr(self, 'services_repo', None):
+                    data = self.services_repo.list_services()
+                else:
+                    data = []
+            elif table_lower in ("schedule", "расписание"):
+                # schedule is represented as 'calendar slots' or schedule sheet
+                data = []
+            else:
+                data = []
+
+            # apply simple filtering
+            if filter_field and filter_value:
+                lowered = filter_value.lower()
+                data = [row for row in data if lowered in str(row.get(filter_field, '')).lower()]
+
+            return {"success": True, "data": data[:limit], "count": len(data)}
+        except Exception as e:
+            logger.error(f"_get_database_info error: {e}")
+            return {"success": False, "error": str(e)}
+
+    async def _create_client(self, params: Dict) -> Dict:
+        """Create or register a client through ClientService"""
+        try:
+            name = params.get("name") or params.get("client_name")
+            phone = params.get("phone") or params.get("client_phone")
+            telegram_id = params.get("telegram_id") or params.get("user_id")
+            # phone and name required
+            if not name or not phone:
+                return {"success": False, "error": "Missing name or phone"}
+            # Use ClientService.register_client to avoid duplicates
+            client = self.client_service.register_client(telegram_id=telegram_id or phone, name=name, phone=phone)
+            return {"success": True, "client": client}
+        except Exception as e:
+            logger.error(f"_create_client error: {e}")
+            return {"success": False, "error": str(e)}
+
+    async def _search_web(self, params: Dict) -> Dict:
+        """Fallback LLM-based search/summary (no real web calls).
+        If full web search is required, integrate with external API later.
+        """
+        try:
+            query = params.get("query")
+            if not query:
+                return {"success": False, "error": "No query provided"}
+            # Use INKAConsultant as a quick summarizer if available
+            try:
+                from src.services.inka_ai import INKAConsultant
+                cons = INKAConsultant(api_key=None)
+                # Use consultant to create a short rule-based summary
+                answer = cons._rule_based_response(query)
+                return {"success": True, "query": query, "answer": answer, "source": "inka_consultant_rule_based"}
+            except Exception:
+                # fallback generic reply
+                return {"success": True, "query": query, "answer": f"Sorry, I cannot perform a live web search. Query: {query}", "source": "fallback"}
+        except Exception as e:
+            logger.error(f"_search_web error: {e}")
+            return {"success": False, "error": str(e)}
     
     async def _format_action_response(
         self,

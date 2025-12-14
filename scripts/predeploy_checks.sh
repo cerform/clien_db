@@ -86,23 +86,43 @@ else
     exit 1
 fi
 
+# Ensure DATABASE_URL exists; construct from env vars if not provided
+if [ -z "$DATABASE_URL" ]; then
+    DB_USER=${CLOUDSQL_USER:-tattoo_user}
+    DB_PASS=${CLOUDSQL_PASSWORD:-}
+    DB_HOST=${CLOUDSQL_HOST:-127.0.0.1}
+    DB_PORT=${CLOUDSQL_PORT:-5432}
+    DB_NAME=${CLOUDSQL_DB:-tattoo_salon}
+    if [ -z "$DB_PASS" ]; then
+        echo -e "  ${YELLOW}⚠${NC} CLOUDSQL_PASSWORD is not set, trying to continue (may fail)"
+    fi
+    export DATABASE_URL="postgresql://$DB_USER:$DB_PASS@${DB_HOST}:${DB_PORT}/${DB_NAME}"
+fi
+
+# Option: if you want to use Cloud SQL Proxy, set USE_CLOUDSQL_PROXY=true (default). For local Postgres, set it false and set CLOUDSQL_HOST/PORT.
+USE_CLOUDSQL_PROXY=${USE_CLOUDSQL_PROXY:-true}
+
 # Check 6: Database exists and has required tables
 echo -e "\n${YELLOW}6. Checking database tables (via proxy)...${NC}"
 
 # Start proxy if not running
-if ! pgrep -f "cloud_sql_proxy.*tattoo-db" > /dev/null; then
-    echo "  Starting Cloud SQL Proxy..."
-    ./cloud_sql_proxy -instances=tattoo-480007:us-central1:tattoo-db=tcp:5432 > /dev/null 2>&1 &
-    PROXY_PID=$!
-    sleep 5
-    STOP_PROXY=true
+if [ "$USE_CLOUDSQL_PROXY" = "true" ]; then
+    if ! pgrep -f "cloud_sql_proxy.*tattoo-db" > /dev/null; then
+            echo "  Starting Cloud SQL Proxy..."
+            ./cloud_sql_proxy -instances=tattoo-480007:us-central1:tattoo-db=tcp:5432 > /dev/null 2>&1 &
+            PROXY_PID=$!
+            sleep 5
+            STOP_PROXY=true
+    else
+            echo "  Proxy already running"
+            STOP_PROXY=false
+    fi
 else
-    echo "  Proxy already running"
+    echo "  Skipping Cloud SQL Proxy because USE_CLOUDSQL_PROXY=$USE_CLOUDSQL_PROXY"
     STOP_PROXY=false
 fi
 
 # Check tables
-export DATABASE_URL="postgresql://tattoo_user:AdNICZWTcyqwT6Jn9EEg4VEXXQUP4l17HdUnz+E/2xM=@localhost:5432/tattoo_salon"
 
 REQUIRED_TABLES=("masters" "clients" "bookings")
 for table in "${REQUIRED_TABLES[@]}"; do
