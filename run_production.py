@@ -233,24 +233,32 @@ def main():
         async def telegram_webhook(update: Dict):
             """Telegram webhook endpoint"""
             try:
-                        update_obj = Update(**update)
-                        # Lazy initialize Bot if token was invalid at startup but later fixed
-                        global bot, dp
-                        if bot is None:
+                update_obj = Update(**update)
+
+                # Lazy initialize Bot if token was invalid at startup but later fixed
+                global bot, dp
+
+                if bot is None:
+                    try:
+                        cfg = Config.from_env()
+                        if cfg.BOT_TOKEN:
                             try:
-                                cfg = Config.from_env()
-                                if cfg.BOT_TOKEN:
-                                    bot = Bot(token=cfg.BOT_TOKEN)
-                                    logger.info("✅ Bot initialized from environment inside webhook handler")
-                                else:
-                                    logger.warning("⚠️ No BOT_TOKEN available to initialize bot in webhook handler")
+                                bot = Bot(token=cfg.BOT_TOKEN)
+                                logger.info("✅ Bot initialized from environment inside webhook handler")
                             except Exception as e:
-                                logger.error(f"Failed to initialize Bot in webhook handler: {e}")
-                        # If bot is still None, skip feeding update to dispatcher
-                        if bot is None:
-                            logger.warning("Bot not initialized; ignoring incoming webhook update")
-                            return {"ok": False, "error": "bot not initialized"}
-                        await dp.feed_update(bot=bot, update=update_obj)
+                                logger.error(f"Failed to construct Bot instance: {e}")
+                        else:
+                            logger.warning("⚠️ No BOT_TOKEN available to initialize bot in webhook handler")
+                    except Exception as e:
+                        logger.error(f"Failed to initialize Bot in webhook handler: {e}")
+
+                # If bot is still None, skip feeding update to dispatcher and return 200 to Telegram
+                if bot is None:
+                    logger.warning("Bot not initialized; ignoring incoming webhook update")
+                    return {"ok": False, "error": "bot not initialized"}
+
+                # Feed update to dispatcher with a valid Bot instance
+                await dp.feed_update(bot=bot, update=update_obj)
                 return {"ok": True}
             except Exception as e:
                 logger.error(f"Webhook error: {e}", exc_info=True)
