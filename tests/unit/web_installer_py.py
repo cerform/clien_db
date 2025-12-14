@@ -48,5 +48,11 @@ def test_installer_router_and_job(monkeypatch, tmp_path):
     sr = client.get(f'/installer/status/{job_id}').json()
     assert sr.get('status') in ('succeeded', 'failed')
 
+    # lockfile should be created on success
+    from src.web import installer as installer_mod
+    assert not sr.get('status') == 'running'
+    if sr.get('status') == 'succeeded':
+        assert installer_mod.LOCKFILE and __import__('os').path.exists(installer_mod.LOCKFILE)
+
     lr = client.get(f'/installer/logs/{job_id}').json()
     assert '[TEST] installer started' in lr.get('logs', '')
