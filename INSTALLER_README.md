@@ -45,6 +45,8 @@ Notes:
    - Follow prompts for GCP project, region, service name, tokens and keys.
    - The installer builds the Docker image, pushes it to Container Registry, creates secrets, and deploys to Cloud Run.
 4. After deploy opens Cloud Run URL, open `<CLOUD_RUN_URL>/setup` and go through the web UI to validate and configure the system.
+### Web-based installer
+You can also drive the installer from the deployed web UI. Visit `<CLOUD_RUN_URL>/installer/` to open the web setup wizard — fill in project, region, tokens and click "Start Install" to trigger a background deploy. Logs and status are available in the same UI (polling-based log viewer).
 
 ## Steps for Developers (local testing)
 1. Ensure you have `credentials.json` in the project root and run `python -m pip install -r requirements.txt`.
