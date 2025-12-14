@@ -72,8 +72,13 @@ def delete_row(sheet_name: str, row_id: str) -> bool:
     idx = find_row_index_by_id(rows, row_id)
     if idx is None:
         return False
-    blank_row = ['' for _ in range(len(rows[0]))]
-    sc.update_row(sid, sheet_name, idx, blank_row)
+    # Perform a hard delete of the row from the sheet
+    try:
+        sc.delete_row(sid, sheet_name, idx)
+    except Exception:
+        # Fallback to blanking the row if delete is not permitted
+        blank_row = ['' for _ in range(len(rows[0]))]
+        sc.update_row(sid, sheet_name, idx, blank_row)
     return True
 
 

@@ -59,29 +59,22 @@ class ClientsRepo:
         return False
 
     def delete_client(self, client_id: str) -> bool:
-        # Soft delete: mark as deleted if an 'active' or 'status' column exists; otherwise remove row by writing blank
+        # Attempt hard delete: remove the row from the sheet so it does not reappear
         rows = self.sc.read_sheet(self.spreadsheet_id, SHEET_CLIENTS)
         if not rows:
             return False
         for idx, r in enumerate(rows, start=1):
             if r.get('id') == client_id:
-                # Soft delete: append 'deleted' marker to notes and update
-                notes = (r.get('notes') or '') + f" [deleted:{datetime.datetime.now(datetime.timezone.utc).isoformat()}]"
-                values = {
-                    'id': r.get('id'),
-                    'telegram_id': r.get('telegram_id'),
-                    'name': r.get('name'),
-                    'phone': r.get('phone'),
-                    'email': r.get('email'),
-                    'notes': notes,
-                    'created_at': r.get('created_at')
-                }
-                new_row = build_row('clients', values)
-                new_row = pad_row_to_headers('clients', new_row)
                 try:
-                    self.sc.update_row(self.spreadsheet_id, SHEET_CLIENTS, idx, new_row)
+                    # Preferred: actually delete the row
+                    if hasattr(self.sc, 'delete_row'):
+                        self.sc.delete_row(self.spreadsheet_id, SHEET_CLIENTS, idx)
+                    else:
+                        # Fallback: blank the row
+                        blank_row = ['' for _ in range(len(rows[0]))]
+                        self.sc.update_row(self.spreadsheet_id, SHEET_CLIENTS, idx, blank_row)
                 except Exception:
                     import logging
-                    logging.getLogger(__name__).exception("Failed to mark client as deleted; proceeding in best-effort mode")
+                    logging.getLogger(__name__).exception("Failed to delete client row; proceeding in best-effort mode")
                 return True
         return False
