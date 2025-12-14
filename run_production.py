@@ -61,15 +61,29 @@ def get_admin_messages_repo():
 
 async def setup_webhook():
     """Setup webhook - вызывается при первом запросе или при старте"""
-    global bot, webhook_url, _webhook_setup_done
+    global bot, webhook_url, _webhook_setup_done, dp
 
     if _webhook_setup_done:
         return
-    # If bot is not configured (invalid or missing token) skip webhook setup
+    # If bot is not configured (invalid or missing token), try to initialize it now
     if bot is None:
-        logger.warning("⚠️ Bot not configured or token invalid; skipping webhook setup")
-        _webhook_setup_done = True
-        return
+        try:
+            cfg = Config.from_env()
+            if cfg.BOT_TOKEN:
+                try:
+                    bot = Bot(token=cfg.BOT_TOKEN)
+                    logger.info("✅ Bot initialized during webhook setup")
+                except Exception as e:
+                    logger.error(f"❌ Failed to initialize Bot during webhook setup: {e}")
+            else:
+                logger.warning("⚠️ No BOT_TOKEN available to initialize bot during webhook setup")
+        except Exception as e:
+            logger.error(f"❌ Error reading config during webhook setup: {e}")
+
+        if bot is None:
+            logger.warning("⚠️ Bot not configured or token invalid; skipping webhook setup")
+            _webhook_setup_done = True
+            return
 
     try:
         # Get webhook secret for validation
