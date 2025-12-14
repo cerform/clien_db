@@ -264,6 +264,8 @@ Notes:
 
 If you'd like, I can add additional migration files or create a small sequence runner to apply multiple migrations in order.
 
+Note: A migration `db/migrations/002_create_etcsys_admin.sql` has been added which creates a user with username `etcsys` and sets a salted password hash. If you used the provided password during the request, it's been hashed and stored — please rotate the password after first login (or update via a secure admin UI). Do NOT store plaintext passwords in repo files.
+
 ## 🚀 Deployment
 
 ### Local Development (Polling)
