@@ -70,14 +70,16 @@ async function loadMasters() {
     const body = document.getElementById('masters-table-body');
     body.innerHTML = '';
         masters.forEach(m => {
-        const tr = document.createElement('tr');
-        tr.innerHTML = `
-            <td>${m.name || ''}</td>
-            <td>${m.specialization || ''}</td>
-            <td>${m.phone || ''}</td>
-            <td style="display:flex;gap:8px"><button class="btn edit-master" data-master-id="${m.id}">Edit</button><button class="btn btn-danger delete-master" data-master-id="${m.id}">Delete</button></td>
-        `;
-        body.appendChild(tr);
+            const tr = document.createElement('tr');
+            tr.dataset.masterId = m.id;
+            tr.innerHTML = \`
+                <td>${m.name || ''}</td>
+                <td>${m.specialization || ''}</td>
+                <td>${m.phone || ''}</td>
+                <td style="display:flex;gap:8px"><button class="btn edit-master" data-master-id="${m.id}">Edit</button><button class="btn btn-danger delete-master" data-master-id="${m.id}">Delete</button></td>
+            \`;
+            tr.addEventListener('click', (e) => { if (e.target.closest('button')) return; openEditMaster(m.id); });
+            body.appendChild(tr);
     });
 }
 
@@ -89,7 +91,7 @@ document.getElementById('add-master-form').addEventListener('submit', async (e) 
     if (token) headers['Authorization'] = 'Bearer ' + token;
     const body = {name: form.name.value, specialty: form.specialty.value, phone: form.phone.value};
     const res = await fetch('/api/masters', {method: 'POST', headers, body: JSON.stringify(body)});
-    if (res.ok) { closeAddMasterModal(); await loadMasters(); } else { alert('Failed to add master'); }
+    if (res.ok) { closeAddMasterModal(); await loadMasters(); app.showAlert('Master added', 'success'); } else { app.showAlert('Failed to add master', 'error'); }
 });
 
 // Edit modal
@@ -131,7 +133,7 @@ document.getElementById('edit-master-form').addEventListener('submit', async (e)
     if (res.ok) { closeEditMasterModal(); await loadMasters(); } else { alert('Failed to update master'); }
 });
 
-async function deleteMaster(id) { if (!confirm('Are you sure?')) return; const token = localStorage.getItem('inka_admin_token'); const headers = {}; if (token) headers['Authorization'] = 'Bearer '+token; const res = await fetch(`/api/masters/${id}`, {method:'DELETE', headers}); if (res.ok) { await loadMasters(); } else { alert('Failed to delete master'); } }
+async function deleteMaster(id) { if (!confirm('Удалить мастера?')) return; const token = localStorage.getItem('inka_admin_token'); const headers = {}; if (token) headers['Authorization'] = 'Bearer '+token; const res = await fetch(`/api/masters/${id}`, {method:'DELETE', headers}); if (res.ok) { await loadMasters(); app.showAlert('Master deleted', 'success'); } else { app.showAlert('Failed to delete master', 'error'); } }
 
 document.addEventListener('DOMContentLoaded', () => { loadMasters(); });
 

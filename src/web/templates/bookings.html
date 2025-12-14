@@ -55,7 +55,7 @@ document.getElementById('add-booking-form').addEventListener('submit', async (e)
         const form = e.target; const token = localStorage.getItem('inka_admin_token'); const headers = {'Content-Type':'application/json'}; if (token) headers['Authorization'] = 'Bearer ' + token;
         const body = { client_id: parseInt(form.client_id.value,10), master_id: parseInt(form.master_id.value,10), service_id: parseInt(form.service_id.value,10), date: form.date.value, slot_start: form.slot_start.value, slot_end: form.slot_end.value };
         const res = await fetch('/api/bookings', {method:'POST', headers, body: JSON.stringify(body)});
-        if (res.ok) { app.closeModal(document.getElementById('addBookingModal')); await loadBookings(); } else { alert('Failed to add booking'); }
+        if (res.ok) { app.closeModal(document.getElementById('addBookingModal')); await loadBookings(); app.showAlert('Booking added', 'success'); } else { app.showAlert('Failed to add booking', 'error'); }
 });
 </script>
 <script>
@@ -66,6 +66,7 @@ async function loadBookings(){
     body.innerHTML = '';
     list.forEach(b => {
         const tr = document.createElement('tr');
+        tr.dataset.bookingId = b.id;
         tr.innerHTML = `
             <td>${b.client_name || b.client_id || ''}</td>
             <td>${b.master_name || b.master_id || ''}</td>
@@ -73,6 +74,7 @@ async function loadBookings(){
             <td>${b.status || ''}</td>
             <td style="display:flex;gap:8px"><button class="btn edit-booking" data-booking-id="${b.id}">Edit</button><button class="btn btn-danger delete-booking" data-booking-id="${b.id}">Delete</button></td>
         `;
+        tr.addEventListener('click', (e) => { if (e.target.closest('button')) return; openEditBooking(b.id); });
         body.appendChild(tr);
     });
 }
@@ -89,10 +91,10 @@ async function openEditBooking(id){
     const headers = {'Content-Type': 'application/json'}; if (token) headers['Authorization'] = 'Bearer ' + token;
     const body = { status: newStatus };
     const put = await fetch(`/api/bookings/${id}`, {method:'PUT', headers, body: JSON.stringify(body)});
-    if (put.ok) await loadBookings(); else alert('Failed to update booking');
+    if (put.ok) { await loadBookings(); app.showAlert('Booking updated', 'success'); } else { app.showAlert('Failed to update booking', 'error'); }
 }
 
-async function deleteBooking(id){ if (!confirm('Delete booking?')) return; const token = localStorage.getItem('inka_admin_token'); const headers = {}; if (token) headers['Authorization'] = 'Bearer ' + token; const res = await fetch(`/api/bookings/${id}`, {method:'DELETE', headers}); if (res.ok) await loadBookings(); else alert('Failed to delete booking'); }
+async function deleteBooking(id){ if (!confirm('Удалить запись?')) return; const token = localStorage.getItem('inka_admin_token'); const headers = {}; if (token) headers['Authorization'] = 'Bearer ' + token; const res = await fetch(`/api/bookings/${id}`, {method:'DELETE', headers}); if (res.ok) { await loadBookings(); app.showAlert('Booking deleted', 'success'); } else { app.showAlert('Failed to delete booking', 'error'); } }
 
 document.addEventListener('DOMContentLoaded', ()=>{ loadBookings(); });
 

@@ -69,12 +69,14 @@ async function loadClients() {
     body.innerHTML = '';
         clients.forEach(c => {
         const tr = document.createElement('tr');
+        tr.dataset.clientId = c.id;
         tr.innerHTML = `
             <td>${c.name || ''}</td>
             <td>${c.phone || ''}</td>
             <td>${c.is_active ? 'Active' : 'Inactive'}</td>
             <td style="display:flex;gap:8px"><button class="btn edit-client" data-client-id="${c.id}">Edit</button><button class="btn btn-danger delete-client" data-client-id="${c.id}">Delete</button></td>
         `;
+        tr.addEventListener('click', (e) => { if (e.target.closest('button')) return; openEditClient(c.id); });
         body.appendChild(tr);
     });
 }
@@ -95,12 +97,13 @@ document.getElementById('add-client-form').addEventListener('submit', async (e) 
         await loadClients();
     } else {
         alert('Failed to add client');
-    }
-});
-
-// Edit modal
-const editModalHtml = `
-<div class="modal-overlay" id="editClientModal" style="display:none"><div class="modal"><div class="modal-header"><h2>Edit Client</h2><button class="modal-close" data-modal-close>&times;</button></div><form id="edit-client-form" class="form-grid gap-lg"><input type="hidden" name="id"><div class="form-group"><label class="form-label">Имя</label><input class="form-input" name="name" required></div><div class="form-group"><label class="form-label">Телефон</label><input class="form-input" name="phone" required></div><div class="form-group mt-lg"><button type="submit" class="btn btn-primary btn-block">Сохранить</button></div></form></div></div>`;
+            if (res.ok) {
+                closeAddClientModal();
+                await loadClients();
+                app.showAlert('Client added', 'success');
+            } else {
+                app.showAlert('Failed to add client', 'error');
+            }
 if (!document.getElementById('editClientModal')) document.body.insertAdjacentHTML('beforeend', editModalHtml);
 function openEditClient(id) {
     // find client
@@ -124,12 +127,13 @@ document.getElementById('edit-client-form').addEventListener('submit', async (e)
     if (token) headers['Authorization'] = 'Bearer ' + token;
     const body = { name: form.name.value, phone: form.phone.value };
     const res = await fetch(`/api/clients/${id}`, {method:'PUT', headers, body: JSON.stringify(body)});
-    if (res.ok) {
-        closeEditClientModal();
-        await loadClients();
-    } else {
-        alert('Failed to update client');
-    }
+            if (res.ok) {
+                closeEditClientModal();
+                await loadClients();
+                app.showAlert('Client updated', 'success');
+            } else {
+                app.showAlert('Failed to update client', 'error');
+            }
 });
 
 async function deleteClient(id) {
@@ -138,11 +142,12 @@ async function deleteClient(id) {
     const headers = {};
     if (token) headers['Authorization'] = 'Bearer ' + token;
     const res = await fetch(`/api/clients/${id}`, {method: 'DELETE', headers});
-    if (res.ok) {
-        await loadClients();
-    } else {
-        alert('Failed to delete client');
-    }
+            if (res.ok) { 
+                await loadClients(); 
+                app.showAlert('Client deleted', 'success'); 
+            } else { 
+                app.showAlert('Failed to delete client', 'error'); 
+            }
 }
 
 document.addEventListener('DOMContentLoaded', () => { loadClients(); });

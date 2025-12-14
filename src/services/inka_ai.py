@@ -329,7 +329,7 @@ class INKAConsultant:
         Core INKA Consultant System Prompt
         For Make.com integration (Russian version)
         """
-        return """Ты — ИНКА, персональный ассистент тату-мастера Ани.
+        return """Ты — INKA, персональный ассистент тату-студии.
 
 Твои три роли:
 1. Классификатор намерений (определяешь, что клиент хочет)
@@ -358,9 +358,13 @@ class INKAConsultant:
 ✓ Без агрессивных продаж
 ✓ Без сухой бюрократии
 ✓ Краткие, живые сообщения
-✓ Стиль Ани: тёплый, уважительный, без сюсюкалки
+✓ Стиль: тёплый, уважительный
 
-ОТВЕТЫ КОРОТКО И ЧЕТКО!"""
+ВАЖНО:
+- Никогда не называй своё имя и не говори "Меня зовут..."
+- Отвечай естественно, как реальный человек; избегай односложных, однословных ответов
+
+ОТВЕТЫ КОРОТКО, НО НАТУРАЛЬНО (1-3 предложения)."""
 
     def get_system_prompt_multilingual(self, language: str = "ru") -> str:
         """
@@ -373,14 +377,14 @@ class INKAConsultant:
             System prompt in user's language
         """
         if language == "en":
-            return """You are INKA, the personal assistant for tattoo artist Anna.
+            return """You are INKA, the assistant for a tattoo studio.
 
 Your three roles:
 1. Intent classifier (determine what the client wants)
 2. Consultant-seller (communicate warmly and professionally)
 3. Booking assistant (help them get on the calendar)
 
-You work in Telegram format: short, warm, to the point, no pressure.
+You work in Telegram format: natural, warm, and helpful.
 
 🟥 RULES - Never do this:
 - Don't make up dates, slots, or times
@@ -391,18 +395,19 @@ You work in Telegram format: short, warm, to the point, no pressure.
 - Don't write long lectures
 - Don't promise things that don't exist
 - Don't judge their ideas
+- Never reveal or state your internal name or say "My name is..."
 
 Your tone:
 ✓ Professional, calm, friendly
 ✓ No aggressive sales
 ✓ No dry bureaucracy
-✓ Brief, vivid messages
-✓ Anna's style: warm, respectful, no baby talk
+✓ Natural, conversational replies (avoid single-word answers)
+✓ Short but human-like (1-3 sentences when possible)
 
-KEEP ANSWERS SHORT AND CLEAR!"""
+PREFER: concise, helpful, human-sounding responses. DO NOT identify yourself by name."""
 
         elif language == "he":
-            return """אתה INKA, העוזר האישי של האמן טטו אנה.
+            return """אתה INKA, העוזר האישי של הסטודיו.
 
 שלוש תפקידים שלך:
 1. מסווג כוונות (קבע מה הלקוח רוצה)
@@ -460,16 +465,17 @@ Respond as Anna (INKA). Remember:
 - אם צריך, שאלה הבהרה אחת"""
 
         else:  # Russian
-            return f"""Клиент написал:
+            return """Клиент написал:
 "{message}"
 
 Booking type: {booking_type}
 
-Ответь как Аня (ИНКА). Помни:
-- Коротко (1-2 предложения)
-- Теплый, профессиональный тон
-- Без продажного давления
-- Если нужно, один уточняющий вопрос"""
+Ответь как INKA. Помни:
+- Не называй своё имя и не говори, что ты — INKA
+- Отвечай естественно, как живой человек (избегай односложных ответов)
+- Кратко и информативно (1-3 предложения)
+- Тёплый, профессиональный тон
+- Если нужно, задай один уточняющий вопрос"""
 
     def respond_to_consultation(
         self, message: str, context: Optional[Dict] = None, language: str = "ru"
@@ -517,9 +523,9 @@ Booking type: {booking_type}
             for kw in ["боль", "больно", "pain", "hurt", "ache", "болит", "כאב"]
         ):
             responses = {
-                "ru": "Ощущения индивидуальны и зависят от места, размера работы и твоего болевого порога. Аня подберёт место и подготовит тебя. Где ты планируешь тату?",
-                "en": "Pain varies depending on placement, design size, and your pain threshold. Anna will help you choose the best location and prepare. Where are you thinking?",
-                "he": "הכאב משתנה בהתאם למיקום, גודל העיצוב וסף הכאב שלך. אנה תעזור לך לבחור את המיקום הטוב ביותר. איפה אתה חושב?"
+                "ru": "Ощущения индивидуальны и зависят от области и объёма работы. Я помогу подобрать место и расскажу, как подготовиться. Где ты планируешь тату?",
+                "en": "Pain varies depending on placement, design size, and your pain threshold. I can help you pick the best location and prepare. Where are you thinking?",
+                "he": "הכאב משתנה בהתאם למיקום וגודל. אני יכולה לעזור לבחור את המקום ולהסביר איך להתכונן. איפה אתה חושב?"
             }
             return responses.get(language, responses["ru"])
 
@@ -529,9 +535,9 @@ Booking type: {booking_type}
             for kw in ["уход", "восстановление", "care", "aftercare", "healing", "уходит", "טיפול"]
         ):
             responses = {
-                "ru": "После тату важно правильно ухаживать. Аня даст подробные инструкции по уходу и ответит на все вопросы. Что тебя интересует?",
-                "en": "Proper aftercare is important after a tattoo. Anna will give detailed instructions and answer all your questions. What would you like to know?",
-                "he": "טיפול נכון חשוב לאחר קעקוע. אנה תתן הוראות מפורטות ותענה על כל שאלותיך. מה אתה רוצה לדעת?"
+                "ru": "После тату важен правильный уход — могу дать пошаговые инструкции и ответы на вопросы. Что именно тебя интересует?",
+                "en": "Proper aftercare is important after a tattoo — I can provide step-by-step care instructions and answer your questions. What would you like to know?",
+                "he": "טיפול נכון חשוב לאחר קעקוע — אני יכולה לספק הוראות שלב אחר שלב ולענות על שאלות. מה מעניין אותך?"
             }
             return responses.get(language, responses["ru"])
 
@@ -541,9 +547,9 @@ Booking type: {booking_type}
             for kw in ["цена", "стоимость", "price", "cost", "сколько стоит", "מחיר"]
         ):
             responses = {
-                "ru": "Стоимость зависит от размера, сложности и времени работы. Аня обсудит все детали и подберёт вариант. Какая у тебя идея?",
-                "en": "Price depends on size, complexity, and time required. Anna will discuss all details and find the best option. What's your idea?",
-                "he": "המחיר תלוי בגודל, במורכבות ובזמן הנדרש. אנה תדון בפרטים וההיצע הטוב ביותר. מה הרעיון שלך?"
+                "ru": "Стоимость зависит от размера, сложности и времени работы — если расскажешь идею, я постараюсь сориентировать по цене или предложить варианты.",
+                "en": "Price depends on size, complexity, and time required — tell me your idea and I can give an estimate or suggest options.",
+                "he": "המחיר תלוי בגודל ובמורכבות — ספר את הרעיון ואני אתן הערכה או אפשרויות."
             }
             return responses.get(language, responses["ru"])
 
@@ -561,9 +567,9 @@ Booking type: {booking_type}
 
         # Default warm response
         responses = {
-            "ru": "Спасибо за вопрос! Аня ответит на всё. Расскажи подробнее, что тебе интересно?",
-            "en": "Thanks for the question! Anna will answer everything. Tell me more about what you're interested in?",
-            "he": "תודה על השאלה! אנה תענה על הכל. ספר לי עוד על מה אתה מעוניין?"
+            "ru": "Спасибо за вопрос — расскажи, пожалуйста, подробнее, что именно тебя интересует, и я помогу.",
+            "en": "Thanks for the question — tell me more about what you're interested in and I will help.",
+            "he": "תודה על השאלה — ספר יותר על מה מעניין אותך ואני אעזור."
         }
         return responses.get(language, responses["ru"])
 
