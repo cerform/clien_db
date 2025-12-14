@@ -5,10 +5,10 @@ import uuid
 import threading
 import subprocess
 import tempfile
+import os
 from src.services.admin_manager import is_admin as is_admin_service
 
 LOCKFILE = os.path.join(os.getcwd(), ".installer_complete")
-import os
 import time
 import logging
 
