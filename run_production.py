@@ -228,6 +228,13 @@ def main():
             except Exception as e:
                 logger.error(f"Webhook error: {e}", exc_info=True)
                 return {"ok": False, "error": str(e)}
+
+        # Also accept the alternate webhook path that some deploy scripts use (/telegram/webhook)
+        try:
+            app.post("/telegram/webhook")(telegram_webhook)
+            logger.info("✅ Alias webhook path /telegram/webhook registered")
+        except Exception:
+            logger.warning("⚠️ Failed to register alias webhook path /telegram/webhook")
         
         logger.warning(f"⚠️  Webhook handler registered at {webhook_path}")
         
