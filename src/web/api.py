@@ -376,6 +376,56 @@ async def get_master(master_id: str):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f'Failed to fetch master: {str(e)}')
 
+
+@api_router.get('/api/admin/profile')
+async def api_admin_profile(request: Request):
+    """Return profile information for the currently authenticated admin."""
+    if not _is_admin(request):
+        raise HTTPException(status_code=403, detail='Forbidden')
+    # Determine admin id from state or token
+    admin_id = getattr(request.state, 'admin_id', None)
+    if admin_id is None:
+        # Try to parse from legacy token
+        auth = request.headers.get('Authorization') or request.headers.get('authorization')
+        if auth and auth.startswith('Bearer '):
+            token = auth.split(' ', 1)[1]
+            if token.startswith('admin_token_'):
+                try:
+                    admin_id = int(token.split('_')[-1])
+                except Exception:
+                    admin_id = None
+    if admin_id is None:
+        raise HTTPException(status_code=400, detail='Admin id not available')
+
+    try:
+        repos = _get_repos()
+        masters = repos['masters'].list_masters()
+        # Try to find a master entry with matching telegram_id or id
+        profile = None
+        for m in masters:
+            try:
+                if str(m.get('telegram_id', '')).strip() == str(admin_id):
+                    profile = m
+                    break
+            except Exception:
+                continue
+
+        if profile:
+            name = profile.get('name') or profile.get('display_name') or f'Admin {admin_id}'
+            role = 'Master' if profile.get('status') != 'no' else 'Master (inactive)'
+            # initials
+            parts = [p for p in str(name).split() if p]
+            initials = ''.join([p[0].upper() for p in parts][:2]) or str(admin_id)
+            return {'ok': True, 'profile': {'id': admin_id, 'name': name, 'role': role, 'initials': initials, 'telegram_id': str(admin_id)}}
+
+        # Fallback: return minimal profile
+        initials = ''.join([c for c in str(admin_id)])[:2]
+        return {'ok': True, 'profile': {'id': admin_id, 'name': f'Admin #{admin_id}', 'role': 'Admin', 'initials': initials, 'telegram_id': str(admin_id)}}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f'Failed to fetch profile: {str(e)}')
+
 @api_router.put('/api/masters/{master_id}')
 async def update_master(master_id: str, request: Request):
     """Update a master - PRODUCTION READY"""
