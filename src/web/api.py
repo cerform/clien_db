@@ -6,7 +6,7 @@ All endpoints connected to real Google Sheets repositories
 from fastapi import APIRouter, Request, HTTPException
 from pydantic import BaseModel
 from typing import List, Dict, Any, Optional
-from datetime import datetime, date, timedelta
+from datetime import datetime, date, timedelta, timezone
 import os
 from src.web.models import Client, Master, Service, Booking, NewAdminModel
 from src.db.sheets_client import SheetsClient
@@ -522,7 +522,7 @@ async def api_admin_refresh_availability(request: Request):
         raise HTTPException(status_code=403, detail='Forbidden')
     try:
         from src.services.slot_worker import compute_slots_for_all_masters, refresh_availability_materialized_view
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         until = now + timedelta(days=7)
         count = compute_slots_for_all_masters(now, until, duration=120)
         refresh_availability_materialized_view()

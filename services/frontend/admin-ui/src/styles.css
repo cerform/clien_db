@@ -1,0 +1,17 @@
+:root{--bg:#0f1113;--panel:#151719;--muted:#9aa3ad;--accent:#6b8cff}
+body{margin:0;font-family:Inter,system-ui,Arial; background:var(--bg); color:#fff}
+.app-header{display:flex;align-items:center;justify-content:space-between;padding:12px 20px;background:linear-gradient(180deg,#0b0c0d,transparent)}
+.app-header h1{margin:0;font-size:18px}
+.app-header nav button{margin-left:8px;padding:8px 12px;border-radius:6px;background:transparent;border:1px solid rgba(255,255,255,0.04);color:var(--muted)}
+.app-header nav button.active{background:var(--panel);border-color:var(--accent);color:#fff}
+.app-main{padding:20px}
+.container{max-width:1100px;margin:0 auto}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:12px}
+.card{background:var(--panel);padding:12px;border-radius:8px}
+.modal{position:fixed;left:0;top:0;right:0;bottom:0;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,0.55)}
+.modal .sheet{background:#fff;color:#000;padding:18px;border-radius:8px;min-width:360px}
+.input{width:100%;padding:8px;border:1px solid #ddd;border-radius:6px}
+.toolbar{display:flex;gap:8px;margin-top:12px}
+.toast{position:fixed;right:16px;bottom:16px;background:#222;color:#fff;padding:8px 12px;border-radius:6px}
+.spinner{display:inline-block;width:16px;height:16px;border-radius:50%;border:3px solid rgba(0,0,0,0.1);border-top-color:var(--accent);animation:spin 1s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}

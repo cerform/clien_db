@@ -7,7 +7,7 @@ from fastapi.responses import JSONResponse
 from typing import Dict, Any, List
 import time
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 from collections import deque
 
 logger = logging.getLogger(__name__)
@@ -29,7 +29,7 @@ async def health_check(request: Request):
     """
     health_status = {
         "status": "healthy",
-        "timestamp": datetime.utcnow().isoformat(),
+        "timestamp": datetime.now(timezone.utc).isoformat(),
         "service": "tattoo-bot",
         "version": "1.0.0"
     }
@@ -282,7 +282,7 @@ async def inka_training_stats():
                 "avg_response_time": 1.2,  # TODO: Calculate from actual response times
                 "satisfaction_rate": 96.3,  # TODO: Calculate from user feedback
                 "languages": languages,
-                "last_updated": datetime.utcnow().isoformat()
+                "last_updated": datetime.now(timezone.utc).isoformat()
             }
     except Exception as e:
         logger.warning(f"Failed to get real INKA stats: {e}")
@@ -294,7 +294,7 @@ async def inka_training_stats():
         "avg_response_time": 0,
         "satisfaction_rate": 0,
         "languages": {"ru": 0, "en": 0, "he": 0},
-        "last_updated": datetime.utcnow().isoformat(),
+        "last_updated": datetime.now(timezone.utc).isoformat(),
         "note": "Database unavailable, showing default values"
     }
 

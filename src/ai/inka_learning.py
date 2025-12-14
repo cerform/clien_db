@@ -137,7 +137,7 @@ class INKALearningSystem:
     def _audit(self, event: str) -> None:
         try:
             with open(self.BASE_DIR / "audit.log", "a", encoding="utf-8") as f:
-                f.write(f"{datetime.datetime.utcnow().isoformat()} | {event}\n")
+                f.write(f"{datetime.datetime.now(datetime.timezone.utc).isoformat()} | {event}\n")
         except Exception as e:
             logger.warning(f"Failed to write audit log: {e}")
 

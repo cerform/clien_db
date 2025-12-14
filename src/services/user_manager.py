@@ -7,7 +7,7 @@ import os
 import secrets
 import hashlib
 from typing import Dict, Optional, List
-from datetime import datetime
+from datetime import datetime, timezone
 
 from src.db.cloudsql_client import CloudSQLClient
 from src.auth.roles import Role, Permission, has_permission
@@ -131,7 +131,7 @@ class UserManager:
                     password_hash,
                     True,  # is_active
                     calendar_link,
-                    datetime.utcnow()
+                    datetime.now(timezone.utc)
                 )
             )
 

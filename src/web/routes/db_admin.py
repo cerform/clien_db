@@ -11,7 +11,7 @@ router = APIRouter()
 async def admin_db_page(request: Request):
     if not is_admin_service(getattr(request.state, 'admin_id', None)):
         return HTMLResponse('Forbidden', status_code=403)
-    return request.app.templates.TemplateResponse('admin_db.html', {'request': request})
+    return request.app.templates.TemplateResponse(request, 'admin_db.html', {'request': request})
 
 
 @router.get('/api/admin/db/{sheet_name}')

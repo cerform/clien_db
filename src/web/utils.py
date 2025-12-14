@@ -2,7 +2,7 @@
 Utilities for web UI: generating sample data from OpenAPI JSON schema.
 """
 from typing import Any, Dict, Optional
-from datetime import datetime
+from datetime import datetime, timezone
 
 
 def schema_to_example(schema: Dict[str, Any], components: Optional[Dict[str, Any]] = None) -> Any:
@@ -60,9 +60,9 @@ def schema_to_example(schema: Dict[str, Any], components: Optional[Dict[str, Any
         if enum:
             return enum[0]
         if fmt == 'date-time':
-            return datetime.utcnow().isoformat() + 'Z'
+            return datetime.now(timezone.utc).isoformat() + 'Z'
         if fmt == 'date':
-            return datetime.utcnow().date().isoformat()
+            return datetime.now(timezone.utc).date().isoformat()
         return schema.get('example') or schema.get('default') or 'string_example'
     if typ in ('integer', 'number'):
         enum = schema.get('enum')

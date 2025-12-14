@@ -1,6 +1,7 @@
 """Audit logging utilities for DB Admin actions."""
 from typing import Dict, Any, List
 import datetime
+from datetime import timezone
 import json
 import logging
 
@@ -14,7 +15,7 @@ AUDIT_SHEET = 'audit_log'
 
 def append_audit_entry(spreadsheet_id: str, user_id: int, user_name: str, sheet: str, row_id: str, action: str, before: Dict[str, Any], after: Dict[str, Any]):
     sc = SheetsClient()
-    ts = datetime.datetime.utcnow().isoformat()
+    ts = datetime.datetime.now(timezone.utc).isoformat()
     values = {
         'timestamp': ts,
         'user_id': str(user_id) if user_id is not None else '',

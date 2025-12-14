@@ -1,5 +1,5 @@
 import os
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Tuple, Optional
 import jwt
 
@@ -13,7 +13,7 @@ def create_jwt_for_admin(admin_id: int, expires_minutes: int = 60*24) -> str:
     payload = {
         'sub': str(admin_id),
         'role': 'admin',
-        'exp': datetime.utcnow() + timedelta(minutes=expires_minutes)
+        'exp': datetime.now(timezone.utc) + timedelta(minutes=expires_minutes)
     }
     token = jwt.encode(payload, JWT_SECRET, algorithm='HS256')
     return token

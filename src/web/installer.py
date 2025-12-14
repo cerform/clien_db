@@ -100,7 +100,7 @@ async def installer_index(request: Request):
     templates_env = Jinja2Templates(directory=os.path.join(os.path.dirname(__file__), "templates"))
     # determine if installer is allowed
     allowed = _is_installer_allowed(request)
-    return templates_env.TemplateResponse("installer/index.html", {"request": request, "allowed": allowed})
+    return templates_env.TemplateResponse(request, "installer/index.html", {"request": request, "allowed": allowed})
 
 
 @router.get("/allowed")
@@ -179,7 +179,7 @@ async def installer_logs(job_id: str, offset: int = 0):
 
 @router.get("/complete", response_class=HTMLResponse)
 async def installer_complete(request: Request):
-    return templates.TemplateResponse("installer/complete.html", {"request": request})
+    return templates.TemplateResponse(request, "installer/complete.html", {"request": request})
 
 
 # Expose name expected by src.web.app

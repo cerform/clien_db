@@ -6,7 +6,7 @@ Calendar sync worker: syncs Google Calendar events into `calendar_events` table
 import logging
 import os
 from typing import Optional, List
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 from src.db.db_client import get_db, get_db_for_role
 #from googleapiclient.discovery import build
@@ -55,7 +55,7 @@ def webhook_notify_calendar_change(calendar_id: str):
     rows = cur.fetchall()
     cur.close()
     total = 0
-    now = datetime.utcnow()
+    now = datetime.now(timezone.utc)
     try:
         for rid, cid, source_type in rows:
             # sync last 7 days for safety
