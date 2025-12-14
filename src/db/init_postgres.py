@@ -176,17 +176,30 @@ def init_database():
             result = conn.execute(text("SELECT COUNT(*) as cnt FROM services"))
             count = result.fetchone()[0]
             if count == 0:
-                logger.info("Seeding default services...")
+                logger.info("Seeding default services (tattoo catalog for Israel)...")
+                # Practical catalog based on local ranges (₪). These are market ranges and can be
+                # adjusted per master/studio. Duration is a rough estimate.
                 conn.execute(text("""
                 INSERT INTO services (name, description, duration_min, price_from, price_to, category, active)
                 VALUES
-                    ('Small tattoo', 'Small tattoo up to 5cm', 60, 100, 150, 'tattoo', TRUE),
-                    ('Medium tattoo', 'Medium tattoo 5-15cm', 120, 250, 400, 'tattoo', TRUE),
-                    ('Large tattoo', 'Large tattoo 15cm+', 180, 500, 1000, 'tattoo', TRUE),
-                    ('Consultation', 'Design consultation', 30, 0, 0, 'consultation', TRUE);
+                    ('Mini / Small tattoo (up to ~5cm)', 'Small tattoo — ориентирный размер до 5 см', 60, 300, 600, 'tattoo', TRUE),
+                    ('Medium tattoo (~5–12 cm)', 'Средний размер — примерно 5–12 см', 120, 600, 1500, 'tattoo', TRUE),
+                    ('Large tattoo / Major project', 'Крупный проект: рукав, спина, бедро — часто в несколько сессий', 240, 1500, 5000, 'tattoo', TRUE),
+                    ('Hourly — Minimalism (per hour)', 'Почасовая ставка для минимализма', 60, 400, 700, 'hourly', TRUE),
+                    ('Hourly — Black & Grey (per hour)', 'Почасовая ставка для Black & Grey', 60, 500, 800, 'hourly', TRUE),
+                    ('Hourly — Traditional (per hour)', 'Почасовая ставка для Traditional', 60, 500, 900, 'hourly', TRUE),
+                    ('Hourly — New School (per hour)', 'Почасовая ставка для New School', 60, 550, 1000, 'hourly', TRUE),
+                    ('Hourly — Realism (per hour)', 'Почасовая ставка для Realism', 60, 600, 1200, 'hourly', TRUE),
+                    ('Studio minimum (minimum charge)', 'Минимальный чек студии / минимальная стоимость', 30, 300, 300, 'policy', TRUE),
+                    ('Fine-line start (small tattoos)', 'Некоторые студии: small fine-line start from ~600 ₪', 60, 600, 600, 'tattoo', TRUE),
+                    ('Consultation / Project estimate', 'Оценка проекта / консультация (может быть бесплатной или платной)', 30, 0, 150, 'consultation', TRUE),
+                    ('Custom sketch / Design (creditable)', 'Разработка эскиза — может быть зачёт в итоговую стоимость', 120, 0, 500, 'design', TRUE),
+                    ('Deposit (booking fee)', 'Депозит за бронь времени мастера (не возвращается при late-cancel)', 0, 200, 500, 'payment', TRUE),
+                    ('Touch-up (correction) — policy window', 'Коррекция: бесплатно в рамках политики, иначе оплата', 60, 0, 400, 'touch-up', TRUE),
+                    ('Aftercare kit / Product', 'Aftercare набор (плёнка / кремы) — доп. продажа', 0, 50, 200, 'product', TRUE);
                 """))
                 conn.commit()
-                logger.info("✅ Default services added")
+                logger.info("✅ Tattoo catalog services added")
 
             return True
 
