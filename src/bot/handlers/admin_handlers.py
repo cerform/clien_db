@@ -142,6 +142,7 @@ async def show_admin_menu(message: types.Message):
     user_lang = i18n.get_user_language(message.from_user.id) or "ru"
     
     load_env()
+    cfg = Config.from_env()
     if message.from_user.id not in get_admin_ids():
         await message.answer("❌ Not admin")
         return
@@ -171,6 +172,7 @@ async def cmd_back_menu(message: types.Message):
 async def cmd_view_clients(message: types.Message):
     """View all clients"""
     load_env()
+    cfg = Config.from_env()
     if message.from_user.id not in get_admin_ids():
         await message.answer("❌ Not admin")
         return
@@ -194,6 +196,7 @@ async def cmd_view_clients(message: types.Message):
 async def cmd_view_bookings(message: types.Message):
     """View all bookings"""
     load_env()
+    cfg = Config.from_env()
     if message.from_user.id not in get_admin_ids():
         await message.answer("❌ Not admin")
         return

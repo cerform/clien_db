@@ -77,8 +77,39 @@ async def telegram_webhook(request: Request):
 
     try:
         data = await request.json()
+        data = data or {}
+        # Try to extract short summary for better logging (avoid PII)
+        summary = {}
+        if 'message' in data:
+            m = data['message']
+            summary = {
+                'update_type': 'message',
+                'from_id': (m.get('from') or {}).get('id'),
+                'chat_id': (m.get('chat') or {}).get('id'),
+                'text': (m.get('text') or '')[:200]
+            }
+        elif 'callback_query' in data:
+            cq = data['callback_query']
+            summary = {
+                'update_type': 'callback_query',
+                'from_id': (cq.get('from') or {}).get('id'),
+                'chat_id': ((cq.get('message') or {}).get('chat') or {}).get('id'),
+                'data': (cq.get('data') or '')[:200]
+            }
+        else:
+            summary = {'update_type': 'unknown'}
+
         update = types.Update(**data)
-        await dp.feed_update(bot=bot, update=update)
+        try:
+            await dp.feed_update(bot=bot, update=update)
+        except Exception as inner_e:
+            # Log handler-level errors with update summary for debugging
+            logger.exception(f"Error while processing update (summary={summary}): {inner_e}")
+            # If Telegram API returned 'chat not found' (user blocked bot / invalid chat), log as INFO
+            text = str(inner_e)
+            if 'chat not found' in text.lower() or 'bad request: chat not found' in text.lower():
+                logger.warning(f"Telegram API returned chat not found for update summary={summary}: {inner_e}")
+            # swallow the exception to avoid 5xx responses (Telegram will not retry on 200)
         return {"ok": True}
     except Exception as e:
         logger.error(f"Error processing webhook update: {e}", exc_info=True)
