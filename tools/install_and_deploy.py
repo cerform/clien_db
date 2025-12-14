@@ -80,7 +80,10 @@ def run_install(
     for api in apis:
         logger.info("Enabling API: %s", api)
         if not dry_run:
-            subprocess.run(f"gcloud services enable {api} --project {project_id}", shell=True, check=True)
+            # Attempt to enable API but do not abort whole install if restricted by org policy
+            res = subprocess.run(f"gcloud services enable {api} --project {project_id}", shell=True, capture_output=True)
+            if res.returncode != 0:
+                logger.warning("Could not enable API %s (rc=%s). Continuing, but API may be unavailable. stderr=%s", api, res.returncode, res.stderr.decode(errors='ignore')[:1000])
 
     # Check/create service account
     try:
