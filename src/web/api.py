@@ -135,9 +135,8 @@ async def get_stats():
             "revenue_week": 0,
         }
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f'Failed to fetch stats: {str(e)}')
+        raise HTTPException(status_code=500, detail=f'Failed to fetch client: {str(e)}')
 
-# ==================== CLIENTS ====================
 
 @api_router.get('/api/clients')
 async def get_clients():
@@ -150,13 +149,20 @@ async def get_clients():
     except Exception as e:
         raise HTTPException(status_code=500, detail=f'Failed to fetch clients: {str(e)}')
 
+
 @api_router.post('/api/clients', status_code=201)
 async def create_client(client: Client):
     """Create a new client"""
     if _force_sheet_mode() and not _get_spreadsheet_id():
         raise HTTPException(status_code=400, detail='SPREADSHEET_ID not configured; FORCE_SHEET_MODE is enabled')
     try:
-        repos = _get_repos()
+        try:
+            repos = _get_repos()
+        except HTTPException as he:
+            # Surface sheet-related configuration issues as client-side validation errors
+            if 'SPREADSHEET_ID' in str(he.detail):
+                raise HTTPException(status_code=400, detail='SPREADSHEET_ID not configured')
+            raise
         new_client = repos['clients'].create_client(
             telegram_id=getattr(client, 'telegram_id', 0),
             name=client.name,
@@ -165,12 +171,20 @@ async def create_client(client: Client):
             notes=getattr(client, 'notes', "")
         )
         return new_client
+    except HTTPException:
+        # propagate HTTP errors (like 400 for sheet config problems)
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f'Failed to create client: {str(e)}')
+
 
 @api_router.get('/api/clients/{client_id}')
 async def get_client(client_id: str):
     """Get a single client by ID"""
+    import re
+    # Basic validation to avoid malformed / injection-like ids
+    if not re.match(r'^[A-Za-z0-9_\-\.]+$', client_id):
+        raise HTTPException(status_code=404, detail='Client not found')
     try:
         repos = _get_repos()
         clients = repos['clients'].list_clients()
@@ -398,13 +412,47 @@ async def api_admin_profile(request: Request):
         raise HTTPException(status_code=400, detail='Admin id not available')
 
     try:
+        # First, try Cloud SQL (if available) to get authoritative admin/user record
+        try:
+            from src.db.cloudsql_client import get_cloudsql_client
+            client = get_cloudsql_client()
+            # Only attempt queries if connection works
+            if client.test_connection():
+                # Find which of the commonly named user/admin tables actually exist to avoid noisy errors
+                try:
+                    tbls = ['admins', 'admin_users', 'users', 'app_users']
+                    placeholders = ','.join(['%s'] * len(tbls))
+                    q_tables = f"SELECT table_name FROM information_schema.tables WHERE table_schema='public' AND table_type='BASE TABLE' AND table_name IN ({placeholders})"
+                    found = client.execute_query(q_tables, params=tuple(tbls))
+                    existing = [r.get('table_name') for r in found] if found else []
+                except Exception:
+                    existing = list(tbls)
+
+                for tbl in existing:
+                    try:
+                        q = f"SELECT * FROM \"{tbl}\" WHERE telegram_id=%s OR id=%s LIMIT 1"
+                        rows = client.execute_query(q, params=(str(admin_id), str(admin_id)))
+                        if rows:
+                            r = rows[0]
+                            name = r.get('name') or r.get('full_name') or r.get('username') or f'Admin {admin_id}'
+                            role = r.get('role') or r.get('type') or 'Admin'
+                            initials = ''.join([p[0].upper() for p in str(name).split() if p][:2]) or str(admin_id)[:2]
+                            return {'ok': True, 'profile': {'id': admin_id, 'name': name, 'role': role, 'initials': initials, 'telegram_id': str(admin_id), 'source': f'cloudsql:{tbl}'}}
+                    except Exception:
+                        # ignore and try next table
+                        continue
+        except Exception:
+            # Cloud SQL unavailable or not configured — continue to sheet-based lookup
+            pass
+
+        # Next, try to resolve from Masters sheet (user-friendly)
         repos = _get_repos()
         masters = repos['masters'].list_masters()
         # Try to find a master entry with matching telegram_id or id
         profile = None
         for m in masters:
             try:
-                if str(m.get('telegram_id', '')).strip() == str(admin_id):
+                if str(m.get('telegram_id', '')).strip() == str(admin_id) or str(m.get('id', '')).strip() == str(admin_id):
                     profile = m
                     break
             except Exception:
@@ -413,14 +461,13 @@ async def api_admin_profile(request: Request):
         if profile:
             name = profile.get('name') or profile.get('display_name') or f'Admin {admin_id}'
             role = 'Master' if profile.get('status') != 'no' else 'Master (inactive)'
-            # initials
             parts = [p for p in str(name).split() if p]
-            initials = ''.join([p[0].upper() for p in parts][:2]) or str(admin_id)
-            return {'ok': True, 'profile': {'id': admin_id, 'name': name, 'role': role, 'initials': initials, 'telegram_id': str(admin_id)}}
+            initials = ''.join([p[0].upper() for p in parts][:2]) or str(admin_id)[:2]
+            return {'ok': True, 'profile': {'id': admin_id, 'name': name, 'role': role, 'initials': initials, 'telegram_id': str(admin_id), 'source': 'sheets'}}
 
         # Fallback: return minimal profile
         initials = ''.join([c for c in str(admin_id)])[:2]
-        return {'ok': True, 'profile': {'id': admin_id, 'name': f'Admin #{admin_id}', 'role': 'Admin', 'initials': initials, 'telegram_id': str(admin_id)}}
+        return {'ok': True, 'profile': {'id': admin_id, 'name': f'Admin #{admin_id}', 'role': 'Admin', 'initials': initials, 'telegram_id': str(admin_id), 'source': 'fallback'}}
     except HTTPException:
         raise
     except Exception as e:
