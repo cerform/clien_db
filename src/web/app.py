@@ -318,7 +318,7 @@ def create_app() -> FastAPI:
             body = await request.json()
             username = body.get("username", "").strip()
             password = body.get("password", "")
-            
+
             # If username provided, use full authentication
             if username:
                 success, admin_info = authenticate_admin(username, password)
@@ -335,33 +335,22 @@ def create_app() -> FastAPI:
                         "message": "Успешный вход"
                     }
                 else:
-                    return {
-                        "success": False,
-                        "message": "Неверный логин или пароль"
-                    }
-                else:
-                    # Fallback: password-only login (backward compatibility)
-                    if check_admin_password(password):
-                        try:
-                            admin_ids = get_runtime_admin_ids()
-                            admin_id = admin_ids[0] if admin_ids else 123
-                        except Exception:
-                            from src.config.config import Config
-                            cfg = Config.from_env()
-                            admin_id = cfg.ADMIN_USER_IDS[0] if cfg.ADMIN_USER_IDS else 123
-                    jwt_token = create_jwt_for_admin(admin_id)
-                    legacy = f"admin_token_{admin_id}"
-                    return {
-                        "success": True,
-                        "token": jwt_token,
-                        "legacy_token": legacy,
-                        "message": "Успешный вход"
-                    }
-                else:
-                    return {
-                        "success": False,
-                        "message": "Неверный пароль"
-                    }
+                    return {"success": False, "message": "Неверный логин или пароль"}
+
+            # Fallback: password-only login (backward compatibility)
+            if check_admin_password(password):
+                try:
+                    admin_ids = get_runtime_admin_ids()
+                    admin_id = admin_ids[0] if admin_ids else 123
+                except Exception:
+                    from src.config.config import Config
+                    cfg = Config.from_env()
+                    admin_id = cfg.ADMIN_USER_IDS[0] if cfg.ADMIN_USER_IDS else 123
+                jwt_token = create_jwt_for_admin(admin_id)
+                legacy = f"admin_token_{admin_id}"
+                return {"success": True, "token": jwt_token, "legacy_token": legacy, "message": "Успешный вход"}
+            else:
+                return {"success": False, "message": "Неверный пароль"}
         except Exception as e:
             logger.error(f"Login error: {e}")
             return {"success": False, "message": "Ошибка входа"}
