@@ -20,7 +20,6 @@ jobs:
         uses: google-github-actions/setup-gcloud@v1
         with:
           project_id: ${{ secrets.GCP_PROJECT_ID }}
-          service_account_key: ${{ secrets.GCP_SA_KEY }}
 
       - name: Submit Cloud Build and deploy to EU Cloud Run
         env:

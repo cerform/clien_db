@@ -97,6 +97,7 @@ if [ -n "${OPENAI_API_KEY}" ]; then
     BOT_MODE=advanced
     MEM=1Gi
     echo "🔧 Detected OPENAI_API_KEY. Enabling AI mode (BOT_MODE=advanced) and setting memory to ${MEM}"
+    ENABLE_LLM=true
 else
     # If OPENAI_API_KEY not in .env, check Secret Manager for OPENAI_API_KEY
     # If secret exists, use advanced mode as well
@@ -110,11 +111,13 @@ else
             BOT_MODE=inka
             MEM=512Mi
             echo "🔧 OpenAI secret exists but is empty. Using INKA-only mode (BOT_MODE=inka) and memory ${MEM}"
+            ENABLE_LLM=false
         fi
     else
         BOT_MODE=inka
         MEM=512Mi
         echo "🔧 No OpenAI key detected. Using INKA-only mode (BOT_MODE=inka) and memory ${MEM}"
+        ENABLE_LLM=false
     fi
 fi
 
@@ -142,6 +145,7 @@ gcloud run deploy ${SERVICE_NAME} \
     --timeout 300 \
     --add-cloudsql-instances ${CLOUDSQL_CONNECTION_NAME} \
     --set-env-vars "CLOUD_RUN_ENV=true,DB_SOCKET_DIR=/cloudsql,CLOUDSQL_CONNECTION_NAME=${CLOUDSQL_CONNECTION_NAME},CLOUDSQL_DB=admin_messages,CLOUDSQL_USER=root,BOT_MODE=${BOT_MODE}" \
+    --set-env-vars "ENABLE_LLM=${ENABLE_LLM}" \
     --set-secrets "BOT_TOKEN=BOT_TOKEN:latest,OPENAI_API_KEY=OPENAI_API_KEY:latest,CLOUDSQL_PASSWORD=CLOUDSQL_PASSWORD:latest,SPREADSHEET_ID=SPREADSHEET_ID:latest" \
     --service-account ${SERVICE_NAME}@${PROJECT_ID}.iam.gserviceaccount.com
 

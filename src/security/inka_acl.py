@@ -6,12 +6,12 @@ from typing import List
 # Minimal role-based access matrix
 ROLE_PERMISSIONS = {
     'inka_llm_runtime': {
-        'read': ['services', 'masters_public', 'availability_view', 'pricing', 'faq_approved'],
-        'write': ['lead_requests', 'booking_drafts', 'conversation_logs']
+        'read': ['services', 'masters_public', 'availability_view', 'pricing', 'faq_approved', 'lead_requests'],
+        'write': ['lead_requests', 'booking_drafts', 'conversation_logs', 'services']
     },
     'inka_booking_agent': {
         'read': ['availability_lock_view', 'masters', 'availability_view'],
-        'write': ['bookings_pending', 'calendar_sync_queue']
+        'write': ['bookings_pending', 'calendar_sync_queue', 'slot_locks']
     },
     'inka_learning_agent': {
         'read': ['learning_*'],

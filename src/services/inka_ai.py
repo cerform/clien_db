@@ -327,13 +327,22 @@ class INKAConsultant:
                 self.openai_service = None
         # Default model
         self.model = "gpt-3.5-turbo"
-        # Enable LLM only if explicitly allowed in env (default True)
+        # Enable LLM only if explicitly allowed in env (default False)
+        # Default to False when configuration isn't available to avoid
+        # requiring an external LLM in tests or local runs without keys.
+        self.enable_llm = False
         try:
             from src.config.config import Config
             cfg = Config.from_env()
             self.enable_llm = bool(cfg.ENABLE_LLM)
         except Exception:
-            self.enable_llm = True
+            # Keep default False if config cannot be loaded
+            self.enable_llm = False
+
+        # Note: We do not override `enable_llm` if OpenAI service is absent.
+        # When `ENABLE_LLM` is explicitly set to true in the environment but
+        # there is no valid OpenAI service, `respond_structured` will escalate
+        # to a human handler (model_unavailable) as intended by policy.
         self.model = "gpt-3.5-turbo"
 
     def get_system_prompt(self) -> str:
