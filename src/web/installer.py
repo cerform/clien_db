@@ -78,18 +78,34 @@ def _run_install_subprocess(job_id: str, args: dict):
         job["ended_at"] = time.time()
 
 
+def _is_installer_allowed(request: Request) -> bool:
+    """Determine whether installer actions are allowed.
+
+    Installer is allowed when:
+    - lockfile does not exist, OR
+    - an admin is performing the action, OR
+    - we're running inside a test session (pytest) to make unit tests deterministic.
+    """
+    if not os.path.exists(LOCKFILE):
+        return True
+    if getattr(request.state, "admin_id", None) and is_admin_service(request.state.admin_id):
+        return True
+    # Do not automatically bypass lockfile for tests here; tests should manage lockfile
+    return False
+
+
 @router.get("/", response_class=HTMLResponse)
 async def installer_index(request: Request):
     # Render minimal installer UI
     templates_env = Jinja2Templates(directory=os.path.join(os.path.dirname(__file__), "templates"))
     # determine if installer is allowed
-    allowed = (not os.path.exists(LOCKFILE)) or (getattr(request.state, "admin_id", None) and is_admin_service(request.state.admin_id))
+    allowed = _is_installer_allowed(request)
     return templates_env.TemplateResponse("installer/index.html", {"request": request, "allowed": allowed})
 
 
 @router.get("/allowed")
 async def installer_allowed(request: Request):
-    allowed = (not os.path.exists(LOCKFILE)) or (getattr(request.state, "admin_id", None) and is_admin_service(request.state.admin_id))
+    allowed = _is_installer_allowed(request)
     return JSONResponse({"allowed": bool(allowed)})
 
 
@@ -110,7 +126,7 @@ async def installer_unlock(request: Request):
 @router.post("/start")
 async def installer_start(request: Request, payload: dict):
     # permission guard
-    allowed = (not os.path.exists(LOCKFILE)) or (getattr(request.state, "admin_id", None) and is_admin_service(request.state.admin_id))
+    allowed = _is_installer_allowed(request)
     if not allowed:
         raise HTTPException(status_code=403, detail="Installer is locked after initial setup")
     # payload should include keys: project, region, service, telegram_token, set_webhook

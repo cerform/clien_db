@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Request, Form
+from fastapi import APIRouter, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 from src.core.config_manager import get_config, save_config, is_configured, set_secret, get_secret
 from src.db.sheets_client import SheetsClient
@@ -15,25 +15,25 @@ async def setup_get(request: Request):
     return request.app.templates.TemplateResponse("setup.html", {"request": request, "step": 1})
 
 @router.post("/setup", response_class=HTMLResponse)
-async def setup_post(
-    request: Request,
-    salon_name: str = Form(...),
-    timezone: str = Form(...),
-    spreadsheet_id: str = Form(...),
-    calendar_id: str = Form(...),
-    telegram_token: str = Form(...),
-    admin_ids: str = Form(...),
-    llm_provider: str = Form(...),
-    llm_api_key: str = Form(...),
-    create_spreadsheet: str = Form(None),
-):
+async def setup_post(request: Request):
+    form = await request.form()
+    salon_name = form.get('salon_name')
+    timezone = form.get('timezone')
+    spreadsheet_id = form.get('spreadsheet_id')
+    calendar_id = form.get('calendar_id')
+    telegram_token = form.get('telegram_token')
+    admin_ids = form.get('admin_ids', '')
+    llm_provider = form.get('llm_provider')
+    llm_api_key = form.get('llm_api_key')
+    create_spreadsheet = form.get('create_spreadsheet')
+
     config = {
         "salon_name": salon_name,
         "timezone": timezone,
         "spreadsheet_id": spreadsheet_id,
         "calendar_id": calendar_id,
         "telegram_token": telegram_token,
-        "admin_ids": [i.strip() for i in admin_ids.split(",")],
+        "admin_ids": [i.strip() for i in (admin_ids or '').split(",")],
         "llm_provider": llm_provider,
         "setup_complete": True
     }

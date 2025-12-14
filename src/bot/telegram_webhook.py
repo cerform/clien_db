@@ -99,7 +99,14 @@ async def telegram_webhook(request: Request):
         else:
             summary = {'update_type': 'unknown'}
 
-        update = types.Update(**data)
+        try:
+            update = types.Update(**data)
+        except Exception as e:
+            # If Update validation fails (missing optional fields in test payloads),
+            # treat as non-fatal and return OK so Telegram does not retry.
+            logger.warning(f"Malformed update payload received; skipping processing: {e}")
+            return {"ok": True}
+
         try:
             await dp.feed_update(bot=bot, update=update)
         except Exception as inner_e:

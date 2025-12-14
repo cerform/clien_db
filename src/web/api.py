@@ -16,6 +16,8 @@ from src.db.repositories.services_repo import ServicesRepo
 from src.db.repositories.bookings_repo import BookingsRepo
 from src.services.admin_manager import is_admin as is_admin_service, get_admin_ids as get_runtime_admin_ids
 from src.services.booking_service import BookingService
+from fastapi.responses import StreamingResponse
+import json
 
 api_router = APIRouter()
 routers = type('routers', (), {'api_router': api_router})
@@ -141,7 +143,7 @@ async def get_stats():
 async def get_clients():
     """Get list of all clients from Google Sheets"""
     if _force_sheet_mode() and not _get_spreadsheet_id():
-        raise HTTPException(status_code=400, detail='SPREADSHEET_ID not configured')
+        raise HTTPException(status_code=400, detail='SPREADSHEET_ID not configured; FORCE_SHEET_MODE is enabled')
     try:
         repos = _get_repos()
         return repos['clients'].list_clients()
@@ -152,7 +154,7 @@ async def get_clients():
 async def create_client(client: Client):
     """Create a new client"""
     if _force_sheet_mode() and not _get_spreadsheet_id():
-        raise HTTPException(status_code=400, detail='SPREADSHEET_ID not configured')
+        raise HTTPException(status_code=400, detail='SPREADSHEET_ID not configured; FORCE_SHEET_MODE is enabled')
     try:
         repos = _get_repos()
         new_client = repos['clients'].create_client(
@@ -187,7 +189,7 @@ async def update_client(client_id: str, request: Request):
     if not _is_admin(request):
         raise HTTPException(status_code=403, detail='Forbidden')
     if _force_sheet_mode() and not _get_spreadsheet_id():
-        raise HTTPException(status_code=400, detail='SPREADSHEET_ID not configured')
+        raise HTTPException(status_code=400, detail='SPREADSHEET_ID not configured; FORCE_SHEET_MODE is enabled')
     try:
         data = await request.json()
         repos = _get_repos()
@@ -326,7 +328,7 @@ async def api_db_table_export(request: Request, table_name: str):
 async def get_masters():
     """Get list of all masters from Google Sheets"""
     if _force_sheet_mode() and not _get_spreadsheet_id():
-        raise HTTPException(status_code=400, detail='SPREADSHEET_ID not configured')
+        raise HTTPException(status_code=400, detail='SPREADSHEET_ID not configured; FORCE_SHEET_MODE is enabled')
     try:
         repos = _get_repos()
         return repos['masters'].list_masters()
@@ -346,7 +348,7 @@ async def api_admin_get_masters(request: Request):
 async def create_master(master: Master):
     """Create a new master"""
     if _force_sheet_mode() and not _get_spreadsheet_id():
-        raise HTTPException(status_code=400, detail='SPREADSHEET_ID not configured')
+        raise HTTPException(status_code=400, detail='SPREADSHEET_ID not configured; FORCE_SHEET_MODE is enabled')
     try:
         repos = _get_repos()
         new_master = repos['masters'].create_master(
@@ -380,7 +382,7 @@ async def update_master(master_id: str, request: Request):
     if not _is_admin(request):
         raise HTTPException(status_code=403, detail='Forbidden')
     if _force_sheet_mode() and not _get_spreadsheet_id():
-        raise HTTPException(status_code=400, detail='SPREADSHEET_ID not configured')
+        raise HTTPException(status_code=400, detail='SPREADSHEET_ID not configured; FORCE_SHEET_MODE is enabled')
     try:
         data = await request.json()
         repos = _get_repos()
@@ -435,7 +437,7 @@ async def api_admin_update_master_calendar(master_id: str, request: Request):
 async def get_services():
     """Get list of all services from Google Sheets"""
     if _force_sheet_mode() and not _get_spreadsheet_id():
-        raise HTTPException(status_code=400, detail='SPREADSHEET_ID not configured')
+        raise HTTPException(status_code=400, detail='SPREADSHEET_ID not configured; FORCE_SHEET_MODE is enabled')
     try:
         repos = _get_repos()
         return repos['services'].list_services()
@@ -446,7 +448,7 @@ async def get_services():
 async def create_service(service: Service):
     """Create a new service"""
     if _force_sheet_mode() and not _get_spreadsheet_id():
-        raise HTTPException(status_code=400, detail='SPREADSHEET_ID not configured')
+        raise HTTPException(status_code=400, detail='SPREADSHEET_ID not configured; FORCE_SHEET_MODE is enabled')
     try:
         repos = _get_repos()
         new_service = repos['services'].create_service(
@@ -550,7 +552,7 @@ async def update_service(service_id: str, request: Request):
     if not _is_admin(request):
         raise HTTPException(status_code=403, detail='Forbidden')
     if _force_sheet_mode() and not _get_spreadsheet_id():
-        raise HTTPException(status_code=400, detail='SPREADSHEET_ID not configured')
+        raise HTTPException(status_code=400, detail='SPREADSHEET_ID not configured; FORCE_SHEET_MODE is enabled')
     try:
         data = await request.json()
         repos = _get_repos()
@@ -591,6 +593,51 @@ async def get_bookings():
         return repos['bookings'].list_bookings()
     except Exception as e:
         raise HTTPException(status_code=500, detail=f'Failed to fetch bookings: {str(e)}')
+
+
+@api_router.post('/api/bookings', status_code=201)
+async def create_booking(request: Request):
+    """Create booking. Accepts either {date, slot_start, slot_end} or {datetime_start, datetime_end}."""
+    if _force_sheet_mode() and not _get_spreadsheet_id():
+        raise HTTPException(status_code=400, detail='SPREADSHEET_ID not configured; FORCE_SHEET_MODE is enabled')
+    try:
+        data = await request.json()
+        repos = _get_repos()
+        # support both date+slot and explicit datetime fields
+        if data.get('date') and data.get('slot_start') and data.get('slot_end'):
+            res = repos['bookings'].create_booking(
+                client_id=str(data.get('client_id', '')),
+                master_id=str(data.get('master_id', '')),
+                date=data.get('date'),
+                slot_start=data.get('slot_start'),
+                slot_end=data.get('slot_end'),
+                status=data.get('status', 'pending'),
+                google_event_id=data.get('google_event_id', '')
+            )
+            return res
+        # fallback to using datetime_start/datetime_end
+        if data.get('datetime_start') and data.get('datetime_end'):
+            # translate to date + slot for underlying create_booking
+            dt_start = data.get('datetime_start')
+            dt_end = data.get('datetime_end')
+            date = dt_start.split('T')[0]
+            slot_start = dt_start.split('T')[1] if 'T' in dt_start else dt_start
+            slot_end = dt_end.split('T')[1] if 'T' in dt_end else dt_end
+            res = repos['bookings'].create_booking(
+                client_id=str(data.get('client_id', '')),
+                master_id=str(data.get('master_id', '')),
+                date=date,
+                slot_start=slot_start,
+                slot_end=slot_end,
+                status=data.get('status', 'pending'),
+                google_event_id=data.get('google_event_id', '')
+            )
+            return res
+        raise HTTPException(status_code=400, detail='Missing required booking fields')
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f'Failed to create booking: {str(e)}')
 
 @api_router.get('/api/bookings/{booking_id}')
 async def get_booking(booking_id: str):
@@ -689,6 +736,26 @@ async def api_admin_list_pending_bookings(request: Request):
         return {'ok': True, 'count': len(pending), 'pending': pending}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@api_router.get('/api/admin/stream')
+async def api_admin_stream(request: Request):
+    """Simple Server-Sent Events endpoint for admin clients.
+
+    Requires admin privileges. Streams periodic heartbeat messages and can be extended to stream audit events.
+    """
+    if not _is_admin(request):
+        raise HTTPException(status_code=403, detail='Forbidden')
+
+    async def event_stream():
+        # For now yield a few heartbeats and then finish; real implementation should be hooked to an event source
+        for i in range(3):
+            payload = {'type': 'heartbeat', 'seq': i}
+            yield f"data: {json.dumps(payload)}\n\n"
+            import asyncio
+            await asyncio.sleep(0.1)
+
+    return StreamingResponse(event_stream(), media_type='text/event-stream')
 
 
 @api_router.post('/api/admin/bookings_pending/{pending_id}/confirm')
