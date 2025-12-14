@@ -36,9 +36,80 @@
           <input name="admin_ids" class="form-input" value="{{config.admin_ids | join(',') if config.admin_ids else ''}}">
         </div>
         <div class="form-group mt-lg">
-          <button type="submit" class="btn btn-primary">Сохранить</button>
+            <button type="submit" class="btn btn-primary" id="save-btn">Сохранить</button>
         </div>
       </form>
+      <hr/>
+      <div class="card" style="max-width:800px;margin:16px auto;padding:12px;border:1px solid var(--border-primary);">
+        <h3>Test bot</h3>
+        <div class="form-group">
+          <label>Chat ID (your Telegram user id)</label>
+          <input id="test-chat-id" class="form-input" placeholder="e.g. 438407739" />
+        </div>
+        <div class="form-group">
+          <label>Message</label>
+          <input id="test-message" class="form-input" value="Hello from INKA (test)" />
+        </div>
+        <div class="form-group">
+          <button id="send-test-btn" class="btn btn-secondary">Send test message</button>
+          <span id="send-test-result" style="margin-left:12px"></span>
+        </div>
+      </div>
+        <script>
+          (function(){
+            const form = document.querySelector('form[action="/admin/settings/save"]');
+            if(!form) return;
+            form.addEventListener('submit', async function(e){
+              e.preventDefault();
+              const btn = document.getElementById('save-btn');
+              const origText = btn.innerText;
+              btn.disabled = true;
+              btn.innerText = 'Сохранение...';
+              try{
+                const fd = new FormData(form);
+                const res = await fetch(form.action, {method:'POST', body: fd});
+                // If server redirected, follow it
+                if(res.redirected){
+                  window.location = res.url;
+                  return;
+                }
+                // Otherwise go to homepage when save succeeded
+                window.location = '/';
+              }catch(err){
+                console.error('Save failed', err);
+                alert('Ошибка при сохранении: ' + err);
+                btn.disabled = false;
+                btn.innerText = origText;
+              }
+            });
+          })();
+          // Test message sender
+          (function(){
+            const btn = document.getElementById('send-test-btn');
+            if(!btn) return;
+            btn.addEventListener('click', async function(e){
+              e.preventDefault();
+              const chat = document.getElementById('test-chat-id').value.trim();
+              const msg = document.getElementById('test-message').value.trim();
+              const resEl = document.getElementById('send-test-result');
+              if(!chat){ resEl.innerText = 'Provide chat id'; return; }
+              btn.disabled = true; resEl.innerText = 'Sending...';
+              try{
+                const form = new FormData();
+                form.append('chat_id', chat);
+                form.append('text', msg);
+                // include admin_id if present in page (no auth flow currently)
+                const adminInput = document.querySelector('input[name="admin_ids"]');
+                if(adminInput && adminInput.value){ form.append('admin_id', adminInput.value.split(',')[0].trim()); }
+                const r = await fetch('/admin/settings/test', {method:'POST', body: form});
+                const j = await r.json();
+                if(j.ok){ resEl.innerText = 'Sent! message_id=' + j.result.message_id; }
+                else { resEl.innerText = 'Failed: ' + (j.error || JSON.stringify(j)); }
+              }catch(err){ resEl.innerText = 'Error: ' + err; }
+              btn.disabled = false;
+            });
+          })();
+        </script>
       <hr/>
       <form method="post" action="/admin/settings/migrate">
         <label>Запустить миграцию структуры таблиц (может длиться долго)</label>

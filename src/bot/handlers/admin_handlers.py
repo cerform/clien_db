@@ -13,6 +13,7 @@ from src.services.sync_service import SyncService
 from src.services.admin_chat_service import AdminChatService
 from src.bot.keyboards.common_kb import admin_menu, main_menu, cancel_kb
 from src.utils.i18n import i18n
+import os
 import logging
 
 logger = logging.getLogger(__name__)
@@ -80,6 +81,9 @@ async def cmd_admin(message: types.Message):
     👥 Clients: {len(clients)}
     👨‍🎨 Masters: {len(masters)}
     📅 Bookings: {len(bookings)}"""
+        # Add link to admin panel (use SERVICE_URL env var if set, otherwise fallback)
+        service_url = os.getenv("SERVICE_URL") or "https://inka-bot.run.app"
+        msg += f"\n\n🔗 Admin Panel: {service_url}"
         msg += "\n\n*Admin controls:*\n`/grant_admin <telegram_id>` - add admin\n`/revoke_admin <telegram_id>` - remove admin"
         await message.answer(msg, reply_markup=admin_menu(user_lang))
     except Exception as e:
@@ -154,9 +158,11 @@ async def show_admin_menu(message: types.Message):
         bookings = admin.list_bookings()
         msg = f"""📊 Admin Dashboard
 
-👥 Clients: {len(clients)}
-👨‍🎨 Masters: {len(masters)}
-📅 Bookings: {len(bookings)}"""
+    👥 Clients: {len(clients)}
+    👨‍🎨 Masters: {len(masters)}
+    📅 Bookings: {len(bookings)}"""
+        service_url = os.getenv("SERVICE_URL") or "https://inka-bot.run.app"
+        msg += f"\n\n🔗 Admin Panel: {service_url}"
         await message.answer(msg, reply_markup=admin_menu(user_lang))
     except Exception as e:
         await message.answer(f"❌ Error: {str(e)[:100]}")

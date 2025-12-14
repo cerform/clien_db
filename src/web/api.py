@@ -217,6 +217,109 @@ async def delete_client(client_id: str, request: Request):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f'Failed to delete client: {str(e)}')
 
+
+# ==================== DB MANAGER (Postgres) ====================
+@api_router.get('/api/db/tables')
+async def api_db_tables(request: Request):
+    """Return list of tables in public schema (admin only)."""
+    if not _is_admin(request):
+        raise HTTPException(status_code=403, detail='Forbidden')
+    try:
+        from src.db.cloudsql_client import get_cloudsql_client
+        client = get_cloudsql_client()
+        rows = client.execute_query("SELECT table_name FROM information_schema.tables WHERE table_schema='public' AND table_type='BASE TABLE' ORDER BY table_name")
+        names = [r.get('table_name') for r in rows]
+        return {'ok': True, 'tables': names}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@api_router.get('/api/db/table/{table_name}')
+async def api_db_table(request: Request, table_name: str):
+    """Return rows for a table (paginated). Admin only."""
+    if not _is_admin(request):
+        raise HTTPException(status_code=403, detail='Forbidden')
+    # validate table name
+    import re
+    if not re.match(r'^[A-Za-z0-9_]+$', table_name):
+        raise HTTPException(status_code=400, detail='Invalid table name')
+    try:
+        limit = int(request.query_params.get('limit', 50))
+        offset = int(request.query_params.get('offset', 0))
+        from src.db.cloudsql_client import get_cloudsql_client
+        client = get_cloudsql_client()
+        # Ensure table exists
+        tables = client.execute_query("SELECT table_name FROM information_schema.tables WHERE table_schema='public' AND table_type='BASE TABLE' AND table_name=%s", params=(table_name,))
+        if not tables:
+            raise HTTPException(status_code=404, detail='Table not found')
+        rows = client.execute_query(f"SELECT * FROM \"{table_name}\" LIMIT %s OFFSET %s", params=(limit, offset))
+        return {'ok': True, 'rows': rows}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@api_router.get('/api/db/table/{table_name}/export')
+async def api_db_table_export(request: Request, table_name: str):
+    """Stream table content as CSV (admin only)."""
+    if not _is_admin(request):
+        raise HTTPException(status_code=403, detail='Forbidden')
+    import csv, io
+    import itertools
+    import re
+    if not re.match(r'^[A-Za-z0-9_]+$', table_name):
+        raise HTTPException(status_code=400, detail='Invalid table name')
+    try:
+        from src.db.cloudsql_client import get_cloudsql_client
+        from src.services.audit import append_audit_entry
+        from src.config.config import Config
+
+        client = get_cloudsql_client()
+        sid = Config.from_env().SPREADSHEET_ID
+
+        chunk = int(request.query_params.get('chunk', 500))
+
+        async def csv_stream():
+            # record start
+            try:
+                append_audit_entry(sid, getattr(request.state, 'admin_id', None), None, table_name, '', 'export_started', None, {'chunk_size': chunk})
+            except Exception:
+                pass
+
+            buf = io.StringIO()
+            writer = None
+            offset = 0
+            try:
+                while True:
+                    rows = client.execute_query(f"SELECT * FROM \"{table_name}\" LIMIT %s OFFSET %s", params=(chunk, offset))
+                    if not rows:
+                        break
+                    if writer is None:
+                        headers = list(rows[0].keys())
+                        writer = csv.writer(buf)
+                        writer.writerow(headers)
+                        yield buf.getvalue()
+                        buf.seek(0); buf.truncate(0)
+                    for r in rows:
+                        writer.writerow([r.get(h, '') for h in headers])
+                        yield buf.getvalue()
+                        buf.seek(0); buf.truncate(0)
+                    offset += chunk
+            finally:
+                try:
+                    append_audit_entry(sid, getattr(request.state, 'admin_id', None), None, table_name, '', 'export_completed', None, {'rows_streamed_up_to_offset': offset})
+                except Exception:
+                    pass
+
+        from fastapi.responses import StreamingResponse
+        filename = f"{table_name}.csv"
+        return StreamingResponse(csv_stream(), media_type='text/csv', headers={'Content-Disposition': f'attachment; filename="{filename}"'})
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
 # ==================== MASTERS ====================
 
 @api_router.get('/api/masters')

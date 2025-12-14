@@ -11,6 +11,16 @@
         <label>Salon Calendar ID</label>
         <input id="main-calendar-id" class="form-input" placeholder="Calendar ID">
       </div>
+      {% if service_account %}
+      <div class="form-group">
+        <label>Service account to share with masters</label>
+        <div style="display:flex; gap:8px; align-items:center">
+          <input id="service-account" class="form-input" value="{{ service_account }}" readonly />
+          <button id="copy-service-account" class="btn btn-outline">Copy</button>
+        </div>
+        <small class="text-muted">Give this service account Editor access to the Google Calendar(s) and Google Sheet so INKA can create events and write data.</small>
+      </div>
+      {% endif %}
       <div style="display:flex; gap:8px; align-items:center">
         <input id="admin-token" class="form-input" placeholder="Admin token (Bearer or admin_token_X)">
         <button id="save-main-calendar" class="btn btn-primary">Save Main Calendar</button>
@@ -90,5 +100,12 @@ async function loadMainCalendar(){
 }
 
 document.addEventListener('DOMContentLoaded', async ()=>{ await loadMainCalendar(); await loadMasters()})
+</script>
+<script>
+document.getElementById('copy-service-account')?.addEventListener('click', (e)=>{
+  const el = document.getElementById('service-account');
+  if (!el) return;
+  navigator.clipboard?.writeText(el.value).then(()=>alert('Copied service account'))
+})
 </script>
 {% endblock %}

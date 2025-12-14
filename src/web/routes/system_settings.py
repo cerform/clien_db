@@ -88,6 +88,32 @@ async def settings_save(request: Request,
         save_config_to_sheet(sc, cfg.get("spreadsheet_id"), {k: v for k, v in cfg.items() if k not in ("llm_api_key", "telegram_token")})
     except Exception:
         pass
+    # Try to auto-configure webhook if bot token is present
+    try:
+        token = get_secret("TELEGRAM_BOT_TOKEN") or cfg.get("telegram_token") or request.app.state.config.BOT_TOKEN
+        if token:
+            # Import setup_webhook lazily to avoid circular imports
+            try:
+                from run_production import setup_webhook
+                await setup_webhook()
+            except Exception:
+                # If direct import/call fails, attempt to call local endpoint as fallback
+                try:
+                    import httpx
+                    # Use relative URL on same host
+                    base = str(request.base_url).rstrip("/")
+                    await httpx.AsyncClient().post(f"{base}/api/setup-webhook", timeout=10)
+                except Exception:
+                    # best-effort only
+                    pass
+
+    except Exception:
+        # non-fatal
+        pass
+
+    # If minimal configuration is present, redirect to homepage; otherwise show settings page
+    if cfg.get("spreadsheet_id") and (get_secret("TELEGRAM_BOT_TOKEN") or cfg.get("telegram_token") or request.app.state.config.BOT_TOKEN):
+        return RedirectResponse(url="/", status_code=302)
     return RedirectResponse(url="/admin/settings", status_code=302)
 
 
@@ -115,6 +141,35 @@ async def settings_migrate(request: Request, admin_id: int = Form(None)):
         result = migrate_spreadsheet(sc, spreadsheet_id)
         return JSONResponse(content={"ok": True, "result": result})
     raise HTTPException(status_code=403, detail="Forbidden: admin_id not recognized")
+
+
+@router.post('/settings/test')
+async def settings_test(request: Request, chat_id: int = Form(...), text: str = Form('Test message from INKA'), admin_id: int = Form(None)):
+    """Send a test Telegram message to a chat id. Requires admin privileges (admin_id param or Authorization header).
+
+    This endpoint is intended for quick verification that webhook / bot connectivity works and that the bot can send messages.
+    """
+    # Determine claimed admin id
+    claimed_admin_id = getattr(request.state, 'admin_id', None)
+    if not claimed_admin_id and admin_id:
+        claimed_admin_id = int(admin_id)
+
+    if not claimed_admin_id or not is_admin_service(claimed_admin_id):
+        raise HTTPException(status_code=403, detail='Forbidden: admin_id not recognized')
+
+    # Get bot token
+    cfg = get_config()
+    token = get_secret('TELEGRAM_BOT_TOKEN') or cfg.get('telegram_token') or request.app.state.config.BOT_TOKEN
+    if not token:
+        raise HTTPException(status_code=400, detail='Bot token not configured')
+
+    # Send a message using aiogram Bot (async)
+    try:
+        bot = Bot(token=token)
+        res = await bot.send_message(chat_id=chat_id, text=text)
+        return JSONResponse({'ok': True, 'result': {'chat_id': res.chat.id, 'message_id': res.message_id}})
+    except Exception as e:
+        return JSONResponse({'ok': False, 'error': str(e)}, status_code=500)
 
 
 @router.get('/bookings/pending', response_class=HTMLResponse)

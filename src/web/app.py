@@ -81,13 +81,11 @@ def create_app() -> FastAPI:
         # Initialize new AI-powered INKA Learning System
         try:
             from src.ai.inka_learning import INKALearningSystem
-            if config.openai_api_key:
-                learning_system = INKALearningSystem(
-                    sheets_client=sheets_client,
-                    openai_api_key=config.openai_api_key,
-                    model="gpt-4o-mini"  # Быстрая и дешевая модель
-                )
-                logger.info("✅ INKA Learning System initialized with OpenAI API")
+            # INKA Learning System does not require OpenAI credentials to initialize.
+            # It provides admin-controlled prompt context. Initialize regardless
+            # and use OpenAI key at runtime for LLM calls inside INKA where needed.
+            learning_system = INKALearningSystem()
+            logger.info("✅ INKA Learning System initialized")
             else:
                 logger.warning("⚠️ OpenAI API key not found, INKA learning disabled")
                 learning_system = None
@@ -239,6 +237,14 @@ def create_app() -> FastAPI:
     # Include admin pages router
     from src.web.pages import admin_router
     app.include_router(admin_router)
+
+    # DB Admin UI
+    try:
+        from src.web.routes.db_admin import router as db_admin_router
+        app.include_router(db_admin_router)
+        logger.info('✅ DB Admin router added')
+    except Exception as de:
+        logger.warning(f'⚠️ Could not add DB Admin router: {de}')
 
     # Include web installer for admins and first-run setup
     try:

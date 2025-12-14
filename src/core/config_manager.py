@@ -5,7 +5,24 @@ from google.cloud import secretmanager
 from google.api_core.exceptions import NotFound
 
 CONFIG_SHEET = os.getenv("CONFIG_SHEET_ID")
-GCP_PROJECT = os.getenv("GCP_PROJECT_ID")
+GCP_PROJECT = os.getenv("GCP_PROJECT_ID") or os.getenv("PROJECT_ID") or os.getenv("GOOGLE_CLOUD_PROJECT")
+
+
+def _detect_project() -> str | None:
+    """Detect GCP project id from env or metadata server. Returns None if not found."""
+    if GCP_PROJECT:
+        return GCP_PROJECT
+    # Try metadata server (works on GCE / Cloud Run when metadata is enabled)
+    try:
+        import requests
+        url = 'http://metadata.google.internal/computeMetadata/v1/project/project-id'
+        headers = {'Metadata-Flavor': 'Google'}
+        resp = requests.get(url, headers=headers, timeout=1)
+        if resp.status_code == 200:
+            return resp.text.strip()
+    except Exception:
+        pass
+    return None
 
 def _get_secret_client():
     return secretmanager.SecretManagerServiceClient()
@@ -20,7 +37,19 @@ def get_secret(secret_id: str) -> str | None:
     if env_val:
         return env_val
     client = _get_secret_client()
-    name = f"projects/{GCP_PROJECT}/secrets/{secret_id}/versions/latest"
+    project = _detect_project()
+    if not project:
+        # If no project detected, fall back to local config secrets (if any)
+        if os.path.exists("config.json"):
+            try:
+                with open("config.json", encoding="utf-8") as f:
+                    cfg = json.load(f) or {}
+                secrets = cfg.get("secrets", {})
+                return secrets.get(secret_id)
+            except Exception:
+                return None
+        return None
+    name = f"projects/{project}/secrets/{secret_id}/versions/latest"
     try:
         resp = client.access_secret_version(request={"name": name})
         return resp.payload.data.decode("UTF-8")
@@ -32,7 +61,25 @@ def get_secret(secret_id: str) -> str | None:
 
 def set_secret(secret_id: str, value: str) -> None:
     client = _get_secret_client()
-    parent = f"projects/{GCP_PROJECT}"
+    project = _detect_project()
+    if not project:
+        # No secret manager project available — store secrets locally in config.json under 'secrets' key (best-effort)
+        try:
+            cfg = {}
+            if os.path.exists("config.json"):
+                with open("config.json", encoding="utf-8") as f:
+                    cfg = json.load(f) or {}
+            secrets = cfg.get("secrets", {})
+            secrets[secret_id] = value
+            cfg["secrets"] = secrets
+            with open("config.json", "w", encoding="utf-8") as f:
+                json.dump(cfg, f, indent=2, ensure_ascii=False)
+            return
+        except Exception:
+            # Give up silently
+            return
+
+    parent = f"projects/{project}"
     secret_name = f"{parent}/secrets/{secret_id}"
     try:
         # Try to create secret; if exists, ignore
@@ -92,7 +139,15 @@ def save_config(data: Dict[str, Any]) -> None:
         json.dump(existing, f, indent=2, ensure_ascii=False)
     # Save secrets to Secret Manager
     for secret_name, secret_value in secrets.items():
-        set_secret(secret_name, secret_value)
+        try:
+            set_secret(secret_name, secret_value)
+        except Exception as e:
+            # Best-effort: do not fail saving non-secret config when Secret Manager is unavailable
+            try:
+                import logging
+                logging.getLogger(__name__).warning(f"Failed to save secret {secret_name} to Secret Manager: {e}")
+            except Exception:
+                pass
 
 
 def save_config_to_sheet(sheets_client, spreadsheet_id: str, data: Dict[str, Any]) -> None:

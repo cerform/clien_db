@@ -18,6 +18,7 @@ class Config:
     OPENAI_API_KEY: str
     DEFAULT_SLOT_DURATION: int
     AI_ONLY_MODE: bool
+    ENABLE_LLM: bool
 
     @staticmethod
     def from_env():
@@ -44,8 +45,9 @@ class Config:
             ADMIN_USER_IDS=[int(x.strip()) for x in __import__('re').split('[,;]', os.getenv("ADMIN_USER_IDS", "")) if x.strip()],
             ENV=os.getenv("ENV", "production"),
             OPENAI_API_KEY=os.getenv("OPENAI_API_KEY", ""),
-            DEFAULT_SLOT_DURATION=int(os.getenv("DEFAULT_SLOT_DURATION", "120")),
-            AI_ONLY_MODE=os.getenv("AI_ONLY_MODE", "false").lower() in ("1","true","yes"),
+                        DEFAULT_SLOT_DURATION=int(os.getenv("DEFAULT_SLOT_DURATION", "120")),
+                        AI_ONLY_MODE=os.getenv("AI_ONLY_MODE", "false").lower() in ("1","true","yes"),
+                        ENABLE_LLM=os.getenv("ENABLE_LLM", "true").lower() in ("1","true","yes"),
         )
 
     def validate(self):

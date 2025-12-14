@@ -9,7 +9,12 @@ from googleapiclient.errors import HttpError
 from google.auth.transport.requests import Request
 from google.auth import default as google_auth_default
 
-SCOPES = ["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/calendar"]
+SCOPES = [
+    "https://www.googleapis.com/auth/spreadsheets",
+    "https://www.googleapis.com/auth/calendar",
+    # Drive scope is required for creating spreadsheets and managing sharing
+    "https://www.googleapis.com/auth/drive"
+]
 logger = logging.getLogger(__name__)
 
 class SheetsClient:
@@ -273,17 +278,47 @@ class SheetsClient:
             for sheet_name in updated_headers:
                 sheet_id = existing.get(sheet_name)
                 if sheet_id:
+                    # Bold header text and set background color
                     format_requests.append({
                         "repeatCell": {
                             "range": {"sheetId": sheet_id, "startRowIndex": 0, "endRowIndex": 1},
-                            "cell": {"userEnteredFormat": {"textFormat": {"bold": True}}},
-                            "fields": "userEnteredFormat.textFormat.bold"
+                            "cell": {"userEnteredFormat": {"textFormat": {"bold": True}, "backgroundColor": {"red": 0.93, "green": 0.93, "blue": 0.93}}},
+                            "fields": "userEnteredFormat(textFormat,backgroundColor)"
                         }
                     })
+                    # Freeze the first row
+                    format_requests.append({
+                        "updateSheetProperties": {
+                            "properties": {"sheetId": sheet_id, "gridProperties": {"frozenRowCount": 1}},
+                            "fields": "gridProperties.frozenRowCount"
+                        }
+                    })
+                    # Auto-resize columns for number of header columns found
+                    # Determine header length by reading current header row
+                    try:
+                        resp = self.service_sheets.spreadsheets().values().get(spreadsheetId=spreadsheet_id, range=f"{sheet_name}!A1:Z1").execute()
+                        current = resp.get('values', [])
+                        col_count = len(current[0]) if current else 0
+                    except Exception:
+                        col_count = 0
+                    if col_count > 0:
+                        format_requests.append({
+                            "autoResizeDimensions": {
+                                "dimensions": {"sheetId": sheet_id, "dimension": "COLUMNS", "startIndex": 0, "endIndex": col_count}
+                            }
+                        })
             if format_requests:
                 self.service_sheets.spreadsheets().batchUpdate(spreadsheetId=spreadsheet_id, body={"requests": format_requests}).execute()
         except Exception:
             logger.exception("Failed to apply header formatting")
+
+        # Track formatting applied in summary
+        try:
+            if format_requests:
+                summary.setdefault('formatted_sheets', [])
+                summary['formatted_sheets'].extend(updated_headers)
+        except Exception:
+            pass
 
         summary = {"created_sheets": created_sheets, "updated_headers": updated_headers}
         logger.info(f"ensure_sheet_format summary: {summary}")
