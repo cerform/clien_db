@@ -1,0 +1,111 @@
+{% extends "base.html" %}
+
+{% block title %}Обучение INKA — Admin Panel{% endblock %}
+
+{% block content %}
+<div class="container mt-xxl">
+    <div class="section card card-interactive">
+        <div class="card-header">
+            <h1 class="card-title">Обучение INKA</h1>
+        </div>
+        <div class="card-body">
+            <div class="tabs">
+                <button class="tab active" onclick="showTab('chat')">💬 Интерактивный чат</button>
+                <button class="tab" onclick="showTab('scenarios')">📝 Сценарии</button>
+                <button class="tab" onclick="showTab('corrections')">✏️ Коррекции</button>
+                <button class="tab" onclick="showTab('knowledge')">📚 База знаний</button>
+            </div>
+            <div class="content mt-md">
+                <div id="chat" class="tab-content active">
+                    <div class="chat-container">
+                        <div id="chatMessages" class="chat-messages">
+                            <div class="message inka">
+                                <div class="message-bubble">Привет! Я готова к обучению. Начните с вопроса или примера.</div>
+                            </div>
+                        </div>
+                        <div id="typingIndicator" class="typing-indicator" style="display:none">ИНКА думает...</div>
+                        <div class="chat-input-container">
+                            <input id="chatInput" class="chat-input" placeholder="Напишите сообщение для ИНКИ..." onkeypress="if(event.key==='Enter')sendTrainingMessage()">
+                            <button class="send-btn" onclick="sendTrainingMessage()">➤</button>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="scenarios" class="tab-content">
+                    <div class="training-section">
+                        <div class="training-card">
+                            <h3>Добавить сценарий</h3>
+                            <div class="training-form">
+                                <select id="scenarioCategory"><option value="booking">Booking</option><option value="pricing">Pricing</option></select>
+                                <input id="scenarioTrigger" class="form-input" placeholder="Вопрос клиента">
+                                <textarea id="scenarioResponse" class="form-input" placeholder="Ответ ИНКИ..."></textarea>
+                                <button class="btn btn-success" onclick="addScenario()">Добавить сценарий</button>
+                            </div>
+                        </div>
+                        <div id="scenariosList" class="knowledge-list mt-md">Загрузка...</div>
+                    </div>
+                </div>
+
+                <div id="corrections" class="tab-content">
+                    <div class="training-section">
+                        <div class="training-card">
+                            <h3>Исправить ответ ИНКИ</h3>
+                            <textarea id="wrongResponse" class="form-input" placeholder="Неправильный ответ..."></textarea>
+                            <textarea id="correctResponse" class="form-input" placeholder="Правильный ответ..."></textarea>
+                            <button class="btn btn-secondary" onclick="addCorrection()">Добавить правку</button>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="knowledge" class="tab-content">
+                    <div class="training-section">
+                        <div class="training-card">
+                            <h3>База знаний</h3>
+                            <div id="knowledgeList" class="knowledge-list">Загрузка...</div>
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+function showTab(tab) {
+    document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+    document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+    document.querySelector(`.tab[onclick="showTab(\'${tab}\')"]`).classList.add('active');
+    document.getElementById(tab === 'chat' ? 'chat' : tab).classList.add('active');
+}
+async function sendTrainingMessage() {
+    const input = document.getElementById('chatInput');
+    const text = input.value.trim(); if(!text) return;
+    addMessage(text, 'user'); input.value = '';
+    try {
+        const res = await fetch('/api/inka-training/chat', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ message: text }) });
+        const data = await res.json(); addMessage(data.response, 'inka');
+    } catch (err) { addMessage('Ошибка сервера', 'inka'); }
+}
+function addMessage(text, type) {
+    const container = document.getElementById('chatMessages');
+    const div = document.createElement('div'); div.className = `message ${type}`;
+    const bubble = document.createElement('div'); bubble.className = 'message-bubble'; bubble.innerText = text;
+    div.appendChild(bubble); container.appendChild(div); container.scrollTop = container.scrollHeight;
+}
+async function addScenario(){
+    const category = document.getElementById('scenarioCategory').value; const trigger = document.getElementById('scenarioTrigger').value; const response = document.getElementById('scenarioResponse').value;
+    await fetch('/api/inka-training/scenario', { method: 'POST', headers: { 'Content-Type':'application/json' }, body: JSON.stringify({ category, trigger, response })});
+    loadScenarios();
+}
+async function addCorrection(){
+    const wrong = document.getElementById('wrongResponse').value; const correct = document.getElementById('correctResponse').value;
+    await fetch('/api/inka-training/correction', { method: 'POST', headers: { 'Content-Type':'application/json' }, body: JSON.stringify({ wrong, correct })});
+    loadCorrections();
+}
+async function loadScenarios(){ const res = await fetch('/api/inka-training/scenarios'); const list = await res.json(); document.getElementById('scenariosList').innerText = JSON.stringify(list); }
+async function loadCorrections(){ const res = await fetch('/api/inka-training/corrections'); const list = await res.json(); document.getElementById('knowledgeList').innerText = JSON.stringify(list); }
+async function loadKnowledge(){ const res = await fetch('/api/inka-training/knowledge'); const list = await res.json(); document.getElementById('knowledgeList').innerText = JSON.stringify(list); }
+document.addEventListener('DOMContentLoaded', () => { loadScenarios(); loadCorrections(); loadKnowledge(); });
+</script>
+{% endblock %}

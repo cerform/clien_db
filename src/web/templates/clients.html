@@ -1,0 +1,188 @@
+{% extends "base.html" %}
+
+{% block title %}Клиенты — Admin Panel{% endblock %}
+
+{% block content %}
+<div class="container mt-xxl">
+    <div class="section card card-interactive">
+        <div class="card-header flex space-between align-center">
+            <h1 class="card-title">Клиенты</h1>
+              <button class="btn btn-primary" data-modal-open="addClientModal">Добавить клиента</button>
+        </div>
+        <div class="card-body">
+            <div class="table-responsive">
+                <table class="table">
+                    <thead>
+                        <tr>
+                            <th>Имя</th>
+                            <th>Телефон</th>
+                            <th>Статус</th>
+                            <th>Действия</th>
+                        </tr>
+                    </thead>
+                    <tbody id="clients-table-body">
+                        <!-- Клиенты будут подгружаться через JS -->
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Модальное окно добавления клиента -->
+<div class="modal-overlay" id="addClientModal" style="display:none">
+    <div class="modal">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h2>Добавить клиента</h2>
+            <button class="modal-close" data-modal-close>&times;</button>
+        </div>
+        <form id="add-client-form" class="form-grid gap-lg">
+            <div class="form-group">
+                <label class="form-label">Имя</label>
+                <input class="form-input" name="name" required>
+            </div>
+            <div class="form-group">
+                <label class="form-label">Телефон</label>
+                <input class="form-input" name="phone" required>
+            </div>
+            <div class="form-group mt-lg">
+                <button type="submit" class="btn btn-primary btn-block">Сохранить</button>
+            </div>
+        </form>
+    </div>
+    </div>
+</div>
+
+<!-- Modal edit client -->
+<div class="modal-overlay" id="editClientModal" style="display:none">
+    <div class="modal">
+        <div class="modal-header">
+            <h2>Редактировать клиента</h2>
+            <button class="modal-close" data-modal-close>&times;</button>
+        </div>
+        <form id="edit-client-form" class="form-grid gap-lg">
+            <input type="hidden" name="id">
+            <div class="form-group"><label class="form-label">Имя</label><input class="form-input" name="name" required></div>
+            <div class="form-group"><label class="form-label">Телефон</label><input class="form-input" name="phone" required></div>
+            <div class="form-group mt-lg"><button type="submit" class="btn btn-primary btn-block">Сохранить</button></div>
+        </form>
+    </div>
+</div>
+
+<script>
+function openAddClientModal() {
+    document.getElementById('addClientModal').style.display = 'block';
+}
+function closeAddClientModal() {
+    document.getElementById('addClientModal').style.display = 'none';
+}
+// AJAX для загрузки и добавления клиентов (улучшенный)
+async function loadClients() {
+    const res = await fetch('/api/clients');
+    if (!res.ok) { app.showAlert('Не удалось загрузить клиентов', 'error'); return }
+    const clients = await res.json();
+    const body = document.getElementById('clients-table-body');
+    body.innerHTML = '';
+        clients.forEach(c => {
+        const tr = document.createElement('tr');
+        tr.dataset.clientId = c.id;
+        tr.innerHTML = `
+            <td>${c.name || ''}</td>
+            <td>${c.phone || ''}</td>
+            <td>${c.is_active ? 'Active' : 'Inactive'}</td>
+            <td style="display:flex;gap:8px"><button class="btn edit-client" data-client-id="${c.id}">Edit</button><button class="btn btn-danger delete-client" data-client-id="${c.id}">Delete</button></td>
+        `;
+        tr.addEventListener('click', (e) => { if (e.target.closest('button')) return; openEditClient(c.id); });
+        body.appendChild(tr);
+    });
+}
+
+document.getElementById('add-client-form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const form = e.target;
+    const token = localStorage.getItem('inka_admin_token');
+    const headers = {'Content-Type': 'application/json'};
+    if (token) headers['Authorization'] = 'Bearer ' + token;
+    const body = {
+        name: form.name.value,
+        phone: form.phone.value
+    };
+    const res = await fetch('/api/clients', {method:'POST', headers, body: JSON.stringify(body)});
+    if (res.ok) {
+        closeAddClientModal();
+        const body = {
+            name: form.name.value,
+            phone: form.phone.value
+        };
+        let res
+        try {
+            res = await fetch('/api/clients', {method:'POST', headers, body: JSON.stringify(body)});
+        } catch (err) {
+            app.showAlert('Ошибка сети при добавлении клиента', 'error');
+            return
+        }
+        if (res.ok) {
+            app.showAlert('Клиент добавлен', 'success');
+            app.closeModal(document.getElementById('addClientModal'));
+            await loadClients();
+        } else {
+            const txt = await res.text().catch(()=>null)
+            app.showAlert('Не удалось добавить клиента: ' + (txt || res.statusText), 'error');
+        }
+        form.name.value = c.name || '';
+    function openEditClient(id) {
+        fetch(`/api/clients/${id}`).then(r => {
+            if (!r.ok) throw new Error('Failed to load client');
+            return r.json()
+        }).then(c => {
+            const form = document.getElementById('edit-client-form');
+            form.id.value = c.id;
+            form.name.value = c.name || '';
+            form.phone.value = c.phone || '';
+            app.openModal('editClientModal');
+        }).catch(e => app.showAlert('Не удалось загрузить клиента', 'error'));
+    }
+    function closeEditClientModal() { app.closeModal(document.getElementById('editClientModal')); }
+
+    document.getElementById('edit-client-form').addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const form = e.target;
+        const id = form.id.value;
+        const token = localStorage.getItem('inka_admin_token');
+        const headers = {'Content-Type': 'application/json'}; if (token) headers['Authorization'] = 'Bearer ' + token;
+        const body = { name: form.name.value, phone: form.phone.value };
+        let res
+        try {
+            res = await fetch(`/api/clients/${id}`, {method:'PUT', headers, body: JSON.stringify(body)});
+        } catch (err) {
+            app.showAlert('Ошибка сети при обновлении клиента', 'error');
+            return
+        }
+        if (res.ok) {
+            app.showAlert('Клиент обновлён', 'success');
+            app.closeModal(document.getElementById('editClientModal'));
+            await loadClients();
+        } else {
+            const txt = await res.text().catch(()=>null)
+            app.showAlert('Не удалось обновить клиента: ' + (txt || res.statusText), 'error');
+        }
+    });
+                await loadClients(); 
+                app.showAlert('Client deleted', 'success'); 
+            } else { 
+                app.showAlert('Failed to delete client', 'error'); 
+            }
+}
+
+document.addEventListener('DOMContentLoaded', () => { loadClients(); });
+
+// Event delegation for edit/delete buttons (works for dynamically generated rows)
+document.body.addEventListener('click', (e) => {
+    const editBtn = e.target.closest('.edit-client');
+    if (editBtn) { openEditClient(editBtn.dataset.clientId); }
+    const delBtn = e.target.closest('.delete-client');
+    if (delBtn) { deleteClient(delBtn.dataset.clientId); }
+});
+</script>
+{% endblock %}

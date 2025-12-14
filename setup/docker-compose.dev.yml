@@ -1,0 +1,51 @@
+version: '3.8'
+
+services:
+  web:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+    container_name: clien_db_web_dev
+    command: sh -c "python -m pip install --upgrade pip && pip install -r requirements.txt && python -m uvicorn src.web.app:create_app --factory --host 0.0.0.0 --port 8081 --reload"
+    ports:
+      - "8081:8081"
+    env_file:
+      - ../.env
+    volumes:
+      - ..:/app:rw
+      - ../credentials.json:/var/secrets/google/credentials.json:ro
+    environment:
+      - ENV=development
+      - PORT=8081
+      - DATABASE_URL=postgresql+psycopg2://postgres:password@postgres:5432/admin_messages
+      - GOOGLE_APPLICATION_CREDENTIALS=/var/secrets/google/credentials.json
+    depends_on:
+      - postgres
+
+  postgres:
+    image: postgres:15
+    container_name: clien_db_postgres_dev
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: password
+      POSTGRES_DB: admin_messages
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata_dev:/var/lib/postgresql/data
+
+  pgadmin:
+    image: dpage/pgadmin4:7
+    container_name: clien_db_pgadmin_dev
+    restart: unless-stopped
+    environment:
+      PGADMIN_DEFAULT_EMAIL: admin@example.com
+      PGADMIN_DEFAULT_PASSWORD: admin
+    ports:
+      - "5050:80"
+    depends_on:
+      - postgres
+
+volumes:
+  pgdata_dev:
+    name: clien_db_pgdata_dev

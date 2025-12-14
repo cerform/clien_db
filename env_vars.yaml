@@ -1,0 +1,6 @@
+CLOUD_RUN_ENV: "true"
+DB_SOCKET_DIR: "/cloudsql"
+CLOUDSQL_CONNECTION_NAME: "tattoo-480007:us-central1:tattoo-db"
+CLOUDSQL_DB: "tattoo_salon"
+CLOUDSQL_USER: "tattoo_user"
+ADMIN_USER_IDS: "438407739,457343487"

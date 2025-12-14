@@ -3,6 +3,7 @@ credentials.json
 credential.json
 token.json
 .env
+.env.deploy 
 
 # Python
 __pycache__/
@@ -54,10 +55,19 @@ htmlcov/
 .tox/
 
 # Project specific
-test_*.py
-*_test.py
+# Tests are included in the repo (do not ignore test_*.py files)
 temp/
 tmp/
 
 # Documentation (keep main docs, ignore temp)
 *.tmp.md
+
+__pycache__/
+.venv_predeploy/
+test.db
+.installer_complete
+config.json
+
+# Ignore frontend node_modules for PoC apps
+services/frontend/db-manager/node_modules/
+services/frontend/admin-ui/node_modules/

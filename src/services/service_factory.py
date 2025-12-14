@@ -1,11 +1,13 @@
 """
 Service factories - создают экземпляры сервисов с подключением к БД
+Автоматически использует PostgreSQL или Google Sheets в зависимости от конфигурации
 """
 
 import logging
 from typing import Optional
 
 from src.db.sheets_client import SheetsClient
+from src.db.db_factory import get_db_factory, DatabaseFactory
 from src.services.booking_service import BookingService
 from src.services.calendar_service import CalendarService
 from src.services.client_service import ClientService
@@ -17,12 +19,27 @@ from src.config.env_loader import load_env
 logger = logging.getLogger(__name__)
 
 # Глобальные экземпляры
+_db_factory: Optional[DatabaseFactory] = None
 _sheets_client: Optional[SheetsClient] = None
 _booking_service: Optional[BookingService] = None
 _calendar_service: Optional[CalendarService] = None
 _client_service: Optional[ClientService] = None
 _admin_service: Optional[AdminService] = None
 _master_service: Optional[MasterService] = None
+
+
+def get_database_factory() -> DatabaseFactory:
+    """Получить или создать database factory (PostgreSQL или Sheets)"""
+    global _db_factory
+    if _db_factory is None:
+        try:
+            load_env()
+            _db_factory = get_db_factory()
+            logger.info("✅ Database factory initialized")
+        except Exception as e:
+            logger.error(f"Failed to initialize database factory: {e}")
+            raise
+    return _db_factory
 
 
 def get_sheets_client() -> SheetsClient:
@@ -111,6 +128,7 @@ def get_master_service() -> MasterService:
 
 # Export
 __all__ = [
+    "get_database_factory",
     "get_sheets_client",
     "get_booking_service",
     "get_calendar_service",

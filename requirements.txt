@@ -8,11 +8,25 @@ pytz==2024.2
 tzdata==2024.2
 uvicorn==0.32.0
 fastapi==0.115.5
+python-multipart
+jinja2
 requests==2.31.0
 openai>=1.12.0
+PyJWT>=2.8.0
+PySimpleGUI==5.0.8.3
+gunicorn==21.2.0
+slowapi>=0.1.9
 
 # Testing
 pytest==8.3.4
 pytest-asyncio==0.24.0
 pytest-mock==3.14.0
 pytest-cov==6.0.0
+
+# Cloud SQL integration
+sqlalchemy
+pymysql
+gspread
+google-cloud-secret-manager
+psycopg2-binary
+jsonschema>=4.20.0

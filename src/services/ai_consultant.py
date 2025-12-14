@@ -1,18 +1,23 @@
 """AI-powered tattoo consultation service"""
 import logging
 import json
-from typing import Dict, List
-import openai
+from typing import Dict
+from src.services.openai_service import OpenAIService
 
 logger = logging.getLogger(__name__)
 
 class AIConsultant:
     """AI consultant for tattoo consultation and booking details"""
     
-    def __init__(self, api_key: str):
-        """Initialize with OpenAI API key"""
-        openai.api_key = api_key
+    def __init__(self, api_key: str = None, openai_service: Optional[OpenAIService] = None):
+        """Initialize with OpenAI API key or OpenAIService instance"""
         self.model = "gpt-3.5-turbo"
+        self.openai_service = openai_service
+        if not self.openai_service and api_key:
+            try:
+                self.openai_service = OpenAIService(api_key=api_key, model=self.model)
+            except Exception:
+                self.openai_service = None
         self.consultation_history = {}
     
     def get_tattoo_consultation(self, user_id: int, user_message: str, consultation_context: Dict = None) -> Dict:
@@ -50,11 +55,13 @@ class AIConsultant:
             messages = self.consultation_history[user_id][-10:]
             
             # Call OpenAI API
-            response = openai.ChatCompletion.create(
-                model=self.model,
+            if not self.openai_service or not self.openai_service.api_enabled:
+                raise RuntimeError("OpenAI service is not enabled")
+            response = self.openai_service.chat_completion(
                 messages=[{"role": "system", "content": system_prompt}] + messages,
                 temperature=0.7,
-                max_tokens=500
+                max_tokens=500,
+                model=self.model
             )
             
             assistant_message = response.choices[0].message.content
@@ -114,11 +121,13 @@ Provide a JSON response with:
 
 Consider factors like complexity, size, number of colors, detail level."""
             
-            response = openai.ChatCompletion.create(
-                model=self.model,
+            if not self.openai_service or not self.openai_service.api_enabled:
+                raise RuntimeError("OpenAI service is not enabled")
+            response = self.openai_service.chat_completion(
                 messages=[{"role": "user", "content": prompt}],
                 temperature=0.5,
-                max_tokens=300
+                max_tokens=300,
+                model=self.model
             )
             
             response_text = response.choices[0].message.content

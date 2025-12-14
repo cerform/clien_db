@@ -1,0 +1,78 @@
+version: '3.8'
+services:
+  db:
+    image: postgres:15
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: tattoo_salon
+      POSTGRES_USER: tattoo_user
+      POSTGRES_PASSWORD: password
+    ports:
+      - "5432:5432"
+    volumes:
+      - db_data:/var/lib/postgresql/data
+
+  backend:
+    build:
+      context: .
+      dockerfile: services/backend/Dockerfile
+    environment:
+      CLOUDSQL_DB: tattoo_salon
+      CLOUDSQL_USER: tattoo_user
+      CLOUDSQL_PASSWORD: password
+      DATABASE_URL: "postgresql://tattoo_user:password@db:5432/tattoo_salon"
+      SPREADSHEET_ID: "${SPREADSHEET_ID:-}"
+      CLOUD_RUN_ENV: 'false'
+      SERVICE_URL: 'http://localhost:8081'
+      PORT: 8081
+    ports:
+      - "8081:8080"
+    depends_on:
+      - db
+    volumes:
+      - ./:/app
+
+  bot:
+    build:
+      context: .
+      dockerfile: services/bot/Dockerfile
+    environment:
+      BOT_TOKEN: "${BOT_TOKEN:-}"
+      SERVICE_URL: 'http://localhost:8082'
+      PORT: 8080
+      CLOUD_RUN_ENV: 'false'
+      DATABASE_URL: "postgresql://tattoo_user:password@db:5432/tattoo_salon"
+      SPREADSHEET_ID: "${SPREADSHEET_ID:-}"
+    ports:
+      - "8082:8080"
+    depends_on:
+      - backend
+      - db
+    volumes:
+      - ./:/app
+
+  ai:
+    build:
+      context: .
+      dockerfile: services/ai/Dockerfile
+    environment:
+      OPENAI_API_KEY: "${OPENAI_API_KEY:-}"
+      DATABASE_URL: "postgresql://tattoo_user:password@db:5432/tattoo_salon"
+      SPREADSHEET_ID: "${SPREADSHEET_ID:-}"
+    depends_on:
+      - backend
+      - db
+    volumes:
+      - ./:/app
+
+  frontend:
+    build:
+      context: .
+      dockerfile: services/frontend/Dockerfile
+    ports:
+      - "8083:80"
+    depends_on:
+      - backend
+
+volumes:
+  db_data:

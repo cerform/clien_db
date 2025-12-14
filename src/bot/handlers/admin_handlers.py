@@ -5,6 +5,7 @@ from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from src.config.env_loader import load_env
 from src.config.config import Config
+from src.services.admin_manager import get_admin_ids, is_admin, grant_admin, revoke_admin
 from src.db.sheets_client import SheetsClient
 from src.services.admin_service import AdminService
 from src.services.master_service import MasterService
@@ -12,6 +13,7 @@ from src.services.sync_service import SyncService
 from src.services.admin_chat_service import AdminChatService
 from src.bot.keyboards.common_kb import admin_menu, main_menu, cancel_kb
 from src.utils.i18n import i18n
+import os
 import logging
 
 logger = logging.getLogger(__name__)
@@ -54,6 +56,9 @@ def setup(dp: Dispatcher):
     dp.message.register(process_slot_master, AddSlotStates.waiting_for_master_id)
     dp.message.register(process_slot_start, AddSlotStates.waiting_for_start_time)
     dp.message.register(process_slot_end, AddSlotStates.waiting_for_end_time)
+    # Admin control commands
+    dp.message.register(cmd_grant_admin, Command(commands=["grant_admin"]))
+    dp.message.register(cmd_revoke_admin, Command(commands=["revoke_admin"]))
 
 async def cmd_admin(message: types.Message):
     """Admin dashboard"""
@@ -62,7 +67,7 @@ async def cmd_admin(message: types.Message):
     
     load_env()
     cfg = Config.from_env()
-    if message.from_user.id not in cfg.ADMIN_USER_IDS:
+    if not is_admin(message.from_user.id):
         await message.answer("❌ Not admin")
         return
     try:
@@ -73,13 +78,67 @@ async def cmd_admin(message: types.Message):
         bookings = admin.list_bookings()
         msg = f"""📊 Admin Dashboard
 
-👥 Clients: {len(clients)}
-👨‍🎨 Masters: {len(masters)}
-📅 Bookings: {len(bookings)}"""
+    👥 Clients: {len(clients)}
+    👨‍🎨 Masters: {len(masters)}
+    📅 Bookings: {len(bookings)}"""
+        # Add link to admin panel (use SERVICE_URL env var if set, otherwise fallback)
+        service_url = os.getenv("SERVICE_URL") or "https://inka-bot.run.app"
+        msg += f"\n\n🔗 Admin Panel: {service_url}"
+        msg += "\n\n*Admin controls:*\n`/grant_admin <telegram_id>` - add admin\n`/revoke_admin <telegram_id>` - remove admin"
         await message.answer(msg, reply_markup=admin_menu(user_lang))
     except Exception as e:
         await message.answer(f"❌ Error: {str(e)[:100]}")
         logger.exception("Admin error")
+
+
+async def cmd_grant_admin(message: types.Message):
+    """Grant admin access to another Telegram user by ID or username"""
+    load_env()
+    if not is_admin(message.from_user.id):
+        await message.answer("⛔️ You are not an admin")
+        return
+
+    args = message.get_args()
+    if not args:
+        await message.answer("Usage: /grant_admin <telegram_id>")
+        return
+
+    try:
+        new_id = int(args.strip())
+    except Exception:
+        await message.answer("Please provide a valid Telegram numeric ID.")
+        return
+
+    success = grant_admin(new_id)
+    if success:
+        await message.answer(f"✅ Granted admin rights to {new_id}")
+    else:
+        await message.answer(f"❌ Failed to grant admin rights to {new_id}")
+
+
+async def cmd_revoke_admin(message: types.Message):
+    """Revoke admin access from a user"""
+    load_env()
+    if not is_admin(message.from_user.id):
+        await message.answer("⛔️ You are not an admin")
+        return
+
+    args = message.get_args()
+    if not args:
+        await message.answer("Usage: /revoke_admin <telegram_id>")
+        return
+
+    try:
+        revoke_id = int(args.strip())
+    except Exception:
+        await message.answer("Please provide a valid Telegram numeric ID.")
+        return
+
+    success = revoke_admin(revoke_id)
+    if success:
+        await message.answer(f"✅ Revoked admin rights from {revoke_id}")
+    else:
+        await message.answer(f"❌ Failed to revoke admin rights from {revoke_id}")
 
 async def show_admin_menu(message: types.Message):
     """Show admin menu"""
@@ -88,7 +147,7 @@ async def show_admin_menu(message: types.Message):
     
     load_env()
     cfg = Config.from_env()
-    if message.from_user.id not in cfg.ADMIN_USER_IDS:
+    if message.from_user.id not in get_admin_ids():
         await message.answer("❌ Not admin")
         return
     try:
@@ -99,9 +158,11 @@ async def show_admin_menu(message: types.Message):
         bookings = admin.list_bookings()
         msg = f"""📊 Admin Dashboard
 
-👥 Clients: {len(clients)}
-👨‍🎨 Masters: {len(masters)}
-📅 Bookings: {len(bookings)}"""
+    👥 Clients: {len(clients)}
+    👨‍🎨 Masters: {len(masters)}
+    📅 Bookings: {len(bookings)}"""
+        service_url = os.getenv("SERVICE_URL") or "https://inka-bot.run.app"
+        msg += f"\n\n🔗 Admin Panel: {service_url}"
         await message.answer(msg, reply_markup=admin_menu(user_lang))
     except Exception as e:
         await message.answer(f"❌ Error: {str(e)[:100]}")
@@ -118,7 +179,7 @@ async def cmd_view_clients(message: types.Message):
     """View all clients"""
     load_env()
     cfg = Config.from_env()
-    if message.from_user.id not in cfg.ADMIN_USER_IDS:
+    if message.from_user.id not in get_admin_ids():
         await message.answer("❌ Not admin")
         return
     try:
@@ -142,7 +203,7 @@ async def cmd_view_bookings(message: types.Message):
     """View all bookings"""
     load_env()
     cfg = Config.from_env()
-    if message.from_user.id not in cfg.ADMIN_USER_IDS:
+    if message.from_user.id not in get_admin_ids():
         await message.answer("❌ Not admin")
         return
     try:
@@ -166,8 +227,7 @@ async def cmd_view_bookings(message: types.Message):
 async def cmd_add_master(message: types.Message, state: FSMContext):
     """Start adding new master"""
     load_env()
-    cfg = Config.from_env()
-    if message.from_user.id not in cfg.ADMIN_USER_IDS:
+    if not is_admin(message.from_user.id):
         await message.answer("❌ Not admin")
         return
     
@@ -206,7 +266,7 @@ async def process_specialties(message: types.Message, state: FSMContext):
         await message.answer("❌ Cancelled", reply_markup=admin_menu(get_user_lang(message.from_user.id)))
         return
     
-    if message.from_user.id not in cfg.ADMIN_USER_IDS:
+    if not is_admin(message.from_user.id):
         await message.answer("❌ Not admin")
         await state.clear()
         return
@@ -235,7 +295,7 @@ async def cmd_add_slot(message: types.Message, state: FSMContext):
     """Start adding new time slot"""
     load_env()
     cfg = Config.from_env()
-    if message.from_user.id not in cfg.ADMIN_USER_IDS:
+    if not is_admin(message.from_user.id):
         await message.answer("❌ Not admin")
         return
     
@@ -299,7 +359,7 @@ async def process_slot_end(message: types.Message, state: FSMContext):
         await message.answer("❌ Cancelled", reply_markup=admin_menu(get_user_lang(message.from_user.id)))
         return
     
-    if message.from_user.id not in cfg.ADMIN_USER_IDS:
+    if not is_admin(message.from_user.id):
         await message.answer("❌ Not admin")
         await state.clear()
         return
@@ -331,7 +391,7 @@ async def cmd_sync(message: types.Message):
     """Sync calendar slots from Google Calendar"""
     load_env()
     cfg = Config.from_env()
-    if message.from_user.id not in cfg.ADMIN_USER_IDS:
+    if not is_admin(message.from_user.id):
         await message.answer("❌ Not admin")
         return
     
@@ -385,7 +445,7 @@ async def cmd_admin_chat(message: types.Message, state: FSMContext):
     load_env()
     cfg = Config.from_env()
     
-    if message.from_user.id not in cfg.ADMIN_USER_IDS:
+    if not is_admin(message.from_user.id):
         await message.answer("❌ Only admins can use this")
         return
 
@@ -429,16 +489,102 @@ async def process_admin_message(message: types.Message, state: FSMContext):
         return
     
     try:
+        # Safety: ensure only admins in this chat can send admin-learning commands.
+        if not is_admin(message.from_user.id):
+            await message.answer("⛔️ You are not an admin")
+            return
+        # Admin learning commands (/rule, /answer, /style, /forbid, /teach)
+        if message.text and message.text.strip().startswith("/"):
+            cmd, *rest = message.text.strip().split(" ", 1)
+            body = rest[0] if rest else ""
+            # Single-line commands support key|value with pipe separator
+            if cmd.lower() in ("/rule", "/teach"):
+                # parse key|value
+                parts = [p.strip() for p in body.split("|", 1)]
+                if len(parts) < 2:
+                    await message.answer("Usage: /rule <key>|<description>")
+                    return
+                key, desc = parts
+                from src.ai.inka_learning import get_inka_learning
+                get_inka_learning().teach_rule(key, desc)
+                # Audit record
+                from src.ai.inka_learning import log_admin_event
+                log_admin_event(message.from_user.username or str(message.from_user.id), f"teach rule {key}")
+                await message.answer(f"✅ Rule added: {key}")
+                return
+            if cmd.lower() == "/answer":
+                parts = [p.strip() for p in body.split("|", 1)]
+                if len(parts) < 2:
+                    await message.answer("Usage: /answer <question>|<answer>")
+                    return
+                q, a = parts
+                from src.ai.inka_learning import get_inka_learning
+                get_inka_learning().teach_faq(q, a)
+                from src.ai.inka_learning import log_admin_event
+                log_admin_event(message.from_user.username or str(message.from_user.id), f"teach faq {q}")
+                await message.answer(f"✅ FAQ added for: {q}")
+                return
+            if cmd.lower() == "/style":
+                parts = [p.strip() for p in body.split("|", 1)]
+                if len(parts) < 2:
+                    await message.answer("Usage: /style <key>|<value>")
+                    return
+                k, v = parts
+                from src.ai.inka_learning import get_inka_learning
+                get_inka_learning().teach_style(k, v)
+                from src.ai.inka_learning import log_admin_event
+                log_admin_event(message.from_user.username or str(message.from_user.id), f"teach style {k}")
+                await message.answer(f"✅ Style setting saved: {k}")
+                return
+            if cmd.lower() in ("/forbid", "/forbidden"):
+                parts = [p.strip() for p in body.split("|", 1)]
+                if len(parts) < 2:
+                    await message.answer("Usage: /forbid <key>|<description>")
+                    return
+                k, desc = parts
+                from src.ai.inka_learning import get_inka_learning
+                get_inka_learning().forbid_behavior(k, desc)
+                from src.ai.inka_learning import log_admin_event
+                log_admin_event(message.from_user.username or str(message.from_user.id), f"forbid {k}")
+                await message.answer(f"✅ Forbidden behavior recorded: {k}")
+                return
+            if cmd.lower() == "/show_learning":
+                from src.ai.inka_learning import get_inka_learning
+                dom = get_inka_learning()
+                rules = dom.list("rules")
+                faq = dom.list("faq")
+                style = dom.list("style")
+                forbidden = dom.list("forbidden")
+                resp = f"Rules: {len(rules)}, FAQ: {len(faq)}, Style: {len(style)}, Forbidden: {len(forbidden)}"
+                await message.answer(resp)
+                return
+
+        # Otherwise, proceed with admin chat processing below
         # Show thinking indicator
         thinking_msg = await message.answer("🤔 Processing your message...")
 
-        # Initialize services
-        admin_chat_service = AdminChatService(cfg.OPENAI_API_KEY)
+        # Initialize services with Cloud SQL repo
+        from src.bot.entrypoint import get_admin_messages_repo
+        repo = get_admin_messages_repo()
+        admin_chat_service = AdminChatService(cfg.OPENAI_API_KEY, repo=repo)
 
         # Process message with AI
         result = admin_chat_service.process_message(
             message.from_user.id, message.text, message.from_user.id
         )
+
+        # Save message to database
+        if result and repo:
+            username = message.from_user.username or message.from_user.full_name
+            category = result["categories"][0] if result["categories"] else "Other"
+            admin_chat_service.save_message(
+                user_id=message.from_user.id,
+                username=username,
+                message=message.text,
+                category=category,
+                data=result.get("extracted_data", {}),
+                inka_category=""
+            )
 
         # Build response message with categorization
         categories_emoji = {
@@ -482,7 +628,7 @@ async def cmd_chat_stats(message: types.Message):
     load_env()
     cfg = Config.from_env()
     
-    if message.from_user.id not in cfg.ADMIN_USER_IDS:
+    if not is_admin(message.from_user.id):
         await message.answer("❌ Only admins can use this")
         return
 

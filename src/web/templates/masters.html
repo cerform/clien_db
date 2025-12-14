@@ -1,0 +1,146 @@
+{% extends "base.html" %}
+
+{% block title %}Мастера — Admin Panel{% endblock %}
+
+{% block content %}
+<div class="container mt-xxl">
+    <div class="section card card-interactive">
+        <div class="card-header flex space-between align-center">
+            <h1 class="card-title">Мастера</h1>
+            <button class="btn btn-primary" data-modal-open="addMasterModal">Добавить мастера</button>
+        </div>
+        <div class="card-body">
+            <div class="table-responsive">
+                <table class="table">
+                    <thead>
+                        <tr>
+                            <th>Имя</th>
+                            <th>Специализация</th>
+                            <th>Телефон</th>
+                            <th>Действия</th>
+                        </tr>
+                    </thead>
+                    <tbody id="masters-table-body">
+                        <!-- Мастера будут подгружаться через JS -->
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Модальное окно добавления мастера -->
+<div class="modal-overlay" id="addMasterModal" style="display:none">
+    <div class="modal">
+        <div class="modal-header">
+            <h2>Добавить мастера</h2>
+            <button class="modal-close" data-modal-close>&times;</button>
+        </div>
+        <form id="add-master-form" class="form-grid gap-lg">
+            <div class="form-group">
+                <label class="form-label">Имя</label>
+                <input class="form-input" name="name" required>
+            </div>
+            <div class="form-group">
+                <label class="form-label">Специализация</label>
+                <input class="form-input" name="specialty" required>
+            </div>
+            <div class="form-group">
+                <label class="form-label">Телефон</label>
+                <input class="form-input" name="phone" required>
+            </div>
+            <div class="form-group mt-lg">
+                <button type="submit" class="btn btn-primary btn-block">Сохранить</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<script>
+// JS для открытия/закрытия модального окна
+function openAddMasterModal() {
+    document.getElementById('addMasterModal').style.display = 'block';
+}
+function closeAddMasterModal() {
+    document.getElementById('addMasterModal').style.display = 'none';
+}
+async function loadMasters() {
+    const res = await fetch('/api/masters');
+    const masters = await res.json();
+    const body = document.getElementById('masters-table-body');
+    body.innerHTML = '';
+        masters.forEach(m => {
+            const tr = document.createElement('tr');
+            tr.dataset.masterId = m.id;
+            tr.innerHTML = \`
+                <td>${m.name || ''}</td>
+                <td>${m.specialization || ''}</td>
+                <td>${m.phone || ''}</td>
+                <td style="display:flex;gap:8px"><button class="btn edit-master" data-master-id="${m.id}">Edit</button><button class="btn btn-danger delete-master" data-master-id="${m.id}">Delete</button></td>
+            \`;
+            tr.addEventListener('click', (e) => { if (e.target.closest('button')) return; openEditMaster(m.id); });
+            body.appendChild(tr);
+    });
+}
+
+document.getElementById('add-master-form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const form = e.target;
+    const token = localStorage.getItem('inka_admin_token');
+    const headers = {'Content-Type': 'application/json'};
+    if (token) headers['Authorization'] = 'Bearer ' + token;
+    const body = {name: form.name.value, specialty: form.specialty.value, phone: form.phone.value};
+    const res = await fetch('/api/masters', {method: 'POST', headers, body: JSON.stringify(body)});
+    if (res.ok) { closeAddMasterModal(); await loadMasters(); app.showAlert('Master added', 'success'); } else { app.showAlert('Failed to add master', 'error'); }
+});
+
+// Edit modal
+const editMasterModalHtml = `
+<div class="modal-overlay" id="editMasterModal" style="display:none">
+    <div class="modal">
+        <div class="modal-header">
+            <h2>Edit Master</h2>
+            <button class="modal-close" data-modal-close>&times;</button>
+        </div>
+        <form id="edit-master-form" class="form-grid gap-lg">
+            <input type="hidden" name="id">
+            <div class="form-group"><label class="form-label">Имя</label><input class="form-input" name="name" required></div>
+            <div class="form-group"><label class="form-label">Специализация</label><input class="form-input" name="specialty" required></div>
+            <div class="form-group"><label class="form-label">Телефон</label><input class="form-input" name="phone" required></div>
+            <div class="form-group mt-lg"><button type="submit" class="btn btn-primary btn-block">Сохранить</button></div>
+        </form>
+    </div>
+</div>`;
+if (!document.getElementById('editMasterModal')) document.body.insertAdjacentHTML('beforeend', editMasterModalHtml);
+function openEditMaster(id) {
+    fetch(`/api/masters/${id}`).then(r => r.json()).then(m => {
+        const form = document.getElementById('edit-master-form');
+        form.id.value = m.id;
+        form.name.value = m.name || '';
+        form.specialty.value = m.specialization || '';
+        form.phone.value = m.phone || '';
+        app.openModal('editMasterModal');
+    }).catch(e => alert('Failed to load master'));
+}
+function closeEditMasterModal() { app.closeModal(document.getElementById('editMasterModal')); }
+
+document.getElementById('edit-master-form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const form = e.target; const id = form.id.value; const token = localStorage.getItem('inka_admin_token');
+    const headers = {'Content-Type': 'application/json'}; if (token) headers['Authorization'] = 'Bearer ' + token;
+    const body = {name: form.name.value, specialization: form.specialty.value, phone: form.phone.value};
+    const res = await fetch(`/api/masters/${id}`, {method:'PUT', headers, body: JSON.stringify(body)});
+    if (res.ok) { closeEditMasterModal(); await loadMasters(); } else { alert('Failed to update master'); }
+});
+
+async function deleteMaster(id) { if (!confirm('Удалить мастера?')) return; const token = localStorage.getItem('inka_admin_token'); const headers = {}; if (token) headers['Authorization'] = 'Bearer '+token; const res = await fetch(`/api/masters/${id}`, {method:'DELETE', headers}); if (res.ok) { await loadMasters(); app.showAlert('Master deleted', 'success'); } else { app.showAlert('Failed to delete master', 'error'); } }
+
+document.addEventListener('DOMContentLoaded', () => { loadMasters(); });
+
+// Event delegation for master edit/delete
+document.body.addEventListener('click', (e) => {
+    const editBtn = e.target.closest('.edit-master'); if (editBtn) { openEditMaster(editBtn.dataset.masterId); }
+    const delBtn = e.target.closest('.delete-master'); if (delBtn) { deleteMaster(delBtn.dataset.masterId); }
+});
+</script>
+{% endblock %}

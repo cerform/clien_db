@@ -1,0 +1,37 @@
+{% extends "base.html" %}
+
+{% block title %}DB Manager — Admin Panel{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="https://unpkg.com/tabulator-tables@5.4.4/dist/css/tabulator.min.css">
+{% endblock %}
+
+{% block content %}
+<div class="container mt-xxl">
+    <div class="section card">
+        <div class="card-header flex space-between align-center">
+            <h1 class="card-title">DB Manager</h1>
+            <div class="flex gap-md">
+                <button class="btn btn-outline" onclick="exportDB()">Export</button>
+                <button class="btn btn-danger" onclick="clearDB()">Clear</button>
+            </div>
+        </div>
+            <div class="card-body">
+                <p>Управление базой данных (только админы): просмотр таблиц, экспорт и простые операции (PoC).</p>
+                <div style="display:flex;gap:8px;align-items:center;margin-bottom:10px">
+                    <select id="db-tables-select" style="min-width:240px"><option>Loading...</option></select>
+                    <button id="load-table" class="btn">Load</button>
+                    <button id="refresh-tables" class="btn">Refresh</button>
+                    <button id="export-table" class="btn btn-outline">Export CSV</button>
+                </div>
+                <div id="db-table" style="min-height:200px"></div>
+                <input type="file" id="restoreFile" style="display:none" onchange="restoreDB(this.files[0])">
+            </div>
+    </div>
+</div>
+
+    {% block extra_js %}
+    <script src="https://unpkg.com/tabulator-tables@5.4.4/dist/js/tabulator.min.js"></script>
+    <script src="/static/js/db_manager.js"></script>
+    {% endblock %}
+{% endblock %}

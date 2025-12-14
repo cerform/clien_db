@@ -1,0 +1,372 @@
+{% extends "base.html" %}
+
+{% block title %}Календарь - Tattoo Salon{% endblock %}
+
+{% block extra_css %}
+<style>
+    .calendar-container {
+        display: grid;
+        grid-template-columns: 1fr;
+        gap: var(--spacing-lg);
+    }
+
+    .calendar-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: var(--spacing-lg);
+        flex-wrap: wrap;
+        gap: var(--spacing-md);
+    }
+
+    .calendar-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+        gap: var(--spacing-lg);
+    }
+
+    .calendar-card {
+        background: var(--bg-elevated);
+        border: 1px solid var(--border-primary);
+        border-radius: var(--border-radius-lg);
+        padding: var(--spacing-lg);
+        transition: all var(--transition-base);
+    }
+
+    .calendar-card:hover {
+        transform: translateY(-2px);
+        box-shadow: var(--shadow-lg);
+        border-color: var(--accent-primary);
+    }
+
+    .calendar-card-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: var(--spacing-md);
+        padding-bottom: var(--spacing-md);
+        border-bottom: 1px solid var(--border-primary);
+    }
+
+    .calendar-card-title {
+        font-size: 1.25rem;
+        font-weight: 600;
+        color: var(--text-primary);
+    }
+
+    .calendar-icon {
+        width: 48px;
+        height: 48px;
+        border-radius: var(--border-radius-md);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 1.5rem;
+        background: rgba(92, 124, 250, 0.1);
+        margin-bottom: var(--spacing-md);
+    }
+
+    .calendar-info {
+        display: flex;
+        flex-direction: column;
+        gap: var(--spacing-sm);
+    }
+
+    .calendar-info-item {
+        display: flex;
+        justify-content: space-between;
+        padding: var(--spacing-sm) 0;
+        border-bottom: 1px solid var(--border-primary);
+        font-size: 0.875rem;
+    }
+
+    .calendar-info-item:last-child {
+        border-bottom: none;
+    }
+
+    .calendar-iframe-container {
+        background: var(--bg-elevated);
+        border: 1px solid var(--border-primary);
+        border-radius: var(--border-radius-lg);
+        padding: var(--spacing-md);
+        margin-top: var(--spacing-lg);
+    }
+
+    .calendar-iframe {
+        width: 100%;
+        height: 600px;
+        border: none;
+        border-radius: var(--border-radius-md);
+    }
+
+    .calendar-sync-status {
+        background: var(--bg-secondary);
+        padding: var(--spacing-md);
+        border-radius: var(--border-radius-md);
+        margin-bottom: var(--spacing-lg);
+    }
+
+    .sync-indicator {
+        display: flex;
+        align-items: center;
+        gap: var(--spacing-sm);
+    }
+
+    .sync-dot {
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        animation: pulse 2s infinite;
+    }
+
+    .sync-dot.connected {
+        background: var(--success);
+    }
+
+    .sync-dot.disconnected {
+        background: var(--danger);
+    }
+
+    @keyframes pulse {
+        0%, 100% { opacity: 1; }
+        50% { opacity: 0.5; }
+    }
+
+    .upcoming-events {
+        background: var(--bg-elevated);
+        border: 1px solid var(--border-primary);
+        border-radius: var(--border-radius-lg);
+        padding: var(--spacing-lg);
+    }
+
+    .event-item {
+        padding: var(--spacing-md);
+        background: var(--bg-secondary);
+        border-radius: var(--border-radius-md);
+        margin-bottom: var(--spacing-md);
+        border-left: 4px solid var(--accent-primary);
+    }
+
+    .event-item:last-child {
+        margin-bottom: 0;
+    }
+
+    .event-time {
+        font-size: 0.875rem;
+        color: var(--text-secondary);
+        margin-bottom: var(--spacing-xs);
+    }
+
+    .event-title {
+        font-weight: 600;
+        color: var(--text-primary);
+        margin-bottom: var(--spacing-xs);
+    }
+
+    .event-details {
+        font-size: 0.875rem;
+        color: var(--text-secondary);
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container">
+    <div class="calendar-header">
+        <div>
+            <h1>📅 Календарь салона</h1>
+            <p class="text-secondary">Синхронизация с Google Calendar</p>
+        </div>
+        <div class="flex gap-md">
+            <button class="btn btn-outline" onclick="refreshCalendars()">🔄 Обновить</button>
+            <button class="btn btn-primary" onclick="openCalendarSettings()">⚙️ Настройки</button>
+        </div>
+    </div>
+
+    <!-- Sync Status -->
+    <div class="calendar-sync-status">
+        <div class="sync-indicator">
+            <span class="sync-dot connected" id="sync-status-dot"></span>
+            <strong>Статус синхронизации:</strong>
+            <span id="sync-status-text">Подключено к Google Calendar</span>
+            <span class="text-secondary ml-auto" id="last-sync-time">Последняя синхронизация: только что</span>
+        </div>
+    </div>
+
+    <!-- Calendar Cards Grid -->
+    <div class="calendar-grid">
+        <!-- Main Salon Calendar -->
+        <div class="calendar-card">
+            <div class="calendar-card-header">
+                <div class="calendar-card-title">🏢 Общий календарь салона</div>
+                <span class="badge badge-success">Активен</span>
+            </div>
+            <div class="calendar-icon">📅</div>
+            <div class="calendar-info">
+                <div class="calendar-info-item">
+                    <span class="text-secondary">ID календаря:</span>
+                    <span id="main-calendar-id">-</span>
+                </div>
+                <div class="calendar-info-item">
+                    <span class="text-secondary">Событий сегодня:</span>
+                    <span class="text-accent">5</span>
+                </div>
+                <div class="calendar-info-item">
+                    <span class="text-secondary">Событий на неделе:</span>
+                    <span class="text-accent">23</span>
+                </div>
+            </div>
+            <button class="btn btn-outline btn-block mt-md" onclick="viewCalendar('main')">
+                📖 Открыть календарь
+            </button>
+        </div>
+
+        <!-- Masters Calendars -->
+        <div id="masters-cards" class="calendar-grid">
+            <!-- dynamic master cards will be injected here -->
+        </div>
+    </div>
+
+    <!-- Main Calendar View -->
+    <div class="calendar-iframe-container mt-xl">
+        <h2 class="mb-md">🗓️ Просмотр календаря</h2>
+        <div id="calendar-iframe-wrapper">
+            <div class="text-center p-xl">
+                <div class="spinner spinner-lg mb-md"></div>
+                <p class="text-secondary">Загрузка календаря...</p>
+                <p class="text-tertiary mt-sm">Если календарь не загружается, проверьте подключение к Google Calendar</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Upcoming Events -->
+    <div class="upcoming-events mt-xl">
+        <h2 class="mb-lg">📋 Ближайшие события</h2>
+        <div id="upcoming-events-container">
+            <div class="event-item">
+                <div class="event-time">Сегодня, 14:00 - 16:00</div>
+                <div class="event-title">Татуировка - Иван Петров</div>
+                <div class="event-details">Мастер: Алексей Мастеров • Стиль: Минимализм</div>
+            </div>
+            <div class="event-item">
+                <div class="event-time">Сегодня, 16:30 - 18:30</div>
+                <div class="event-title">Консультация - Анна Сидорова</div>
+                <div class="event-details">Мастер: Мария Иванова • Обсуждение эскиза</div>
+            </div>
+            <div class="event-item">
+                <div class="event-time">Завтра, 10:00 - 13:00</div>
+                <div class="event-title">Большая татуировка - Сергей Козлов</div>
+                <div class="event-details">Мастер: Дмитрий Петров • Стиль: Traditional</div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    // Get calendar ID from config
+    const MAIN_CALENDAR_ID = '{{ calendar_id or "loading..." }}';
+
+    // Display calendar ID
+    document.getElementById('main-calendar-id').textContent = MAIN_CALENDAR_ID || 'Не настроен';
+
+    function refreshCalendars() {
+        console.log('Refreshing calendars...');
+        // Reload iframe
+        const wrapper = document.getElementById('calendar-iframe-wrapper');
+        const currentSrc = wrapper.querySelector('iframe')?.src;
+        if (currentSrc) {
+            wrapper.innerHTML = `<iframe class="calendar-iframe" src="${currentSrc}"></iframe>`;
+        }
+
+        // Update last sync time
+        document.getElementById('last-sync-time').textContent = `Последняя синхронизация: ${new Date().toLocaleTimeString('ru-RU')}`;
+    }
+
+    function openCalendarSettings() {
+        window.location.href = '/admin/calendar-settings';
+    }
+
+    function viewCalendar(calendarType) {
+        console.log('Viewing calendar:', calendarType);
+        loadCalendarIframe(calendarType);
+    }
+
+    async function loadCalendarIframe(calendarType = 'main') {
+        const wrapper = document.getElementById('calendar-iframe-wrapper');
+
+        // Use the configured calendar ID if available. Support master-specific calendars by prefix 'master-<id>'.
+        let calendarId = MAIN_CALENDAR_ID;
+        if (calendarType && calendarType.startsWith('master-')){
+            const mid = calendarType.split('-')[1];
+            try{
+                const res = await fetch(`/api/masters/${mid}`);
+                if (res.ok){
+                    const m = await res.json();
+                    calendarId = m && (m.calendar_id || m.calendar) ? (m.calendar_id || m.calendar) : calendarId;
+                }
+            }catch(e){ console.warn('Failed to fetch master calendar', e); }
+        }
+
+        // If no calendar ID configured, show message
+        if (!calendarId || calendarId === 'loading...' || calendarId === 'Не настроен') {
+            wrapper.innerHTML = `
+                <div class="alert alert-warning">
+                    <strong>⚠️ Календарь не настроен</strong>
+                    <p>Для отображения календаря необходимо настроить Google Calendar ID в файле конфигурации.</p>
+                    <p class="mt-sm">
+                        1. Откройте Google Calendar<br>
+                        2. Найдите нужный календарь в настройках<br>
+                        3. Скопируйте Calendar ID<br>
+                        4. Добавьте его в переменную окружения MASTER_CALENDAR_ID
+                    </p>
+                    <button class="btn btn-primary mt-md" onclick="window.open('https://calendar.google.com', '_blank')">
+                        Открыть Google Calendar
+                    </button>
+                </div>
+            `;
+            return;
+        }
+
+        // Build Google Calendar embed URL
+        const embedUrl = `https://calendar.google.com/calendar/embed?src=${encodeURIComponent(calendarId)}&ctz=Europe/Moscow&mode=WEEK&showTitle=0&showNav=1&showDate=1&showPrint=0&showTabs=1&showCalendars=0&showTz=0`;
+
+        wrapper.innerHTML = `<iframe class="calendar-iframe" src="${embedUrl}"></iframe>`;
+    }
+
+    // Load calendar on page load
+    async function loadMasterCards(){
+        try{
+            const res = await fetch('/api/admin/masters');
+            const masters = await res.json();
+            const container = document.getElementById('masters-cards');
+            if (!masters || !masters.length) { container.innerHTML = '<div>No masters found</div>'; return; }
+            container.innerHTML = masters.map(m => {
+                const cid = m.calendar_id || m.calendar || '';
+                return `
+                <div class="calendar-card">
+                    <div class="calendar-card-header">
+                        <div class="calendar-card-title">✂️ Мастер: ${m.name || 'Unknown'}</div>
+                        <span class="badge badge-${m.is_active ? 'success' : 'warning'}">${m.is_active ? 'Активен' : 'Не активен'}</span>
+                    </div>
+                    <div class="calendar-icon">👨‍🎨</div>
+                    <div class="calendar-info">
+                        <div class="calendar-info-item"><span class="text-secondary">Специализация:</span><span>${m.specialization || ''}</span></div>
+                        <div class="calendar-info-item"><span class="text-secondary">ID календаря:</span><span>${cid || '-'}</span></div>
+                    </div>
+                    <button class="btn btn-outline btn-block mt-md" onclick="viewCalendar('master-${m.id}')">📖 Открыть календарь</button>
+                </div>`;
+            }).join('\n');
+        }catch(e){ console.warn('Failed to load masters', e); }
+    }
+
+    document.addEventListener('DOMContentLoaded', () => {
+        // Delay to show loading state
+        setTimeout(() => {
+            loadCalendarIframe('main');
+            loadMasterCards();
+        }, 500);
+    });
+</script>
+{% endblock %}

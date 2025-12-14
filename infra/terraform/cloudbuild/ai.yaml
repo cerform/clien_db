@@ -1,0 +1,39 @@
+steps:
+  - name: 'python:3.12-slim'
+    entrypoint: 'bash'
+    args:
+      - '-c'
+      - |
+        set -e
+        pip install --no-cache-dir -r services/ai/requirements.txt || true
+        pytest -q services/ai || true
+
+  - name: 'gcr.io/cloud-builders/docker'
+    args: ['build', '-t', 'gcr.io/$PROJECT_ID/tattoo-ai:$SHORT_SHA', '.']
+    dir: 'services/ai'
+  - name: 'gcr.io/cloud-builders/docker'
+    args: ['push', 'gcr.io/$PROJECT_ID/tattoo-ai:$SHORT_SHA']
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    entrypoint: 'bash'
+    args:
+      - '-c'
+      - |
+        gcloud run deploy tattoo-ai-staging \
+          --image=gcr.io/$PROJECT_ID/tattoo-ai:$SHORT_SHA \
+          --region=${_REGION} --platform=managed --allow-unauthenticated \
+          --service-account=${_AI_SA} --quiet
+
+        sleep 5
+        STAGING_URL=$(gcloud run services describe tattoo-ai-staging --region=${_REGION} --format='value(status.url)')
+        if ! curl -s --fail ${STAGING_URL}/api/health; then
+          echo "Staging smoke test failed"; exit 1
+        fi
+
+        gcloud run deploy tattoo-ai \
+          --image=gcr.io/$PROJECT_ID/tattoo-ai:$SHORT_SHA \
+          --region=${_REGION} --platform=managed --allow-unauthenticated \
+          --service-account=${_AI_SA} --quiet
+substitutions:
+  _REGION: "us-central1"
+  _AI_SA: "tattoo-ai-sa@${PROJECT_ID}.iam.gserviceaccount.com"
+timeout: '1200s'

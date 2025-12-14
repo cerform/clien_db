@@ -1,0 +1,293 @@
+#!/bin/bash
+set -e
+
+echo "========================================"
+echo "   INTERACTIVE CLOUD RUN DEPLOYMENT"
+echo "========================================"
+echo ""
+
+# Colors
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+NC='\033[0m' # No Color
+
+# Project settings
+PROJECT_ID="tattoo-480007"
+REGION="europe-west1"
+SERVICE_NAME="tattoo-bot"
+IMAGE="gcr.io/${PROJECT_ID}/${SERVICE_NAME}:latest"
+
+echo -e "${GREEN}Project ID:${NC} $PROJECT_ID"
+echo -e "${GREEN}Region:${NC} $REGION"
+echo -e "${GREEN}Service:${NC} $SERVICE_NAME"
+echo ""
+
+# Check if image exists
+echo -e "${YELLOW}[1/6]${NC} Checking if Docker image exists..."
+if gcloud container images describe $IMAGE --quiet 2>/dev/null; then
+    echo -e "${GREEN}✓${NC} Image found: $IMAGE"
+else
+    echo -e "${RED}✗${NC} Image not found. Building..."
+    docker build -t $IMAGE .
+    docker push $IMAGE
+fi
+echo ""
+
+# Collect secrets
+echo -e "${YELLOW}[2/6]${NC} Please provide the following secrets:"
+echo ""
+
+read -p "Telegram Bot Token (from @BotFather): " BOT_TOKEN
+while [ -z "$BOT_TOKEN" ]; do
+    echo -e "${RED}Bot token cannot be empty!${NC}"
+    read -p "Telegram Bot Token: " BOT_TOKEN
+done
+
+read -p "OpenAI API Key: " OPENAI_API_KEY
+while [ -z "$OPENAI_API_KEY" ]; do
+    echo -e "${RED}OpenAI API key cannot be empty!${NC}"
+    read -p "OpenAI API Key: " OPENAI_API_KEY
+done
+
+read -p "Google Spreadsheet ID: " SPREADSHEET_ID
+while [ -z "$SPREADSHEET_ID" ]; do
+    echo -e "${RED}Spreadsheet ID cannot be empty!${NC}"
+    read -p "Google Spreadsheet ID: " SPREADSHEET_ID
+done
+
+read -p "Webhook Secret (random string, press Enter to generate): " WEBHOOK_SECRET
+if [ -z "$WEBHOOK_SECRET" ]; then
+    WEBHOOK_SECRET=$(openssl rand -hex 32)
+    echo -e "${GREEN}Generated webhook secret:${NC} $WEBHOOK_SECRET"
+fi
+
+read -p "Admin Telegram IDs (comma-separated): " ADMIN_IDS
+if [ -z "$ADMIN_IDS" ]; then
+    ADMIN_IDS="123456789"
+    echo -e "${YELLOW}Using default admin ID: $ADMIN_IDS${NC}"
+fi
+
+# Sanity check: ensure we don't accidentally keep real secrets in example file
+echo ""
+echo -e "${YELLOW}[SANITY]${NC} Checking that '.env.deploy.example' does not contain live secrets..."
+contains_secret() {
+    local file=$1
+    # heuristics: OpenAI key (starts with sk-) or Telegram token pattern
+    if grep -E "sk-[A-Za-z0-9_-]{10,}" -q "$file" 2>/dev/null || grep -E "[0-9]{8,}:[A-Za-z0-9_-]{20,}" -q "$file" 2>/dev/null; then
+        return 0
+    fi
+    return 1
+}
+
+if [ -f .env.deploy.example ]; then
+    if contains_secret .env.deploy.example; then
+        echo -e "${RED}Warning:${NC} '.env.deploy.example' appears to contain real secrets."
+        read -p "Sanitize '.env.deploy.example' (replace values with placeholders)? (y/N): " -n 1 -r
+        echo
+        if [[ $REPLY =~ ^[Yy]$ ]]; then
+            if [ -x ./scripts/sanitize_env_example.sh ]; then
+                ./scripts/sanitize_env_example.sh
+            else
+                ./scripts/sanitize_env_example.sh || true
+            fi
+            echo -e "${GREEN}Sanitized '.env.deploy.example'. Please review and commit the sanitized file.${NC}"
+        else
+            echo -e "${RED}Aborting to avoid writing secrets into example file. Please manually sanitize '.env.deploy.example' and re-run.${NC}"
+            exit 1
+        fi
+    fi
+fi
+
+echo ""
+echo -e "${YELLOW}[3/6]${NC} Creating/updating secrets in Secret Manager..."
+
+# Function to create or update secret
+create_or_update_secret() {
+    local secret_name=$1
+    local secret_value=$2
+
+    echo -n "  - $secret_name... "
+
+    # Check if secret exists
+    if gcloud secrets describe $secret_name --project=$PROJECT_ID &>/dev/null; then
+        # Update existing secret
+        echo -n "$secret_value" | gcloud secrets versions add $secret_name \
+            --project=$PROJECT_ID \
+            --data-file=- &>/dev/null
+        echo -e "${GREEN}updated${NC}"
+    else
+        # Create new secret
+        echo -n "$secret_value" | gcloud secrets create $secret_name \
+            --project=$PROJECT_ID \
+            --replication-policy="automatic" \
+            --data-file=- &>/dev/null
+        echo -e "${GREEN}created${NC}"
+    fi
+}
+
+create_or_update_secret "TELEGRAM_BOT_TOKEN" "$BOT_TOKEN"
+create_or_update_secret "OPENAI_API_KEY" "$OPENAI_API_KEY"
+create_or_update_secret "SPREADSHEET_ID" "$SPREADSHEET_ID"
+create_or_update_secret "WEBHOOK_SECRET" "$WEBHOOK_SECRET"
+create_or_update_secret "ADMIN_USER_IDS" "$ADMIN_IDS"
+
+# Persist values to .env.deploy, but ensure the file is not tracked by git
+ENV_FILE=".env.deploy"
+echo "Persisting deployment variables to ${ENV_FILE}";
+if git ls-files --error-unmatch ${ENV_FILE} >/dev/null 2>&1; then
+    echo -e "${RED}Error:${NC} ${ENV_FILE} is tracked in git. Remove it from the index (git rm --cached ${ENV_FILE}) before continuing to avoid committing secrets.";
+    exit 1
+fi
+cat > ${ENV_FILE} <<EOF
+# deployment env generated by deploy_interactive.sh
+BOT_TOKEN=${BOT_TOKEN}
+OPENAI_API_KEY=${OPENAI_API_KEY}
+SPREADSHEET_ID=${SPREADSHEET_ID}
+WEBHOOK_SECRET=${WEBHOOK_SECRET}
+ADMIN_USER_IDS=${ADMIN_IDS}
+PROJECT_ID=${PROJECT_ID}
+REGION=${REGION}
+SERVICE_NAME=${SERVICE_NAME}
+EOF
+echo -e "${GREEN}Saved deployment env to ${ENV_FILE}${NC}"
+
+echo ""
+echo -e "${YELLOW}[4/6]${NC} Granting Secret Manager access to Cloud Run service account..."
+PROJECT_NUMBER=$(gcloud projects describe $PROJECT_ID --format="value(projectNumber)")
+SERVICE_ACCOUNT="${PROJECT_NUMBER}-compute@developer.gserviceaccount.com"
+
+for secret in TELEGRAM_BOT_TOKEN OPENAI_API_KEY SPREADSHEET_ID WEBHOOK_SECRET ADMIN_USER_IDS; do
+    gcloud secrets add-iam-policy-binding $secret \
+        --project=$PROJECT_ID \
+        --member="serviceAccount:$SERVICE_ACCOUNT" \
+        --role="roles/secretmanager.secretAccessor" \
+        --quiet &>/dev/null
+done
+echo -e "${GREEN}✓${NC} Permissions granted"
+
+read -p "Do you want this script to create Cloud SQL (Postgres) instance and do the full infrastructure deploy (Cloud Run + Cloud SQL)? (y/n): " -n 1 -r
+echo
+if [[ $REPLY =~ ^[Yy]$ ]]; then
+    # Ensure deploy script exists
+    if [ -f ./deploy_cloudrun_postgres.sh ]; then
+        chmod +x ./deploy_cloudrun_postgres.sh
+        echo -e "${YELLOW}Calling deploy_cloudrun_postgres.sh to provision Cloud SQL & deploy Cloud Run...${NC}"
+        ./deploy_cloudrun_postgres.sh
+        echo -e "${GREEN}Cloud Run + Cloud SQL deployment finished.${NC}"
+    else
+        echo -e "${RED}deploy_cloudrun_postgres.sh not found. Skipping full infra deployment.${NC}"
+    fi
+else
+    echo -e "${YELLOW}Skipping full infra deploy. Proceeding with Cloud Run deploy only.${NC}"
+fi
+
+# Ask to create per-role DB users (inka roles)
+read -p "Create DB roles for INKA (inka_booking_agent, calendar_sync)? (y/n): " -n 1 -r
+echo
+if [[ $REPLY =~ ^[Yy]$ ]]; then
+    # Determine cloud sql instance and DB details; ask if unknown
+    if [ -z "$CLOUDSQL_INSTANCE" ]; then
+        read -p "Cloud SQL instance name (default: tattoo-db): " CLOUDSQL_INSTANCE
+        CLOUDSQL_INSTANCE=${CLOUDSQL_INSTANCE:-tattoo-db}
+    fi
+    if [ -z "$DB_NAME" ]; then
+        read -p "DB name (default: tattoo_salon): " DB_NAME
+        DB_NAME=${DB_NAME:-tattoo_salon}
+    fi
+    if [ -z "$DB_USER" ]; then
+        DB_USER=${DB_USER:-tattoo_user}
+    fi
+    # Ask for passwords
+    read -s -p "Password for inka_booking_agent: " BOOKING_PWD
+    echo
+    read -s -p "Password for calendar_sync: " CAL_SYNC_PWD
+    echo
+    # Create or update users
+    echo "Creating/updating Cloud SQL users..."
+    gcloud sql users create inka_booking_agent --instance=${CLOUDSQL_INSTANCE} --password=${BOOKING_PWD} --project=${PROJECT_ID} || true
+    gcloud sql users create calendar_sync --instance=${CLOUDSQL_INSTANCE} --password=${CAL_SYNC_PWD} --project=${PROJECT_ID} || true
+    # Get the Cloud SQL connection name
+    CLOUDSQL_CONNECTION_NAME=$(gcloud sql instances describe ${CLOUDSQL_INSTANCE} --format='value(connectionName)' --project=${PROJECT_ID})
+    # Build role specific DATABASE_URLs
+    DATABASE_URL_INKA_BOOKING_AGENT="postgresql+psycopg2://inka_booking_agent:${BOOKING_PWD}@/${DB_NAME}?host=/cloudsql/${CLOUDSQL_CONNECTION_NAME}"
+    DATABASE_URL_CALENDAR_SYNC="postgresql+psycopg2://calendar_sync:${CAL_SYNC_PWD}@/${DB_NAME}?host=/cloudsql/${CLOUDSQL_CONNECTION_NAME}"
+    # Create or update the secrets
+    create_or_update_secret "DATABASE_URL_INKA_BOOKING_AGENT" "$DATABASE_URL_INKA_BOOKING_AGENT"
+    create_or_update_secret "DATABASE_URL_CALENDAR_SYNC" "$DATABASE_URL_CALENDAR_SYNC"
+    # Grant secret access to service account
+    gcloud secrets add-iam-policy-binding DATABASE_URL_INKA_BOOKING_AGENT --project=$PROJECT_ID --member="serviceAccount:$SERVICE_ACCOUNT" --role="roles/secretmanager.secretAccessor" --quiet || true
+    gcloud secrets add-iam-policy-binding DATABASE_URL_CALENDAR_SYNC --project=$PROJECT_ID --member="serviceAccount:$SERVICE_ACCOUNT" --role="roles/secretmanager.secretAccessor" --quiet || true
+    echo -e "${GREEN}Per-role DB users and secrets created${NC}"
+
+    # Optional: apply DB-level grants for role accounts (requires postgres admin access)
+    read -p "Apply DB grants for role accounts (grant schema/table privileges) now? (y/N): " -n 1 -r
+    echo
+    if [[ $REPLY =~ ^[Yy]$ ]]; then
+        echo "Applying DB grants for inka_booking_agent and calendar_sync..."
+        SQL_CMD="GRANT CONNECT ON DATABASE ${DB_NAME} TO inka_booking_agent; \nGRANT USAGE ON SCHEMA public TO inka_booking_agent; \nGRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO inka_booking_agent; \nALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO inka_booking_agent; \nGRANT CONNECT ON DATABASE ${DB_NAME} TO calendar_sync; \nGRANT USAGE ON SCHEMA public TO calendar_sync; \nGRANT SELECT ON ALL TABLES IN SCHEMA public TO calendar_sync; \nALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT SELECT ON TABLES TO calendar_sync;"
+        if gcloud sql connect ${CLOUDSQL_INSTANCE} --project=${PROJECT_ID} --user=postgres --quiet --command "${SQL_CMD}"; then
+            echo -e "${GREEN}DB grants applied successfully.${NC}"
+        else
+            echo -e "${YELLOW}Could not apply DB grants automatically. You may need to run the following commands manually via 'gcloud sql connect ${CLOUDSQL_INSTANCE} --user=postgres --project=${PROJECT_ID}':${NC}"
+            echo "--- BEGIN SQL ---"
+            echo -e "GRANT CONNECT ON DATABASE ${DB_NAME} TO inka_booking_agent;"
+            echo -e "GRANT USAGE ON SCHEMA public TO inka_booking_agent;"
+            echo -e "GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO inka_booking_agent;"
+            echo -e "ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO inka_booking_agent;"
+            echo -e "GRANT CONNECT ON DATABASE ${DB_NAME} TO calendar_sync;"
+            echo -e "GRANT USAGE ON SCHEMA public TO calendar_sync;"
+            echo -e "GRANT SELECT ON ALL TABLES IN SCHEMA public TO calendar_sync;"
+            echo -e "ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT SELECT ON TABLES TO calendar_sync;"
+            echo "--- END SQL ---"
+        fi
+    fi
+fi
+
+echo ""
+echo -e "${YELLOW}[5/6]${NC} Deploying to Cloud Run..."
+echo ""
+
+gcloud run deploy $SERVICE_NAME \
+    --image=$IMAGE \
+    --region=$REGION \
+    --platform=managed \
+    --allow-unauthenticated \
+    --memory=1Gi \
+    --cpu=1 \
+    --min-instances=0 \
+    --max-instances=10 \
+    --timeout=300 \
+    --set-secrets="BOT_TOKEN=TELEGRAM_BOT_TOKEN:latest,TELEGRAM_BOT_TOKEN=TELEGRAM_BOT_TOKEN:latest,OPENAI_API_KEY=OPENAI_API_KEY:latest,SPREADSHEET_ID=SPREADSHEET_ID:latest,WEBHOOK_SECRET=WEBHOOK_SECRET:latest,ADMIN_USER_IDS=ADMIN_USER_IDS:latest" \
+    --set-env-vars="CLOUD_RUN_ENV=true" \
+    --quiet
+
+echo ""
+echo -e "${YELLOW}[6/6]${NC} Getting service URL..."
+SERVICE_URL=$(gcloud run services describe $SERVICE_NAME --region=$REGION --format="value(status.url)")
+
+echo ""
+echo "========================================"
+echo -e "${GREEN}    DEPLOYMENT SUCCESSFUL! 🎉${NC}"
+echo "========================================"
+echo ""
+echo -e "${GREEN}Service URL:${NC} $SERVICE_URL"
+echo -e "${GREEN}Health Check:${NC} $SERVICE_URL/api/health"
+echo -e "${GREEN}Admin Panel:${NC} $SERVICE_URL/"
+echo -e "${GREEN}Webhook URL:${NC} $SERVICE_URL/telegram/webhook"
+echo ""
+
+# Update SERVICE_URL env var
+echo -e "${YELLOW}Updating SERVICE_URL environment variable...${NC}"
+gcloud run services update $SERVICE_NAME \
+    --region=$REGION \
+    --update-env-vars="SERVICE_URL=$SERVICE_URL" \
+    --quiet
+
+echo ""
+echo -e "${YELLOW}Next steps:${NC}"
+echo "1. Test health endpoint: curl $SERVICE_URL/api/health"
+echo "2. Webhook will be automatically set up on first request"
+echo "3. Send a message to your Telegram bot to test"
+echo ""
+echo -e "${GREEN}Done!${NC}"

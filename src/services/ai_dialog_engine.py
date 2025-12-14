@@ -7,13 +7,19 @@ AI Dialog Engine - Полноценный диалоговый движок на
 import logging
 import json
 from typing import Dict, List, Optional, Any
-from datetime import datetime, timedelta
+from datetime import datetime
 from enum import Enum
 
-try:
-    from openai import OpenAI
-except ImportError:
-    OpenAI = None
+from src.services.openai_service import OpenAIService
+from src.ai.advanced_inka import get_advanced_inka
+from src.ai.inka_learning import get_inka_learning
+from src.services.service_factory import (
+    get_admin_service,
+    get_booking_service,
+    get_client_service,
+    get_master_service,
+    get_calendar_service
+)
 
 logger = logging.getLogger(__name__)
 
@@ -63,46 +69,23 @@ class AIDialogEngine:
             default_language: Язык по умолчанию (ru, en, he)
         """
         self.api_enabled = False
-        self.client = None
+        self.openai_service: Optional[OpenAIService] = None
         
         # Определяем провайдера по ключу
         is_groq = api_key and api_key.startswith("gsk_")
         self.provider = "Groq" if is_groq else "OpenAI"
-        
-        # Пробуем инициализировать AI клиент (OpenAI или Groq)
-        if api_key and api_key != "YOUR_OPENAI_API_KEY" and OpenAI:
-            try:
-                import httpx
-                import ssl
-                
-                # Create custom HTTP client with SSL disabled
-                http_client = httpx.Client(
-                    verify=False,  # Disable SSL verification
-                    timeout=30.0
-                )
-                
-                client_kwargs = {
-                    "api_key": api_key,
-                    "http_client": http_client,
-                    "timeout": 30.0,
-                    "max_retries": 2
-                }
-                
-                # Groq использует OpenAI-совместимый API
-                if is_groq:
-                    client_kwargs["base_url"] = "https://api.groq.com/openai/v1"
-                    self.model = "llama-3.3-70b-versatile"  # Быстрая модель Groq
-                else:
-                    self.model = "gpt-4o-mini"  # Быстрая и экономичная модель OpenAI
-                
-                self.client = OpenAI(**client_kwargs)
-                self.api_enabled = True
-                logger.info(f"✅ {self.provider} API enabled (model: {self.model})")
-            except Exception as e:
-                logger.warning(f"⚠️ {self.provider} API disabled: {e}")
-                self.client = None
-                self.api_enabled = False
-                self.model = "gpt-4o-mini"
+
+        # Initialize OpenAIService
+        try:
+            self.openai_service = OpenAIService(api_key=api_key, model=None)
+            self.api_enabled = bool(self.openai_service and self.openai_service.api_enabled)
+            if self.openai_service and getattr(self.openai_service, 'model', None):
+                self.model = self.openai_service.model
+        except Exception as e:
+            logger.warning(f"⚠️ Failed to init OpenAIService: {e}")
+            self.openai_service = None
+            self.api_enabled = False
+            self.model = "gpt-4o-mini"
         else:
             logger.info("ℹ️ Running in fallback mode (no AI API)")
             self.model = "gpt-4o-mini"
@@ -113,6 +96,23 @@ class AIDialogEngine:
         
         # Максимальная длина истории
         self.max_history_length = 20
+        # Advanced INKA config (function definitions mapping)
+        try:
+            admin_services = {
+                "admin_service": get_admin_service(),
+                "booking_service": get_booking_service(),
+                "clients_service": get_client_service(),
+                "masters_service": get_master_service(),
+                "calendar_service": get_calendar_service(),
+            }
+            self.advanced_inka = get_advanced_inka(admin_services=admin_services)
+        except Exception:
+            self.advanced_inka = get_advanced_inka({})
+        # Load INKA learning system for context injection (optional)
+        try:
+            self.inka_learning = get_inka_learning()
+        except Exception:
+            self.inka_learning = None
         
     def _get_system_prompt(self, user_role: UserRole, user_info: Dict) -> str:
         """
@@ -135,7 +135,7 @@ class AIDialogEngine:
 - Можешь выполнять административные функции"""
 
         if user_role == UserRole.CLIENT:
-            return f"""{base_personality}
+            prompt = f"""{base_personality}
 
 КАК КЛИЕНТСКИЙ АССИСТЕНТ ты можешь:
 
@@ -165,7 +165,7 @@ class AIDialogEngine:
 Предпочитаемый язык: {user_info.get('language', 'ru')}"""
 
         elif user_role == UserRole.ADMIN:
-            return f"""{base_personality}
+            prompt = f"""{base_personality}
 
 КАК АДМИНИСТРАТИВНЫЙ АССИСТЕНТ ты можешь:
 
@@ -192,7 +192,7 @@ class AIDialogEngine:
 Администратор: {user_info.get('name', 'Admin')}"""
 
         elif user_role == UserRole.MASTER:
-            return f"""{base_personality}
+            prompt = f"""{base_personality}
 
 КАК АССИСТЕНТ МАСТЕРА ты можешь:
 
@@ -213,7 +213,15 @@ class AIDialogEngine:
 
 Мастер: {user_info.get('name', 'Master')}"""
 
-        return base_personality
+        # Append learning context if present
+        try:
+            if getattr(self, 'inka_learning', None):
+                learning_ctx = self.inka_learning.build_prompt_context()
+                prompt = prompt + "\n\n" + learning_ctx
+        except Exception:
+            pass
+
+        return prompt
 
     def _build_function_definitions(self, user_role: UserRole) -> List[Dict]:
         """
@@ -456,7 +464,15 @@ class AIDialogEngine:
                     }
                 }
             ])
-        
+        # Merge in AdvancedINKA tools to be compatible with remote branch tool names
+        try:
+            if hasattr(self, 'advanced_inka') and self.advanced_inka:
+                tools = self.advanced_inka.create_tools_config(is_admin=(user_role == UserRole.ADMIN))
+                for t in tools:
+                    # Each tool is already a dict of type/function
+                    functions.append(t['function'] if t.get('type') == 'function' and t.get('function') else t)
+        except Exception as e:
+            logger.debug(f"Failed to add advanced INKA tools: {e}")
         return functions
 
     async def process_message(
@@ -515,6 +531,14 @@ class AIDialogEngine:
             if context:
                 context_str = f"\n\nТЕКУЩИЙ КОНТЕКСТ:\n{json.dumps(context, ensure_ascii=False, indent=2)}"
                 system_prompt += context_str
+
+            # Append INKA learning prompt context (admin-approved rules)
+            try:
+                if getattr(self, 'inka_learning', None):
+                    learning_ctx = self.inka_learning.build_prompt_context()
+                    system_prompt += f"\n\n{learning_ctx}"
+            except Exception:
+                pass
             
             # Получаем определения функций
             functions = self._build_function_definitions(user_role)
@@ -524,7 +548,7 @@ class AIDialogEngine:
             logger.info(f"🌐 Detected language: {detected_language}")
             
             # Проверяем, доступен ли AI API
-            if not self.api_enabled or not self.client:
+            if not self.api_enabled or not self.openai_service:
                 logger.warning("⚠️ AI API not enabled, using fallback")
                 # Fallback: используем rule-based ответы
                 return self._fallback_response(message, user_role, detected_language)
@@ -540,13 +564,13 @@ class AIDialogEngine:
             logger.info(f"   Functions count: {len(functions)}")
             
             try:
-                response = self.client.chat.completions.create(
-                    model=self.model,
+                response = self.openai_service.chat_completion(
                     messages=messages,
                     functions=functions,
                     function_call="auto",
                     temperature=0.7,
-                    max_tokens=1000
+                    max_tokens=1000,
+                    model=self.model
                 )
                 logger.info(f"✅ {self.provider} API responded successfully")
             except Exception as api_error:
@@ -689,7 +713,7 @@ class AIDialogEngine:
             'ru': {
                 'greeting': 'Здравствуйте! 👋\n\nЯ помогу вам записаться на сеанс татуировки.\n\nРасскажите:\n• Какую татуировку хотите сделать?\n• Желаемое место на теле\n• Примерный размер\n\nПосле этого предложу доступное время! 📅',
                 'booking': 'Отлично! 🎨\n\nДля записи мне нужно:\n1️⃣ Описание татуировки\n2️⃣ Место на теле\n3️⃣ Размер (см)\n4️⃣ Желаемая дата\n\nНапишите эту информацию, и я покажу свободные слоты!',
-                'price': '💰 **Цены на татуировки:**\n\n• Маленькая (до 5см) - от $50\n• Средняя (5-10см) - от $100\n• Большая (10-20см) - от $200\n• Рукав/спина - от $500\n\nТочная цена зависит от сложности!\n\nХотите записаться? Опишите что хотите сделать 🎨',
+                'price': '💰 **Цены на татуировки (в ₪):**\n\n• Маленькая (до ~5см) — 300–600 ₪\n• Средняя (~5–12см) — 600–1,500 ₪\n• Крупный проект (рукав/спина/бедро) — 1,500–5,000+ ₪\n• Почасовая работа (в зависимости от стиля) — 400–1,200 ₪/час\n• Fine-line (small) — от 600 ₪\n\nТочная цена зависит от эскиза и сложности!\n\nХотите записаться? Опишите, что хотите сделать 🎨',
                 'portfolio': '🎨 **Посмотреть работы:**\n\n📸 Instagram: [ваш_аккаунт]\n🌐 Сайт: [ваш_сайт]\n\nТам вы найдёте примеры работ в разных стилях!\n\nЕсли понравилось - пишите, запишу на сеанс! ✨',
                 'care': '💡 **Уход за татуировкой:**\n\n1. Первые 2-3 часа - не снимать плёнку\n2. Промывать тёплой водой с мылом 2-3 раза в день\n3. Наносить заживляющую мазь (Bepanthen/Panthenol)\n4. Не чесать, не сдирать корочки!\n5. Избегать солнца 2-3 недели\n\nПодробные инструкции дам после сеанса! 📋',
                 'default': 'Спасибо за сообщение!\n\nЧтобы записаться на сеанс татуировки, расскажите:\n• Что хотите сделать\n• Где (место на теле)\n• Размер\n• Когда хотите прийти\n\nОтвечу в ближайшее время! ⏰'
@@ -697,7 +721,7 @@ class AIDialogEngine:
             'en': {
                 'greeting': 'Hello! 👋\n\nI will help you book a tattoo session.\n\nPlease tell me:\n• What tattoo do you want?\n• Desired body placement\n• Approximate size\n\nThen I\'ll suggest available times! 📅',
                 'booking': 'Great! 🎨\n\nFor booking I need:\n1️⃣ Tattoo description\n2️⃣ Body placement\n3️⃣ Size (cm)\n4️⃣ Preferred date\n\nWrite this info and I\'ll show available slots!',
-                'price': '💰 **Tattoo Pricing:**\n\n• Small (up to 5cm) - from $50\n• Medium (5-10cm) - from $100\n• Large (10-20cm) - from $200\n• Sleeve/back - from $500\n\nFinal price depends on complexity!\n\nWant to book? Describe what you want 🎨',
+                'price': '💰 **Tattoo Pricing (₪):**\n\n• Small (up to ~5cm) — 300–600 ₪\n• Medium (~5–12cm) — 600–1,500 ₪\n• Large project (sleeve/back/hip) — 1,500–5,000+ ₪\n• Hourly work (depends on style) — 400–1,200 ₪/hr\n• Fine-line (small) — from 600 ₪\n\nFinal price depends on the sketch and complexity!\n\nWant to book? Describe what you want 🎨',
                 'portfolio': '🎨 **View our works:**\n\n📸 Instagram: [your_account]\n🌐 Website: [your_site]\n\nCheck out examples in different styles!\n\nLike what you see? Message me to book! ✨',
                 'care': '💡 **Tattoo Aftercare:**\n\n1. First 2-3 hours - keep the film on\n2. Wash with warm water & soap 2-3 times daily\n3. Apply healing ointment (Bepanthen/Panthenol)\n4. Don\'t scratch or pick scabs!\n5. Avoid sun for 2-3 weeks\n\nDetailed instructions after session! 📋',
                 'default': 'Thanks for your message!\n\nTo book a tattoo session, tell me:\n• What you want\n• Where (body placement)\n• Size\n• When you want to come\n\nI\'ll reply soon! ⏰'
@@ -835,12 +859,11 @@ class AIDialogEngine:
 - Что хочет клиент
 - Какие действия были выполнены
 - Что нужно сделать дальше"""
-            
-            response = self.client.chat.completions.create(
-                model=self.model,
+            response = self.openai_service.chat_completion(
                 messages=messages + [{"role": "user", "content": summary_prompt}],
                 temperature=0.5,
-                max_tokens=200
+                max_tokens=200,
+                model=self.model
             )
             
             return response.choices[0].message.content

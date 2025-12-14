@@ -1,0 +1,187 @@
+from fastapi import APIRouter, Request, HTTPException
+from fastapi.responses import JSONResponse, HTMLResponse
+from starlette.templating import Jinja2Templates
+import uuid
+import threading
+import subprocess
+import tempfile
+import os
+from src.services.admin_manager import is_admin as is_admin_service
+
+LOCKFILE = os.path.join(os.getcwd(), ".installer_complete")
+import time
+import logging
+
+router = APIRouter(prefix="/installer", tags=["installer"])
+templates = Jinja2Templates(directory=os.path.join(os.path.dirname(__file__), "templates"))
+
+logger = logging.getLogger("web.installer")
+
+# Simple in-memory job store. For production use a persistent store.
+_JOBS = {}
+
+
+def _run_install_subprocess(job_id: str, args: dict):
+    job = _JOBS[job_id]
+    logfile = job["logfile"]
+    cmd = [
+        os.environ.get("PYTHON_EXECUTABLE", "python"),
+        os.path.join(os.getcwd(), "tools", "install_and_deploy.py"),
+        "--project",
+        args.get("project", ""),
+        "--region",
+        args.get("region", "europe-west1"),
+        "--service",
+        args.get("service", "inka-bot"),
+        "--telegram-token",
+        args.get("telegram_token", ""),
+    ]
+    if args.get("set_webhook"):
+        cmd.append("--set-webhook")
+    if args.get("dry_run"):
+        cmd.append("--dry-run")
+
+    job["status"] = "running"
+    job["started_at"] = time.time()
+    logger.info("Starting install job %s: %s", job_id, " ".join(cmd))
+    try:
+        with open(logfile, "ab") as lf:
+            process = subprocess.Popen(cmd, stdout=lf, stderr=lf)
+            ret = process.wait()
+        job["exit_code"] = ret
+        job["status"] = "succeeded" if ret == 0 else "failed"
+        # If succeeded, try to find the deployed URL in the logs and create a lockfile
+        if ret == 0:
+            try:
+                with open(logfile, "r", encoding="utf-8", errors="ignore") as rlf:
+                    txt = rlf.read()
+                # look for the line printed by tools/install_and_deploy.py
+                marker = "✅ Deploy completed. Visit "
+                idx = txt.find(marker)
+                if idx != -1:
+                    rest = txt[idx + len(marker):]
+                    url = rest.split()[0]
+                    job["result_url"] = url
+                # create lockfile
+                with open(LOCKFILE, "w") as lf2:
+                    lf2.write(f"installed_at={time.time()}\n")
+                    if job.get("result_url"):
+                        lf2.write(f"url={job.get('result_url')}\n")
+            except Exception:
+                logger.exception("failed to parse logs or write lockfile")
+    except Exception as e:
+        logger.exception("Installer job failed: %s", e)
+        job["status"] = "failed"
+        with open(logfile, "ab") as lf:
+            lf.write((f"\nException: {e}\n").encode())
+    finally:
+        job["ended_at"] = time.time()
+
+
+def _is_installer_allowed(request: Request) -> bool:
+    """Determine whether installer actions are allowed.
+
+    Installer is allowed when:
+    - lockfile does not exist, OR
+    - an admin is performing the action, OR
+    - we're running inside a test session (pytest) to make unit tests deterministic.
+    """
+    if not os.path.exists(LOCKFILE):
+        return True
+    if getattr(request.state, "admin_id", None) and is_admin_service(request.state.admin_id):
+        return True
+    # Do not automatically bypass lockfile for tests here; tests should manage lockfile
+    return False
+
+
+@router.get("/", response_class=HTMLResponse)
+async def installer_index(request: Request):
+    # Render minimal installer UI
+    templates_env = Jinja2Templates(directory=os.path.join(os.path.dirname(__file__), "templates"))
+    # determine if installer is allowed
+    allowed = _is_installer_allowed(request)
+    return templates_env.TemplateResponse(request, "installer/index.html", {"request": request, "allowed": allowed})
+
+
+@router.get("/allowed")
+async def installer_allowed(request: Request):
+    allowed = _is_installer_allowed(request)
+    return JSONResponse({"allowed": bool(allowed)})
+
+
+@router.post("/unlock")
+async def installer_unlock(request: Request):
+    # Admin-only: remove the lockfile if present
+    claimed = getattr(request.state, "admin_id", None)
+    if not claimed or not is_admin_service(claimed):
+        raise HTTPException(status_code=403, detail="Forbidden: admin only")
+    if os.path.exists(LOCKFILE):
+        try:
+            os.unlink(LOCKFILE)
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=str(e))
+    return JSONResponse({"ok": True})
+
+
+@router.post("/start")
+async def installer_start(request: Request, payload: dict):
+    # permission guard
+    allowed = _is_installer_allowed(request)
+    if not allowed:
+        raise HTTPException(status_code=403, detail="Installer is locked after initial setup")
+    # payload should include keys: project, region, service, telegram_token, set_webhook
+    job_id = str(uuid.uuid4())
+    fd, logfile = tempfile.mkstemp(prefix=f"installer_{job_id}_", suffix=".log")
+    os.close(fd)
+    _JOBS[job_id] = {
+        "id": job_id,
+        "status": "queued",
+        "logfile": logfile,
+        "created_at": time.time(),
+    }
+
+    # Start background thread to run the installer subprocess
+    t = threading.Thread(target=_run_install_subprocess, args=(job_id, payload), daemon=True)
+    _JOBS[job_id]["thread"] = t
+    t.start()
+    return JSONResponse({"job_id": job_id})
+
+
+@router.get("/status/{job_id}")
+async def installer_status(job_id: str):
+    job = _JOBS.get(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+    return JSONResponse({
+        "job_id": job_id,
+        "status": job.get("status"),
+        "created_at": job.get("created_at"),
+        "started_at": job.get("started_at"),
+        "ended_at": job.get("ended_at"),
+        "exit_code": job.get("exit_code"),
+        "result_url": job.get("result_url"),
+    })
+
+
+@router.get("/logs/{job_id}")
+async def installer_logs(job_id: str, offset: int = 0):
+    job = _JOBS.get(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+    logfile = job.get("logfile")
+    if not logfile or not os.path.exists(logfile):
+        return JSONResponse({"logs": ""})
+    with open(logfile, "rb") as lf:
+        lf.seek(offset)
+        data = lf.read()
+    return JSONResponse({"logs": data.decode(errors="replace"), "offset": offset + len(data)})
+
+
+@router.get("/complete", response_class=HTMLResponse)
+async def installer_complete(request: Request):
+    return templates.TemplateResponse(request, "installer/complete.html", {"request": request})
+
+
+# Expose name expected by src.web.app
+installer_router = router
+# Ensure `installer_router` exposes the real router instance used by the app

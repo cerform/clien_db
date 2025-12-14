@@ -20,12 +20,12 @@ from typing import Dict, List, Optional
 from datetime import datetime
 from enum import Enum
 
-try:
-    from openai import OpenAI
-except ImportError:
-    OpenAI = None
+from src.services.openai_service import OpenAIService
+from src.services.inka_schema import validate_contract, ContractValidationError, load_contract_from_text
+from src.services.telemetry import incr
 
 from src.services.inka_booking_engine import INKABookingEngine, BookingEngineStage
+import hashlib
 
 logger = logging.getLogger(__name__)
 
@@ -315,18 +315,40 @@ class INKAConsultant:
     - Guides to booking when ready
     """
 
-    def __init__(self, api_key: Optional[str] = None):
+    def __init__(self, api_key: Optional[str] = None, openai_service: Optional[OpenAIService] = None):
         """Initialize consultant with optional OpenAI integration"""
         self.api_key = api_key
-        self.client = OpenAI(api_key=api_key) if api_key and OpenAI else None
+        self.openai_service = openai_service
+        # If no service provided and key is present, create it
+        if not self.openai_service and api_key:
+            try:
+                self.openai_service = OpenAIService(api_key=api_key)
+            except Exception:
+                self.openai_service = None
+        # Default model
         self.model = "gpt-3.5-turbo"
+        # Enable LLM only if explicitly allowed in env (default True)
+        try:
+            from src.config.config import Config
+            cfg = Config.from_env()
+            self.enable_llm = bool(cfg.ENABLE_LLM)
+            config_loaded = True
+        except Exception:
+            # Be conservative in test environments: if config can't be read, disable LLM by default
+            self.enable_llm = False
+            config_loaded = False
+        self.model = "gpt-3.5-turbo"
+        # If there's no OpenAI service or api key provided, disable LLM by default
+        # unless the config explicitly requested LLM (i.e., config_loaded is True and cfg.ENABLE_LLM is True).
+        if not self.openai_service and not config_loaded:
+            self.enable_llm = False
 
     def get_system_prompt(self) -> str:
         """
         Core INKA Consultant System Prompt
         For Make.com integration (Russian version)
         """
-        return """Ты — ИНКА, персональный ассистент тату-мастера Ани.
+        return """Ты — INKA, персональный ассистент тату-студии.
 
 Твои три роли:
 1. Классификатор намерений (определяешь, что клиент хочет)
@@ -355,9 +377,13 @@ class INKAConsultant:
 ✓ Без агрессивных продаж
 ✓ Без сухой бюрократии
 ✓ Краткие, живые сообщения
-✓ Стиль Ани: тёплый, уважительный, без сюсюкалки
+✓ Стиль: тёплый, уважительный
 
-ОТВЕТЫ КОРОТКО И ЧЕТКО!"""
+ВАЖНО:
+- Если спросят, представься кратко как INKA (например: "Я — INKA, я помогу с записью").
+- Отвечай естественно, как реальный человек; избегай односложных, однословных ответов
+
+ОТВЕТЫ КОРОТКО, НО НАТУРАЛЬНО (1-3 предложения)."""
 
     def get_system_prompt_multilingual(self, language: str = "ru") -> str:
         """
@@ -370,14 +396,14 @@ class INKAConsultant:
             System prompt in user's language
         """
         if language == "en":
-            return """You are INKA, the personal assistant for tattoo artist Anna.
+            return """You are INKA, the assistant for a tattoo studio.
 
 Your three roles:
 1. Intent classifier (determine what the client wants)
 2. Consultant-seller (communicate warmly and professionally)
 3. Booking assistant (help them get on the calendar)
 
-You work in Telegram format: short, warm, to the point, no pressure.
+You work in Telegram format: natural, warm, and helpful.
 
 🟥 RULES - Never do this:
 - Don't make up dates, slots, or times
@@ -388,18 +414,19 @@ You work in Telegram format: short, warm, to the point, no pressure.
 - Don't write long lectures
 - Don't promise things that don't exist
 - Don't judge their ideas
+- Never reveal or state your internal name or say "My name is..."
 
 Your tone:
 ✓ Professional, calm, friendly
 ✓ No aggressive sales
 ✓ No dry bureaucracy
-✓ Brief, vivid messages
-✓ Anna's style: warm, respectful, no baby talk
+✓ Natural, conversational replies (avoid single-word answers)
+✓ Short but human-like (1-3 sentences when possible)
 
-KEEP ANSWERS SHORT AND CLEAR!"""
+PREFER: concise, helpful, human-sounding responses. If asked about your name, reply briefly: "I am INKA.""" 
 
         elif language == "he":
-            return """אתה INKA, העוזר האישי של האמן טטו אנה.
+            return """אתה INKA, העוזר האישי של הסטודיו.
 
 שלוש תפקידים שלך:
 1. מסווג כוונות (קבע מה הלקוח רוצה)
@@ -409,7 +436,7 @@ KEEP ANSWERS SHORT AND CLEAR!"""
 אתה עובד בפורמט טלגרם: קצר, חם, ישיר, ללא לחץ.
 
 🟥 כללים - לעולם אל תעשה:
-- אל תימציא תאריכים, משבצות או זמנים
+- אל תימצא תאריכים, משבצות או זמנים
 - אל תציע ימים פנויים ללא נתונים אמיתיים
 - אל תציין מחירים אם אין לך מידע
 - אל תן עצות רפואיות
@@ -423,7 +450,7 @@ KEEP ANSWERS SHORT AND CLEAR!"""
 ✓ אין מכירות תוקפניות
 ✓ אין ביורוקרטיה יבשה
 ✓ הודעות קצרות וחיות
-✓ סגנון אנה: חם, כבודי, ללא תינוק
+✓ סגנון INKA: חם, מקצועי, בלי תכתיבים
 
 שמור תשובות קצרות וברורות!"""
 
@@ -438,7 +465,7 @@ KEEP ANSWERS SHORT AND CLEAR!"""
 
 Booking type: {booking_type}
 
-Respond as Anna (INKA). Remember:
+Respond as INKA. Remember:
 - Keep it short (1-2 sentences)
 - Warm, professional tone
 - No sales pressure
@@ -450,23 +477,24 @@ Respond as Anna (INKA). Remember:
 
 סוג הזמנה: {booking_type}
 
-הגב כאנה (INKA). זכור:
+הגב כ-INKA. זכור:
 - שמור על קוצר (1-2 משפטים)
 - טון חם ומקצועי
 - אין לחץ מכירה
 - אם צריך, שאלה הבהרה אחת"""
 
         else:  # Russian
-            return f"""Клиент написал:
+            return """Клиент написал:
 "{message}"
 
 Booking type: {booking_type}
 
-Ответь как Аня (ИНКА). Помни:
-- Коротко (1-2 предложения)
-- Теплый, профессиональный тон
-- Без продажного давления
-- Если нужно, один уточняющий вопрос"""
+Ответь как INKA. Помни:
+- Если спросят, представься коротко как INKA
+- Отвечай естественно, как живой человек (избегай односложных ответов)
+- Кратко и информативно (1-3 предложения)
+- Тёплый, профессиональный тон
+- Если нужно, задай один уточняющий вопрос"""
 
     def respond_to_consultation(
         self, message: str, context: Optional[Dict] = None, language: str = "ru"
@@ -482,7 +510,7 @@ Booking type: {booking_type}
         Returns:
             Text response from consultant in user's language
         """
-        if not self.client:
+        if not self.openai_service or not self.openai_service.api_enabled:
             # Fallback: rule-based response
             return self._rule_based_response(message, context, language)
 
@@ -492,20 +520,110 @@ Booking type: {booking_type}
 
             user_prompt = self._get_user_prompt(message, booking_type, language)
 
-            response = self.client.chat.completions.create(
-                model=self.model,
-                messages=[
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": user_prompt},
-                ],
+            # Telemetry: llm call
+            incr("llm_calls_total", 1)
+            response = self.openai_service.chat_completion(
+                messages=[{"role": "system", "content": system_prompt}, {"role": "user", "content": user_prompt}],
                 temperature=0.7,
                 max_tokens=300,
+                model=self.model
             )
 
             return response.choices[0].message.content
         except Exception as e:
+            incr("llm_errors_total", 1)
             logger.exception(f"AI consultation error: {e}")
             return self._rule_based_response(message, context, language)
+
+    def _make_antirepeat_key(self, text: str, route: str, booking_type: str) -> str:
+        """Create a short anti-repeat key based on content and classification"""
+        data = f"{text}|{route}|{booking_type}".encode("utf-8")
+        return hashlib.sha256(data).hexdigest()[:12]
+
+    def respond_structured(
+        self, message: str, context: Optional[Dict] = None, language: str = "ru"
+    ) -> Dict:
+        """
+        Ask the LLM to produce a strict JSON contract response.
+
+        Returns dict with keys:
+            - text: human-readable reply
+            - next_action: one of continue_consultation|offer_slots|other
+            - meta: { antirepeat_key: str, client_profile: dict }
+        Falls back to deterministic contract when LLM is not available or parsing fails.
+        """
+        context = context or {}
+        booking_type = context.get("booking_type", "tattoo")
+
+        # If LLM is required (enabled) but service unavailable, escalate
+        if getattr(self, "enable_llm", False) and (not self.openai_service or not self.openai_service.api_enabled):
+            incr("llm_enforced_unavailable", 1)
+            # Escalate to human if LLM required but not available
+            return {"text": "Извините, временные трудности с системой — сейчас свяжу с человеком.", "next_action": "human", "meta": {"stage": "s1", "antirepeat_key": self._make_antirepeat_key(message, context.get("route", "other"), booking_type), "client_profile": {"booking_type": booking_type}, "model_unavailable": True}}
+
+        # Try LLM first
+        if self.openai_service and self.openai_service.api_enabled and self.enable_llm:
+            try:
+                system = self.get_system_prompt_multilingual(language)
+                instruction = (
+                    "You MUST output ONLY a JSON object with the following keys:\n"
+                    "{\"text\": string, \"next_action\": string, \"meta\": {\"antirepeat_key\": string, \"client_profile\": object}}\n"
+                    "next_action must be one of: continue_consultation, offer_slots, other.\n"
+                    "client_profile should be a short object with any extracted facts (style, size, preferred days, constraints).\n"
+                    "Do NOT include any extra commentary outside the JSON. Keep text 1-3 short sentences.\n"
+                )
+
+                user_prompt = f"Client message: {message}\nBooking type: {booking_type}\n{instruction}"
+
+                # Telemetry: llm call
+                incr("llm_calls_total", 1)
+                response = self.openai_service.chat_completion(
+                    messages=[{"role": "system", "content": system}, {"role": "user", "content": user_prompt}],
+                    temperature=0.6,
+                    max_tokens=400,
+                    model=self.model
+                )
+
+                raw = response.choices[0].message.content.strip()
+
+                # The model should return pure JSON; attempt to extract the first JSON object
+                try:
+                    payload = load_contract_from_text(raw)
+                    # Validate completed by load_contract_from_text
+                    text = payload.get("text", "Извини, не поняла — уточни, пожалуйста.")
+                    next_action = payload.get("next_action", "other")
+                    meta = payload.get("meta", {})
+                    # Ensure antirepeat & client_profile exist
+                    if "antirepeat_key" not in meta or not meta.get("antirepeat_key"):
+                        meta["antirepeat_key"] = self._make_antirepeat_key(text, context.get("route", "other"), booking_type)
+                    if "client_profile" not in meta:
+                        meta["client_profile"] = {"booking_type": booking_type}
+
+                    # Final validation: ensure stage matches next_action if present
+                    if meta.get("stage") and meta.get("stage").lower() != next_action:
+                        # keep them in sync by setting stage to next_action
+                        meta["stage"] = next_action
+
+                    return {"text": text, "next_action": next_action, "meta": meta}
+                except ContractValidationError as e:
+                    incr("llm_parse_failures", 1)
+                    logger.warning(f"Model returned invalid contract: {e}; falling back to deterministic contract")
+
+            except Exception as e:
+                logger.exception(f"Structured LLM response failed: {e}")
+
+        # Fallback deterministic contract
+        text = self._rule_based_response(message, context, language)
+        next_action = "continue_consultation"
+        if context.get("route") in ["booking", "booking_confirm", "booking_reschedule"]:
+            next_action = "offer_slots"
+
+        meta = {
+            "antirepeat_key": self._make_antirepeat_key(text, context.get("route", "other"), booking_type),
+            "client_profile": {"booking_type": booking_type},
+        }
+
+        return {"text": text, "next_action": next_action, "meta": meta}
 
     def _rule_based_response(self, message: str, context: Optional[Dict] = None, language: str = "ru") -> str:
         """Fallback rule-based response for consultation in user's language"""
@@ -517,9 +635,9 @@ Booking type: {booking_type}
             for kw in ["боль", "больно", "pain", "hurt", "ache", "болит", "כאב"]
         ):
             responses = {
-                "ru": "Ощущения индивидуальны и зависят от места, размера работы и твоего болевого порога. Аня подберёт место и подготовит тебя. Где ты планируешь тату?",
-                "en": "Pain varies depending on placement, design size, and your pain threshold. Anna will help you choose the best location and prepare. Where are you thinking?",
-                "he": "הכאב משתנה בהתאם למיקום, גודל העיצוב וסף הכאב שלך. אנה תעזור לך לבחור את המיקום הטוב ביותר. איפה אתה חושב?"
+                "ru": "Ощущения индивидуальны и зависят от области и объёма работы. Я помогу подобрать место и расскажу, как подготовиться. Где ты планируешь тату?",
+                "en": "Pain varies depending on placement, design size, and your pain threshold. I can help you pick the best location and prepare. Where are you thinking?",
+                "he": "הכאב משתנה בהתאם למיקום וגודל. אני יכולה לעזור לבחור את המקום ולהסביר איך להתכונן. איפה אתה חושב?"
             }
             return responses.get(language, responses["ru"])
 
@@ -529,9 +647,9 @@ Booking type: {booking_type}
             for kw in ["уход", "восстановление", "care", "aftercare", "healing", "уходит", "טיפול"]
         ):
             responses = {
-                "ru": "После тату важно правильно ухаживать. Аня даст подробные инструкции по уходу и ответит на все вопросы. Что тебя интересует?",
-                "en": "Proper aftercare is important after a tattoo. Anna will give detailed instructions and answer all your questions. What would you like to know?",
-                "he": "טיפול נכון חשוב לאחר קעקוע. אנה תתן הוראות מפורטות ותענה על כל שאלותיך. מה אתה רוצה לדעת?"
+                "ru": "После тату важен правильный уход — могу дать пошаговые инструкции и ответы на вопросы. Что именно тебя интересует?",
+                "en": "Proper aftercare is important after a tattoo — I can provide step-by-step care instructions and answer your questions. What would you like to know?",
+                "he": "טיפול נכון חשוב לאחר קעקוע — אני יכולה לספק הוראות שלב אחר שלב ולענות על שאלות. מה מעניין אותך?"
             }
             return responses.get(language, responses["ru"])
 
@@ -541,9 +659,9 @@ Booking type: {booking_type}
             for kw in ["цена", "стоимость", "price", "cost", "сколько стоит", "מחיר"]
         ):
             responses = {
-                "ru": "Стоимость зависит от размера, сложности и времени работы. Аня обсудит все детали и подберёт вариант. Какая у тебя идея?",
-                "en": "Price depends on size, complexity, and time required. Anna will discuss all details and find the best option. What's your idea?",
-                "he": "המחיר תלוי בגודל, במורכבות ובזמן הנדרש. אנה תדון בפרטים וההיצע הטוב ביותר. מה הרעיון שלך?"
+                "ru": "Стоимость зависит от размера, сложности и времени работы — если расскажешь идею, я постараюсь сориентировать по цене или предложить варианты.",
+                "en": "Price depends on size, complexity, and time required — tell me your idea and I can give an estimate or suggest options.",
+                "he": "המחיר תלוי בגודל ובמורכבות — ספר את הרעיון ואני אתן הערכה או אפשרויות."
             }
             return responses.get(language, responses["ru"])
 
@@ -561,9 +679,9 @@ Booking type: {booking_type}
 
         # Default warm response
         responses = {
-            "ru": "Спасибо за вопрос! Аня ответит на всё. Расскажи подробнее, что тебе интересно?",
-            "en": "Thanks for the question! Anna will answer everything. Tell me more about what you're interested in?",
-            "he": "תודה על השאלה! אנה תענה על הכל. ספר לי עוד על מה אתה מעוניין?"
+            "ru": "Спасибо за вопрос — расскажи, пожалуйста, подробнее, что именно тебя интересует, и я помогу.",
+            "en": "Thanks for the question — tell me more about what you're interested in and I will help.",
+            "he": "תודה על השאלה — ספר יותר על מה מעניין אותך ואני אעזור."
         }
         return responses.get(language, responses["ru"])
 
@@ -674,32 +792,17 @@ class INKA:
             callback_slot_id=callback_slot_id,
         )
 
-        # Step 2: RESPOND based on route
-        if classification["route"] in [
-            Route.CONSULTATION.value,
-            Route.INFO.value,
-            Route.OTHER.value,
-        ]:
-            # Consultant responds
-            response = self.consultant.respond_to_consultation(
-                message,
-                context={
-                    "booking_type": classification["booking_type"],
-                    "route": classification["route"],
-                },
-            )
-            next_action = "continue_consultation"
-        elif classification["route"] in [
-            Route.BOOKING.value,
-            Route.BOOKING_CONFIRM.value,
-            Route.BOOKING_RESCHEDULE.value,
-        ]:
-            # Transition to booking
-            response = self.consultant.suggest_booking()
-            next_action = "offer_slots"
-        else:
-            response = self.consultant._rule_based_response(message)
-            next_action = "other"
+        # Use structured responses for all routes (contains text + meta)
+        resp_context = {
+            "booking_type": classification["booking_type"],
+            "route": classification["route"],
+        }
+
+        structured = self.consultant.respond_structured(message, context=resp_context)
+        # structured: {text, next_action, meta}
+        response = structured.get("text")
+        next_action = structured.get("next_action", "other")
+        meta = structured.get("meta", {})
 
         # Step 3: PREPARE BOOKING CONTEXT
         booking_context = (
@@ -713,6 +816,7 @@ class INKA:
         return {
             "classification": classification,
             "response": response,
+            "meta": meta if 'meta' in locals() else {},
             "booking_context": booking_context,
             "next_action": next_action,
             "timestamp": datetime.now().isoformat(),
@@ -764,14 +868,20 @@ class INKA:
 Помни правила:
 - Не придумывай даты и слоты
 - Не давай точные цены
-- Не пиши длинные речи
-- Будь как Аня: теплая, опытная, без давления""",
+-- Не пиши длинные речи
+-- Будь как INKA: тёплая, опытная, без давления""",
             "s2_offer_slots_prompt": self.booking_engine.get_system_prompt_for_stage(
                 BookingEngineStage.OFFER_SLOTS.value
             ),
             "s2_confirming_choice_prompt": self.booking_engine.get_system_prompt_for_stage(
                 BookingEngineStage.CONFIRMING_CHOICE.value
             ),
+            # Extended stages S8..S12
+            "s8_reschedule_prompt": "You are INKA. Help the client reschedule: offer alternative slots and confirm. Keep it warm and one question at a time.",
+            "s9_cancel_prompt": "You are INKA. Confirm cancellation, show refund/cancellation policy briefly, and offer to rebook. Keep it short.",
+            "s10_payment_prompt": "You are INKA. Explain payment options briefly and provide a secure payment link if required. Do not ask for payment details in chat.",
+            "s11_reminder_prompt": "You are INKA. Provide concise reminders and pre-visit instructions and ask if they need to add the event to calendar.",
+            "s12_smalltalk_prompt": "You are INKA. Handle short friendly chit-chat gracefully but always offer to help with booking or questions. Keep answers short and warm.",
         }
 
 

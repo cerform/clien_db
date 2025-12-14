@@ -1,0 +1,85 @@
+{% extends "base.html" %}
+
+{% block title %}Администраторы — Admin Panel{% endblock %}
+
+{% block content %}
+<div class="container mt-xxl">
+    <div class="section card">
+        <div class="card-header flex space-between align-center">
+            <h1 class="card-title">Администраторы</h1>
+            <button class="btn btn-primary" data-modal-open="addAdminModal">Добавить администратора</button>
+        </div>
+        <div class="card-body">
+            <div class="table-responsive">
+                <table class="table">
+                    <thead>
+                        <tr>
+                            <th>Имя</th>
+                            <th>Роль</th>
+                            <th>Действия</th>
+                        </tr>
+                    </thead>
+                    <tbody id="admins-table-body"></tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+<!-- Add Admin Modal -->
+<div class="modal-overlay" id="addAdminModal" style="display:none">
+    <div class="modal">
+        <div class="modal-header">
+            <div class="modal-title">Добавить администратора</div>
+            <button class="modal-close" data-modal-close>&times;</button>
+        </div>
+        <div class="modal-body">
+            <form id="add-admin-form" class="form-grid gap-lg">
+                <div class="form-group">
+                    <label class="form-label">Telegram Admin ID</label>
+                    <input class="form-input" name="admin_id" required>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Имя (необязательно)</label>
+                    <input class="form-input" name="name">
+                </div>
+                <div class="form-group mt-lg">
+                    <button type="submit" class="btn btn-primary btn-block">Добавить</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<script>
+async function loadAdmins(){
+    const res = await fetch('/api/admin/admins');
+    const j = await res.json();
+    const list = j.admins || [];
+    const body = document.getElementById('admins-table-body');
+    body.innerHTML = '';
+    list.forEach(a => {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `<td>${a}</td><td>Telegram Admin</td><td style="display:flex;gap:8px"><button class="btn btn-danger delete-admin" data-admin-id="${a}">Delete</button></td>`;
+        body.appendChild(tr);
+    });
+}
+
+document.getElementById('add-admin-form').addEventListener('submit', async (e)=>{
+    e.preventDefault();
+    const form = e.target; const id = parseInt(form.admin_id.value, 10); const name = form.name.value || '';
+    const token = localStorage.getItem('inka_admin_token');
+    const headers = {'Content-Type': 'application/json'}; if (token) headers['Authorization'] = 'Bearer ' + token;
+    const res = await fetch('/api/admin/admins', {method:'POST', headers, body: JSON.stringify({admin_id: id, name})});
+    if (res.ok) { app.closeModal(document.getElementById('addAdminModal')); await loadAdmins(); } else { alert('Failed to add admin'); }
+});
+
+async function deleteAdmin(id){ if (!confirm('Удалить администратора?')) return; const token = localStorage.getItem('inka_admin_token'); const headers = {}; if (token) headers['Authorization'] = 'Bearer ' + token; const res = await fetch(`/api/admin/admins/${id}`, {method:'DELETE', headers}); if (res.ok) await loadAdmins(); else alert('Failed to delete admin'); }
+
+document.addEventListener('DOMContentLoaded', () => { loadAdmins(); });
+
+// Delegation for admin remove
+document.body.addEventListener('click', (e)=>{
+    const delBtn = e.target.closest('.delete-admin'); if (delBtn) deleteAdmin(delBtn.dataset.adminId);
+});
+</script>
+{% endblock %}

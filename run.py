@@ -22,6 +22,11 @@ def main():
         
         # Load configuration
         cfg = Config.from_env()
+        try:
+            cfg.validate()
+        except Exception as e:
+            logger.error(f"Configuration invalid: {e}")
+            sys.exit(1)
         
         # Setup logging
         setup_logging(cfg)
