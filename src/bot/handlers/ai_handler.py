@@ -12,6 +12,7 @@ from aiogram.filters import Command
 from src.services.ai_dialog_engine import AIDialogEngine, UserRole
 from src.services.ai_orchestrator import AIOrchestrator
 from src.config.config import Config
+from src.services.admin_manager import is_admin, get_admin_ids as get_runtime_admin_ids
 from src.config.env_loader import load_env
 
 logger = logging.getLogger(__name__)
@@ -67,6 +68,13 @@ def determine_user_role(user_id: int, admin_ids: list) -> UserRole:
     Returns:
         UserRole
     """
+    # Use admin manager for checks if provided
+    try:
+        if is_admin(user_id):
+            return UserRole.ADMIN
+    except Exception:
+        # fallback to provided admin_ids list
+        pass
     if user_id in admin_ids:
         return UserRole.ADMIN
     # Можно добавить логику для определения мастеров
@@ -79,9 +87,12 @@ def create_ai_router() -> Router:
     
     # Загружаем конфиг для получения admin_ids
     try:
-        load_env()
-        cfg = Config.from_env()
-        admin_ids = cfg.ADMIN_USER_IDS
+        # Prefer runtime admin list (env + sheet) to keep web and bot permissions in sync
+        admin_ids = get_runtime_admin_ids()
+        if not admin_ids:
+            load_env()
+            cfg = Config.from_env()
+            admin_ids = cfg.ADMIN_USER_IDS or []
     except Exception as e:
         logger.warning(f"Failed to load admin IDs: {e}")
         admin_ids = []
@@ -242,6 +253,10 @@ def create_ai_router() -> Router:
 💬 **Клиенты:**
 - "Отправь сообщение клиенту 123"
 - "Список всех клиентов"
+
+Примеры команд для управления админ-правами:
+- `/grant_admin <telegram_id>` — добавить нового администратора
+- `/revoke_admin <telegram_id>` — лишить администратора прав
 
 Просто пишите команды естественным языком!
 """

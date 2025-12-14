@@ -1,0 +1,6 @@
+# AI
+# Structure: learning_platform, admin, api_logic
+learning_platform/
+admin/
+api_logic/
+README.md

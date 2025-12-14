@@ -1,0 +1,137 @@
+{% extends "base.html" %}
+
+{% block title %}Услуги — Admin Panel{% endblock %}
+
+{% block content %}
+<div class="container mt-xxl">
+    <div class="section card card-interactive">
+        <div class="card-header flex space-between align-center">
+            <h1 class="card-title">Услуги</h1>
+            <button class="btn btn-primary" data-modal-open="addServiceModal">Добавить услугу</button>
+        </div>
+        <div class="card-body">
+            <div class="table-responsive">
+                <table class="table">
+                    <thead>
+                        <tr>
+                            <th>Название</th>
+                            <th>Цена</th>
+                            <th>Длительность</th>
+                            <th>Действия</th>
+                        </tr>
+                    </thead>
+                    <tbody id="services-table-body"></tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Модальное окно добавления услуги -->
+<div class="modal-overlay" id="addServiceModal" style="display:none">
+    <div class="modal">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h2>Добавить услугу</h2>
+            <button class="modal-close" data-modal-close>&times;</button>
+        </div>
+        <form id="add-service-form" class="form-grid gap-lg">
+            <div class="form-group">
+                <label class="form-label">Название</label>
+                <input class="form-input" name="name" required>
+            </div>
+            <div class="form-group">
+                <label class="form-label">Цена</label>
+                <input class="form-input" name="price" required>
+            </div>
+            <div class="form-group">
+                <label class="form-label">Длительность (мин)</label>
+                <input class="form-input" name="duration" required>
+            </div>
+            <div class="form-group mt-lg">
+                <button type="submit" class="btn btn-primary btn-block">Сохранить</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<script>
+function openAddServiceModal() { document.getElementById('addServiceModal').style.display = 'block'; }
+function closeAddServiceModal() { document.getElementById('addServiceModal').style.display = 'none'; }
+async function getCurrencySymbol() {
+    try{
+        const token = localStorage.getItem('inka_admin_token');
+        // Try to get currency from status
+        const res = await fetch('/api/status');
+        const s = await res.json();
+        const cur = (s && s.config && s.config.currency) ? s.config.currency : (localStorage.getItem('inka_currency') || 'NIS');
+        return cur;
+    }catch(e){ return localStorage.getItem('inka_currency') || 'NIS'; }
+}
+
+function formatPrice(price, currency) {
+    const symbol = currency === 'USD' ? '$' : (currency === 'EUR' ? '€' : '₪');
+    return symbol + ' ' + price;
+}
+
+async function loadServices(){
+    const res = await fetch('/api/services');
+    const services = await res.json();
+    const body = document.getElementById('services-table-body');
+    body.innerHTML = '';
+    const currency = await getCurrencySymbol();
+    services.forEach(s => {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+            <td>${s.name || ''}</td>
+            <td>${formatPrice(s.price || s.price_from || 0, currency)}</td>
+            <td>${s.duration_minutes || s.duration_min || ''} мин</td>
+            <td style="display:flex;gap:8px"><button class="btn edit-service" data-service-id="${s.id}">Edit</button><button class="btn btn-danger delete-service" data-service-id="${s.id}">Delete</button></td>
+        `;
+        body.appendChild(tr);
+    });
+}
+
+// Add service
+document.getElementById('add-service-form').addEventListener('submit', async (e)=>{
+    e.preventDefault();
+    const form = e.target; const token = localStorage.getItem('inka_admin_token'); const headers = {'Content-Type':'application/json'}; if (token) headers['Authorization'] = 'Bearer ' + token;
+    const body = { name: form.name.value, price: parseInt(form.price.value, 10), duration_minutes: parseInt(form.duration.value,10) };
+    const res = await fetch('/api/services', {method:'POST', headers, body: JSON.stringify(body)});
+    if (res.ok) { closeAddServiceModal(); await loadServices(); } else { alert('Failed to add service'); }
+});
+
+// Edit modal
+const editServiceModalHtml = `
+<div class="modal-overlay" id="editServiceModal" style="display:none">
+    <div class="modal">
+        <div class="modal-header">
+            <h2>Edit Service</h2>
+            <button class="modal-close" data-modal-close>&times;</button>
+        </div>
+        <form id="edit-service-form" class="form-grid gap-lg">
+            <input type="hidden" name="id">
+            <div class="form-group"><label class="form-label">Название</label><input class="form-input" name="name" required></div>
+            <div class="form-group"><label class="form-label">Цена</label><input class="form-input" name="price" required></div>
+            <div class="form-group"><label class="form-label">Длительность (мин)</label><input class="form-input" name="duration" required></div>
+            <div class="form-group mt-lg"><button type="submit" class="btn btn-primary btn-block">Сохранить</button></div>
+        </form>
+    </div>
+</div>`;
+if (!document.getElementById('editServiceModal')) document.body.insertAdjacentHTML('beforeend', editServiceModalHtml);
+    function openEditService(id) { fetch(`/api/services/${id}`).then(r=>r.json()).then(s=>{ const form = document.getElementById('edit-service-form'); form.id.value = s.id; form.name.value = s.name || ''; form.price.value = s.price || s.price_from || 0; form.duration.value = s.duration_minutes || s.duration_min || 60; app.openModal('editServiceModal'); }).catch(e=>alert('Failed to load service')) }
+    function closeEditServiceModal() { app.closeModal(document.getElementById('editServiceModal')); }
+document.getElementById('edit-service-form').addEventListener('submit', async (e)=>{ e.preventDefault(); const form = e.target; const id = form.id.value; const token = localStorage.getItem('inka_admin_token'); const headers = {'Content-Type':'application/json'}; if (token) headers['Authorization'] = 'Bearer ' + token; const body = { name: form.name.value, price: parseInt(form.price.value,10), duration_minutes: parseInt(form.duration.value,10) }; const res = await fetch(`/api/services/${id}`, {method:'PUT', headers, body: JSON.stringify(body)}); if (res.ok) { closeEditServiceModal(); await loadServices(); } else { alert('Failed to update service'); } });
+
+async function deleteService(id) { if (!confirm('Are you sure?')) return; const token = localStorage.getItem('inka_admin_token'); const headers = {}; if (token) headers['Authorization'] = 'Bearer ' + token; const res = await fetch(`/api/services/${id}`, {method:'DELETE', headers}); if (res.ok) { await loadServices(); } else { alert('Failed to delete service'); } }
+
+document.addEventListener('DOMContentLoaded', ()=>{ loadServices(); });
+
+// Delegation for edit/delete
+document.body.addEventListener('click', (e)=>{
+    const editBtn = e.target.closest('.edit-service'); if (editBtn) openEditService(editBtn.dataset.serviceId);
+    const delBtn = e.target.closest('.delete-service'); if (delBtn) deleteService(delBtn.dataset.serviceId);
+});
+</script>
+
+{% endblock %}

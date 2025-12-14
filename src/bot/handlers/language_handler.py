@@ -83,9 +83,12 @@ def setup(dp):
         }
         
         await state.clear()
+
+        # Send confirmation WITHOUT keyboard for clean AI receptionist experience
+        from aiogram.types import ReplyKeyboardRemove
         await message.answer(
             confirmations.get(language, "✅ Language selected"),
-            reply_markup=main_menu(language)
+            reply_markup=ReplyKeyboardRemove()
         )
 
     dp.include_router(router)

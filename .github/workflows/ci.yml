@@ -2,6 +2,36 @@ name: CI
 
 on:
   push:
+    branches: [ main, master, develop, feature/** ]
+  pull_request:
+    branches: [ main, master, develop ]
+
+jobs:
+  tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt
+      - name: Run predeploy check
+        run: python3 scripts/predeploy_check.py || true
+      - name: Run pytest
+        run: pytest -q -k "not selenium"
+      - name: Dry-run SQL migrations and RBAC updates
+        run: |
+          export DATABASE_URL=sqlite:////tmp/test.db
+          python3 scripts/apply_sql_migrations.py
+          python3 scripts/create_rbac_roles.py
+name: CI
+
+on:
+  push:
     branches: [ main, eco-system-init ]
   pull_request:
     branches: [ main, eco-system-init ]

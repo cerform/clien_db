@@ -30,11 +30,15 @@ if ! command -v openssl >/dev/null 2>&1; then
   exit 1
 fi
 
-# Confirm values with user
-read -p "Project: ${PROJECT_ID}. Continue? [Y/n] " -r
-if [[ ! $REPLY =~ ^[Yy] && -n $REPLY ]]; then
-  echo "Aborted"
-  exit 0
+# If ASSUME_YES is set (or passed via env), skip confirmations
+if [[ -z "${ASSUME_YES:-}" ]]; then
+  read -p "Project: ${PROJECT_ID}. Continue? [Y/n] " -r
+  if [[ ! $REPLY =~ ^[Yy] && -n $REPLY ]]; then
+    echo "Aborted"
+    exit 0
+  fi
+else
+  echo "ASSUME_YES set; skipping interactive confirmation"
 fi
 
 # Set project and region
@@ -134,8 +138,8 @@ fi
 # Build container image and push to GCR
 IMAGE_NAME="gcr.io/${PROJECT_ID}/${SERVICE_NAME}"
 
-echo "Building container image and pushing to Container Registry"
-gcloud builds submit --tag ${IMAGE_NAME} --project=${PROJECT_ID}
+echo "Building container image and pushing to Container Registry (using Cloud Build with substitutions)"
+gcloud builds submit --tag ${IMAGE_NAME} --project=${PROJECT_ID} --substitutions=_REGION=${REGION},_SERVICE_NAME=${SERVICE_NAME},_CLOUDSQL_INSTANCE=${CLOUDSQL_INSTANCE}
 
 # Deploy to Cloud Run
 # Map secrets to env vars: BOT_TOKEN, OPENAI_API_KEY, CLOUDSQL_PASSWORD, SPREADSHEET_ID, GOOGLE_CREDENTIALS_JSON

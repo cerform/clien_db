@@ -74,6 +74,14 @@ def create_schema():
         );
         """))
         logger.info("✓ masters table created")
+        # Ensure required columns exist even if older schema existed
+        try:
+            conn.execute(text("ALTER TABLE masters ADD COLUMN IF NOT EXISTS username VARCHAR(255) UNIQUE;"))
+            conn.execute(text("ALTER TABLE masters ADD COLUMN IF NOT EXISTS password_hash VARCHAR(255);"))
+            conn.execute(text("ALTER TABLE masters ADD COLUMN IF NOT EXISTS role VARCHAR(50) DEFAULT 'master';"))
+            conn.execute(text("ALTER TABLE masters ADD COLUMN IF NOT EXISTS is_active BOOLEAN DEFAULT TRUE;"))
+        except Exception as e:
+            logger.info(f'Failed adding some columns to masters (may exist already): {e}')
 
         # Services table
         conn.execute(text("""
@@ -88,6 +96,22 @@ def create_schema():
         );
         """))
         logger.info("✓ services table created")
+        # Ensure auxiliary columns exist even if table previously existed with different schema
+        # Ensure auxiliary columns exist even if table previously existed with different schema
+        try:
+            conn.execute(text("ALTER TABLE services ADD COLUMN IF NOT EXISTS duration_minutes INTEGER;"))
+            conn.execute(text("ALTER TABLE services ADD COLUMN IF NOT EXISTS price DECIMAL(10,2);"))
+            conn.execute(text("ALTER TABLE services ADD COLUMN IF NOT EXISTS category VARCHAR(100);"))
+            conn.execute(text("ALTER TABLE services ADD COLUMN IF NOT EXISTS is_active BOOLEAN DEFAULT TRUE;"))
+        except Exception as e:
+            logger.info(f'Failed adding some columns to services (may exist already): {e}')
+        # Ensure id default is set (sequence) so inserts without id work
+        try:
+            conn.execute(text("CREATE SEQUENCE IF NOT EXISTS services_id_seq;"))
+            conn.execute(text("ALTER TABLE services ALTER COLUMN id SET DEFAULT nextval('services_id_seq');"))
+            conn.execute(text("SELECT setval('services_id_seq', COALESCE((SELECT MAX(id) FROM services), 1));"))
+        except Exception as e:
+            logger.info(f'Failed to ensure id sequence on services: {e}')
 
         # Bookings table
         conn.execute(text("""
@@ -135,10 +159,11 @@ def create_schema():
             message TEXT NOT NULL,
             role VARCHAR(20) NOT NULL,
             timestamp TIMESTAMP DEFAULT NOW(),
-            context JSONB,
-            INDEX idx_user_time (user_id, timestamp)
+            context JSONB
         );
         """))
+        # Create index for user_id and timestamp if not exists
+        conn.execute(text("CREATE INDEX IF NOT EXISTS idx_user_time ON conversation_history (user_id, timestamp);"))
         logger.info("✓ conversation_history table created")
 
         # Admin messages (already exists, but ensure schema)

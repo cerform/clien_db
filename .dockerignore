@@ -1,0 +1,56 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info/
+dist/
+build/
+.venv/
+venv/
+env/
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+*.log
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Git
+.git/
+.gitignore
+
+# Environment
+.env
+.env.*
+!.env.example
+
+# Credentials
+credentials.json
+token.json
+
+# Local development
+cloud_sql_proxy
+*.db
+*.sqlite
+
+# Documentation
+README.md
+docs/
+*.md
+!PII_POLICY.md
+
+# CI/CD
+.github/
+
+# Scripts (not needed in production)
+scripts/
+create_google_sheets_structure.py
+init_admin_messages.py

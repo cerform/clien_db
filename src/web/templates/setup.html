@@ -1,0 +1,57 @@
+{% extends "base.html" %}
+
+{% block title %}Установка INKA — Tattoo Salon{% endblock %}
+
+{% block content %}
+<div class="container mt-xxl">
+    <div class="section card card-interactive" style="max-width: 540px; margin: 0 auto;">
+        <div class="card-header">
+            <h1 class="card-title">🛠️ Установка INKA</h1>
+        </div>
+        <div class="card-body">
+            <form method="post" class="form-grid gap-lg">
+                <div class="form-group">
+                    <label class="form-label">Название салона</label>
+                    <input class="form-input" name="salon_name" required>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Часовой пояс</label>
+                    <input class="form-input" name="timezone" value="Europe/Moscow" required>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Google Sheets ID</label>
+                    <input class="form-input" name="spreadsheet_id" required>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Создать новый Google Spreadsheet?</label>
+                    <input type="checkbox" name="create_spreadsheet" value="true">
+                    <div class="hint text-secondary">Если отметить, будет создана новая таблица со стандартными листами.</div>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Google Calendar ID</label>
+                    <input class="form-input" name="calendar_id" required>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Telegram Bot Token</label>
+                    <input class="form-input" name="telegram_token" required>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Telegram Admin IDs <span class="text-secondary">(через запятую)</span></label>
+                    <input class="form-input" name="admin_ids" required>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">LLM Provider</label>
+                    <input class="form-input" name="llm_provider" value="openai" required>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">LLM API Key</label>
+                    <input class="form-input" name="llm_api_key" required>
+                </div>
+                <div class="form-group mt-lg">
+                    <button type="submit" class="btn btn-primary btn-block">Сохранить и продолжить</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}

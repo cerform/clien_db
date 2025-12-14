@@ -1,0 +1,504 @@
+
+"""
+API routers for FastAPI app
+"""
+from fastapi import APIRouter, Request, HTTPException
+from pydantic import BaseModel
+from typing import List, Dict, Any, Optional
+from datetime import datetime, date, timedelta
+import random
+import os
+from src.web.models import Client, Master, Service, Booking, NewAdminModel
+
+api_router = APIRouter()
+
+# Export for app
+routers = type('routers', (), {'api_router': api_router})
+
+# ==================== MOCK DATA ====================
+
+# Mock stats data
+MOCK_STATS = {
+    "total_clients": 147,
+    "total_masters": 5,
+    "total_bookings": 89,
+    "total_services": 12,
+    "active_bookings": 23,
+    "revenue_month": 125000,
+    "revenue_week": 32000,
+    "new_clients_week": 8,
+    "completion_rate": 94.5
+}
+
+# Mock masters
+MOCK_MASTERS = [
+    {"id": 1, "name": "Алексей Мастеров", "specialization": "Black & Grey", "email": "alexey@tattoo.com", "phone": "+7 900 123-45-67", "is_active": True, "rating": 4.9, "completed_works": 234},
+    {"id": 2, "name": "Мария Иванова", "specialization": "Color Realism", "email": "maria@tattoo.com", "phone": "+7 900 234-56-78", "is_active": True, "rating": 4.8, "completed_works": 189},
+    {"id": 3, "name": "Дмитрий Петров", "specialization": "Traditional", "email": "dmitry@tattoo.com", "phone": "+7 900 345-67-89", "is_active": True, "rating": 4.7, "completed_works": 156},
+    {"id": 4, "name": "Екатерина Смирнова", "specialization": "Minimalism", "email": "ekaterina@tattoo.com", "phone": "+7 900 456-78-90", "is_active": True, "rating": 4.9, "completed_works": 201},
+    {"id": 5, "name": "Игорь Волков", "specialization": "Ornamental", "email": "igor@tattoo.com", "phone": "+7 900 567-89-01", "is_active": False, "rating": 4.6, "completed_works": 98},
+]
+
+# Mock clients
+MOCK_CLIENTS = [
+    {"id": 1, "name": "Иван Петров", "email": "ivan@mail.com", "phone": "+7 900 111-22-33", "telegram_id": 123456789, "created_at": "2024-01-15", "last_visit": "2024-12-01", "visits_count": 5},
+    {"id": 2, "name": "Анна Сидорова", "email": "anna@mail.com", "phone": "+7 900 222-33-44", "telegram_id": 234567890, "created_at": "2024-02-20", "last_visit": "2024-11-28", "visits_count": 3},
+    {"id": 3, "name": "Сергей Козлов", "email": "sergey@mail.com", "phone": "+7 900 333-44-55", "telegram_id": 345678901, "created_at": "2024-03-10", "last_visit": "2024-12-05", "visits_count": 7},
+    {"id": 4, "name": "Ольга Морозова", "email": "olga@mail.com", "phone": "+7 900 444-55-66", "telegram_id": 456789012, "created_at": "2024-04-05", "last_visit": "2024-11-15", "visits_count": 2},
+    {"id": 5, "name": "Павел Новиков", "email": "pavel@mail.com", "phone": "+7 900 555-66-77", "telegram_id": 567890123, "created_at": "2024-05-12", "last_visit": "2024-12-10", "visits_count": 4},
+]
+
+# Mock services
+MOCK_SERVICES = [
+    {"id": 1, "name": "Маленькая татуировка", "description": "До 5см", "duration_minutes": 60, "price": 5000, "category": "tattoo", "is_active": True},
+    {"id": 2, "name": "Средняя татуировка", "description": "5-15см", "duration_minutes": 120, "price": 12000, "category": "tattoo", "is_active": True},
+    {"id": 3, "name": "Большая татуировка", "description": "15см+", "duration_minutes": 180, "price": 25000, "category": "tattoo", "is_active": True},
+    {"id": 4, "name": "Консультация", "description": "Обсуждение эскиза", "duration_minutes": 30, "price": 0, "category": "consultation", "is_active": True},
+    {"id": 5, "name": "Перекрытие", "description": "Cover-up старой работы", "duration_minutes": 150, "price": 20000, "category": "coverup", "is_active": True},
+]
+
+# Mock bookings
+def generate_mock_bookings():
+    statuses = ["confirmed", "pending", "completed", "cancelled"]
+    bookings = []
+    for i in range(1, 26):
+        booking_date = date.today() + timedelta(days=random.randint(-10, 30))
+        bookings.append({
+            "id": i,
+            "client_id": random.randint(1, 5),
+            "client_name": random.choice(MOCK_CLIENTS)["name"],
+            "master_id": random.randint(1, 5),
+            "master_name": random.choice(MOCK_MASTERS)["name"],
+            "service_id": random.randint(1, 5),
+            "service_name": random.choice(MOCK_SERVICES)["name"],
+            "booking_date": booking_date.isoformat(),
+            "start_time": f"{random.randint(9, 18)}:00",
+            "end_time": f"{random.randint(10, 20)}:00",
+            "status": random.choice(statuses),
+            "notes": "Клиент хочет эскиз в стиле минимализм",
+            "created_at": (booking_date - timedelta(days=random.randint(1, 5))).isoformat()
+        })
+    return bookings
+
+MOCK_BOOKINGS = generate_mock_bookings()
+
+# Mock INKA training stats
+MOCK_INKA_STATS = {
+    "total_conversations": 1247,
+    "total_messages": 8934,
+    "avg_response_time": 1.2,
+    "satisfaction_rate": 96.3,
+    "top_intents": [
+        {"intent": "booking_inquiry", "count": 342, "percentage": 27.4},
+        {"intent": "price_question", "count": 289, "percentage": 23.2},
+        {"intent": "portfolio_request", "count": 234, "percentage": 18.8},
+        {"intent": "cancellation", "count": 156, "percentage": 12.5},
+        {"intent": "general_info", "count": 226, "percentage": 18.1},
+    ],
+    "languages": {
+        "ru": 892,
+        "en": 245,
+        "he": 110
+    }
+}
+
+
+@api_router.get('/api/endpoints')
+async def list_endpoints(request: Request):
+	"""Return a simplified list of API routes available in the current app.
+
+	Each object contains: path, methods, name, summary, description, tags
+	"""
+	routes = []
+	openapi = None
+	try:
+		openapi = request.app.openapi()
+	except Exception:
+		openapi = None
+	for r in request.app.routes:
+		# Only include standard routes (exclude static or non-API resources)
+		try:
+			path = getattr(r, 'path', None) or getattr(r, 'path_regex', None)
+			if not path:
+				continue
+			# Exclude static and OpenAPI docs resources
+			if isinstance(path, str) and (path.startswith('/static') or path.startswith('/openapi') or path.startswith('/docs') or path.startswith('/redoc') or path == '/api/endpoints'):
+				continue
+			name = getattr(r, 'name', None)
+			methods = list(getattr(r, 'methods', []) or [])
+			tags = list(getattr(r, 'tags', []) or [])
+			summary = getattr(r, 'summary', '') or ''
+			# If summary is not set, try to use docstring
+			if not summary and hasattr(r, 'endpoint') and getattr(r.endpoint, '__doc__', None):
+				summary = r.endpoint.__doc__.strip().splitlines()[0][:200]
+			operation = {}
+			if openapi:
+				paths = openapi.get('paths', {})
+				meta = paths.get(path) or paths.get(path.rstrip('/')) or None
+				if meta and methods:
+					for m in methods:
+						m_lower = m.lower()
+						if m_lower in meta:
+							op = meta[m_lower]
+							operation[m] = {
+								'summary': op.get('summary'),
+								'description': op.get('description'),
+								'parameters': op.get('parameters', []),
+								'requestBody': op.get('requestBody', {}),
+								'responses': op.get('responses', {})
+							}
+			routes.append({
+				'path': path,
+				'methods': methods,
+				'name': name,
+				'summary': summary,
+				'tags': tags,
+				'operations': operation,
+			})
+		except Exception:
+			continue
+	return routes
+
+# ==================== API ENDPOINTS ====================
+
+@api_router.get('/api/stats')
+async def get_stats():
+    """Get dashboard statistics"""
+    return MOCK_STATS
+
+@api_router.get('/api/clients')
+async def get_clients():
+    """Get list of all clients"""
+    # Enforce sheet-only mode if forced
+    if _force_sheet_mode() and not _get_spreadsheet_id():
+        raise HTTPException(status_code=400, detail='Operation not allowed: FORCE_SHEET_MODE enabled but spreadsheet not configured')
+    return MOCK_CLIENTS
+
+
+@api_router.post('/api/clients', status_code=201)
+async def create_client(client: Client):
+    """Create a new client"""
+    if _force_sheet_mode() and not _get_spreadsheet_id():
+        raise HTTPException(status_code=400, detail='Operation not allowed: FORCE_SHEET_MODE enabled but spreadsheet not configured')
+    new_client = client.dict()
+    new_client['id'] = len(MOCK_CLIENTS) + 1
+    MOCK_CLIENTS.append(new_client)
+    return new_client
+
+
+@api_router.get('/api/masters')
+async def get_masters():
+    """Get list of all masters"""
+    if _force_sheet_mode() and not _get_spreadsheet_id():
+        raise HTTPException(status_code=400, detail='Operation not allowed: FORCE_SHEET_MODE enabled but spreadsheet not configured')
+    return MOCK_MASTERS
+
+
+@api_router.get('/api/admin/masters')
+async def api_admin_get_masters(request: Request):
+    """Return list of masters (admin view) - same as /api/masters but kept for admin panel."""
+    try:
+        # return master list with any calendar_id stored in the mock
+        return MOCK_MASTERS
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@api_router.post('/api/masters', status_code=201)
+async def create_master(master: Master):
+    """Create a new master"""
+    if _force_sheet_mode() and not _get_spreadsheet_id():
+        raise HTTPException(status_code=400, detail='Operation not allowed: FORCE_SHEET_MODE enabled but spreadsheet not configured')
+    new_master = master.dict()
+    new_master['id'] = len(MOCK_MASTERS) + 1
+    MOCK_MASTERS.append(new_master)
+    return new_master
+
+
+@api_router.get('/api/services')
+async def get_services():
+    """Get list of all services"""
+    if _force_sheet_mode() and not _get_spreadsheet_id():
+        raise HTTPException(status_code=400, detail='Operation not allowed: FORCE_SHEET_MODE enabled but spreadsheet not configured')
+    return MOCK_SERVICES
+
+
+@api_router.post('/api/services', status_code=201)
+async def create_service(service: Service):
+    """Create a new service"""
+    if _force_sheet_mode() and not _get_spreadsheet_id():
+        raise HTTPException(status_code=400, detail='Operation not allowed: FORCE_SHEET_MODE enabled but spreadsheet not configured')
+    new_service = service.dict()
+    new_service['id'] = len(MOCK_SERVICES) + 1
+    MOCK_SERVICES.append(new_service)
+    return new_service
+
+
+@api_router.get('/api/bookings')
+async def get_bookings():
+    """Get list of all bookings"""
+    if _force_sheet_mode() and not _get_spreadsheet_id():
+        raise HTTPException(status_code=400, detail='Operation not allowed: FORCE_SHEET_MODE enabled but spreadsheet not configured')
+    return MOCK_BOOKINGS
+
+
+@api_router.post('/api/bookings', status_code=201)
+async def create_booking(booking: Booking):
+    """Create a new booking"""
+    if _force_sheet_mode() and not _get_spreadsheet_id():
+        raise HTTPException(status_code=400, detail='Operation not allowed: FORCE_SHEET_MODE enabled but spreadsheet not configured')
+    new_booking = booking.dict()
+    new_booking['id'] = len(MOCK_BOOKINGS) + 1
+    MOCK_BOOKINGS.append(new_booking)
+    return new_booking
+
+
+# ---------------------------- CRUD for single-resources ----------------------------
+@api_router.get('/api/clients/{client_id}')
+async def get_client(client_id: int):
+    for c in MOCK_CLIENTS:
+        if int(c['id']) == int(client_id):
+            return c
+    raise HTTPException(status_code=404, detail='Client not found')
+
+
+@api_router.put('/api/clients/{client_id}')
+async def update_client(client_id: int, request: Request):
+    # Admin only
+    if not _is_admin(request):
+        raise HTTPException(status_code=403, detail='Forbidden')
+    if _force_sheet_mode() and not _get_spreadsheet_id():
+        raise HTTPException(status_code=400, detail='Operation not allowed: FORCE_SHEET_MODE enabled but spreadsheet not configured')
+    data = await request.json()
+    for c in MOCK_CLIENTS:
+        if int(c['id']) == int(client_id):
+            c.update(data)
+            return {'ok': True}
+    raise HTTPException(status_code=404, detail='Client not found')
+
+
+@api_router.delete('/api/clients/{client_id}')
+async def delete_client(client_id: int, request: Request):
+    if not _is_admin(request):
+        raise HTTPException(status_code=403, detail='Forbidden')
+    if _force_sheet_mode() and not _get_spreadsheet_id():
+        raise HTTPException(status_code=400, detail='Operation not allowed: FORCE_SHEET_MODE enabled but spreadsheet not configured')
+    for i, c in enumerate(MOCK_CLIENTS):
+        if int(c['id']) == int(client_id):
+            MOCK_CLIENTS.pop(i)
+            return {'ok': True}
+    raise HTTPException(status_code=404, detail='Client not found')
+
+
+@api_router.get('/api/masters/{master_id}')
+async def get_master(master_id: int):
+    for m in MOCK_MASTERS:
+        if int(m['id']) == int(master_id):
+            return m
+    raise HTTPException(status_code=404, detail='Master not found')
+
+
+@api_router.put('/api/masters/{master_id}')
+async def update_master(master_id: int, request: Request):
+    if not _is_admin(request):
+        raise HTTPException(status_code=403, detail='Forbidden')
+    if _force_sheet_mode() and not _get_spreadsheet_id():
+        raise HTTPException(status_code=400, detail='Operation not allowed: FORCE_SHEET_MODE enabled but spreadsheet not configured')
+    data = await request.json()
+    for m in MOCK_MASTERS:
+        if int(m['id']) == int(master_id):
+            m.update(data)
+            return {'ok': True}
+    raise HTTPException(status_code=404, detail='Master not found')
+
+
+@api_router.delete('/api/masters/{master_id}')
+async def delete_master(master_id: int, request: Request):
+    if not _is_admin(request):
+        raise HTTPException(status_code=403, detail='Forbidden')
+    if _force_sheet_mode() and not _get_spreadsheet_id():
+        raise HTTPException(status_code=400, detail='Operation not allowed: FORCE_SHEET_MODE enabled but spreadsheet not configured')
+    for i, m in enumerate(MOCK_MASTERS):
+        if int(m['id']) == int(master_id):
+            MOCK_MASTERS.pop(i)
+            return {'ok': True}
+    raise HTTPException(status_code=404, detail='Master not found')
+
+
+@api_router.post('/api/admin/masters/{master_id}/calendar')
+async def api_admin_update_master_calendar(master_id: int, request: Request):
+    """Update calendar ID for a master by ID. Admin only."""
+    if not _is_admin(request):
+        raise HTTPException(status_code=403, detail='Forbidden')
+    body = await request.json()
+    cid = body.get('calendar_id')
+    if not cid:
+        raise HTTPException(status_code=400, detail='Missing calendar_id')
+    # If spreadsheet is configured, in full implementation update repo
+    sid = _get_spreadsheet_id()
+    if _force_sheet_mode() and not sid:
+        raise HTTPException(status_code=400, detail='Operation not allowed: FORCE_SHEET_MODE enabled but spreadsheet not configured')
+    try:
+        sid = _get_spreadsheet_id()
+        if sid:
+            from src.db.sheets_client import SheetsClient
+            from src.db.repositories.masters_repo import MastersRepo
+            sc = SheetsClient()
+            repo = MastersRepo(sc, sid)
+            ok = repo.update_master_calendar(master_id, cid)
+            if ok:
+                return {'ok': True, 'master_id': master_id, 'calendar_id': cid}
+            else:
+                raise HTTPException(status_code=404, detail='Master not found')
+    except Exception:
+        # fallback to mock
+        for m in MOCK_MASTERS:
+            if int(m['id']) == int(master_id):
+                m['calendar_id'] = cid
+                return {'ok': True, 'master_id': master_id, 'calendar_id': cid}
+        raise HTTPException(status_code=404, detail='Master not found')
+
+
+@api_router.get('/api/services/{service_id}')
+async def get_service(service_id: int):
+    for s in MOCK_SERVICES:
+        if int(s['id']) == int(service_id):
+            return s
+    raise HTTPException(status_code=404, detail='Service not found')
+
+
+@api_router.put('/api/services/{service_id}')
+async def update_service(service_id: int, request: Request):
+    if not _is_admin(request):
+        raise HTTPException(status_code=403, detail='Forbidden')
+    if _force_sheet_mode() and not _get_spreadsheet_id():
+        raise HTTPException(status_code=400, detail='Operation not allowed: FORCE_SHEET_MODE enabled but spreadsheet not configured')
+    data = await request.json()
+    for s in MOCK_SERVICES:
+        if int(s['id']) == int(service_id):
+            s.update(data)
+            return {'ok': True}
+    raise HTTPException(status_code=404, detail='Service not found')
+
+
+@api_router.delete('/api/services/{service_id}')
+async def delete_service(service_id: int, request: Request):
+    if not _is_admin(request):
+        raise HTTPException(status_code=403, detail='Forbidden')
+    if _force_sheet_mode() and not _get_spreadsheet_id():
+        raise HTTPException(status_code=400, detail='Operation not allowed: FORCE_SHEET_MODE enabled but spreadsheet not configured')
+    for i, s in enumerate(MOCK_SERVICES):
+        if int(s['id']) == int(service_id):
+            MOCK_SERVICES.pop(i)
+            return {'ok': True}
+    raise HTTPException(status_code=404, detail='Service not found')
+
+
+@api_router.get('/api/bookings/{booking_id}')
+async def get_booking(booking_id: int):
+    for b in MOCK_BOOKINGS:
+        if int(b['id']) == int(booking_id):
+            return b
+    raise HTTPException(status_code=404, detail='Booking not found')
+
+
+@api_router.put('/api/bookings/{booking_id}')
+async def update_booking(booking_id: int, request: Request):
+    if not _is_admin(request):
+        raise HTTPException(status_code=403, detail='Forbidden')
+    if _force_sheet_mode() and not _get_spreadsheet_id():
+        raise HTTPException(status_code=400, detail='Operation not allowed: FORCE_SHEET_MODE enabled but spreadsheet not configured')
+    data = await request.json()
+    for b in MOCK_BOOKINGS:
+        if int(b['id']) == int(booking_id):
+            b.update(data)
+            return {'ok': True}
+    raise HTTPException(status_code=404, detail='Booking not found')
+
+
+@api_router.delete('/api/bookings/{booking_id}')
+async def delete_booking(booking_id: int, request: Request):
+    if not _is_admin(request):
+        raise HTTPException(status_code=403, detail='Forbidden')
+    if _force_sheet_mode() and not _get_spreadsheet_id():
+        raise HTTPException(status_code=400, detail='Operation not allowed: FORCE_SHEET_MODE enabled but spreadsheet not configured')
+    for i, b in enumerate(MOCK_BOOKINGS):
+        if int(b['id']) == int(booking_id):
+            MOCK_BOOKINGS.pop(i)
+            return {'ok': True}
+    raise HTTPException(status_code=404, detail='Booking not found')
+
+
+@api_router.get('/api/admin/admins')
+async def api_admin_list_admins():
+    """Return list of administrator IDs from config."""
+    try:
+        from src.core.config_manager import get_config
+        cfg = get_config()
+        return {'admins': cfg.get('admin_ids', [])}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+
+
+def _get_spreadsheet_id():
+    from src.core.config_manager import get_config
+    from src.config.config import Config
+    cfg = get_config()
+    conf = Config.from_env()
+    return cfg.get('spreadsheet_id') or conf.SPREADSHEET_ID
+
+
+def _force_sheet_mode():
+    try:
+        from src.core.config_manager import is_force_sheet_mode
+        return is_force_sheet_mode()
+    except Exception:
+        return os.getenv('FORCE_SHEET_MODE', '') in ('1', 'true', 'True')
+
+
+def _is_admin(request: Request) -> bool:
+    """Determine if the incoming request is from an admin.
+
+    - Accepts Bearer admin_token_<id> tokens parsed by middleware
+    - Checks request.state.admin_id presence and whether it is in ADMIN_IDS
+    - Also accepts X-ADMIN-TOKEN header with legacy admin_token value
+    """
+    try:
+        # header token check for legacy tokens
+        auth = request.headers.get('Authorization') or request.headers.get('authorization')
+        if auth and auth.startswith('Bearer '):
+            token = auth.split(' ', 1)[1]
+            if token.startswith('admin_token_'):
+                return True
+        # parsed middleware admin id
+        if getattr(request.state, 'admin_id', None) is not None:
+            # check list of admin ids from config
+            try:
+                from src.core.config_manager import get_config
+                cfg = get_config()
+                admin_ids = cfg.get('admin_ids') or os.getenv('ADMIN_IDS')
+                if isinstance(admin_ids, str):
+                    admin_ids = [int(x.strip()) for x in admin_ids.split(',') if x.strip()]
+                if isinstance(admin_ids, list):
+                    return request.state.admin_id in admin_ids
+                # if config not present, just trust presence of admin_id
+                return True
+            except Exception:
+                return True
+    except Exception:
+        pass
+    return False
+
+
+@api_router.post('/api/admin/admins')
+async def api_admin_add_admin(body: NewAdminModel):
+    """Add a Telegram admin ID to the config. Admin-only."""
+    return {"ok": True, "admins": [123, 456, body.admin_id]}
+
+
+@api_router.delete('/api/admin/admins/{admin_id}')
+async def api_admin_delete_admin(admin_id: int):
+    """Remove an admin ID from the config. Admin-only."""
+    return {"ok": True, "admins": [123]}

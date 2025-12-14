@@ -5,6 +5,7 @@ from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from src.config.env_loader import load_env
 from src.config.config import Config
+from src.services.admin_manager import is_admin
 from src.db.sheets_client import SheetsClient
 from src.services.booking_service import BookingService
 from src.utils.time_utils import get_next_business_days
@@ -116,7 +117,7 @@ def is_user_admin(user_id: int) -> bool:
     """Check if user is admin"""
     load_env()
     cfg = Config.from_env()
-    return user_id in cfg.ADMIN_USER_IDS
+    return is_admin(user_id)
 
 def get_main_menu(user_id: int) -> types.ReplyKeyboardMarkup:
     """Get main menu with admin button if user is admin"""
@@ -162,7 +163,7 @@ async def cmd_start(message: types.Message, state: FSMContext):
     # Check if user is admin
     load_env()
     cfg = Config.from_env()
-    is_admin = message.from_user.id in cfg.ADMIN_USER_IDS
+    is_admin = is_admin(message.from_user.id)
     
     # Welcome messages in different languages
     welcome_messages = {
@@ -181,7 +182,7 @@ async def cmd_show_admin(message: types.Message):
     """Show admin panel - redirect to admin handlers"""
     load_env()
     cfg = Config.from_env()
-    if message.from_user.id not in cfg.ADMIN_USER_IDS:
+    if not is_admin(message.from_user.id):
         await message.answer("❌ Not admin")
         return
     

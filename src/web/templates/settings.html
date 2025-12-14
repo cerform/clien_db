@@ -1,0 +1,55 @@
+{% extends "base.html" %}
+
+{% block title %}Настройки системы{% endblock %}
+
+{% block content %}
+<div class="container mt-xxl">
+  <div class="section card" style="max-width: 800px; margin: 0 auto;">
+    <div class="card-header">
+      <h1 class="card-title">⚙️ Настройки системы</h1>
+    </div>
+    <div class="card-body">
+      <div class="status">
+        <p>SHEETS: {% if status.sheets_ok %}<span style="color:green">OK</span>{% else %}<span style="color:orange">NOT OK</span>{% endif %}</p>
+        <p>TELEGRAM: {% if status.telegram_ok %}<span style="color:green">OK</span>{% else %}<span style="color:orange">NOT OK</span>{% endif %}</p>
+        <p>LLM: {% if status.llm_ok %}<span style="color:green">OK</span>{% else %}<span style="color:orange">NOT OK</span>{% endif %}</p>
+      </div>
+      <form method="post" action="/admin/settings/save">
+        <div class="form-group">
+          <label>Название салона</label>
+          <input name="salon_name" class="form-input" value="{{config.salon_name or ''}}">
+        </div>
+        <div class="form-group">
+          <label>Часовой пояс</label>
+          <input name="timezone" class="form-input" value="{{config.timezone or 'Europe/Moscow'}}">
+        </div>
+        <div class="form-group">
+          <label>Spreadsheet ID</label>
+          <input name="spreadsheet_id" class="form-input" value="{{config.spreadsheet_id or ''}}">
+        </div>
+        <div class="form-group">
+          <label>Salon Calendar ID</label>
+          <input name="calendar_id" class="form-input" value="{{config.calendar_id or ''}}">
+        </div>
+        <div class="form-group">
+          <label>Admin IDs (comma separated)</label>
+          <input name="admin_ids" class="form-input" value="{{config.admin_ids | join(',') if config.admin_ids else ''}}">
+        </div>
+        <div class="form-group mt-lg">
+          <button type="submit" class="btn btn-primary">Сохранить</button>
+        </div>
+      </form>
+      <hr/>
+      <form method="post" action="/admin/settings/migrate">
+        <label>Запустить миграцию структуры таблиц (может длиться долго)</label>
+        <div class="form-group mt-lg">
+          <input name="admin_id" placeholder="Введите ваш admin ID" class="form-input">
+        </div>
+        <div class="form-group">
+          <button type="submit" class="btn btn-warning">Запустить миграцию</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+{% endblock %}

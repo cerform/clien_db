@@ -44,15 +44,14 @@ provider "kubernetes" {
   host = google_container_cluster.jenkins_cluster.endpoint
   cluster_ca_certificate = base64decode(google_container_cluster.jenkins_cluster.master_auth[0].cluster_ca_certificate)
   token = data.google_client_config.default.access_token
-  load_config_file = false
+  # load_config_file removed: not supported in this provider version
 }
 
 provider "helm" {
-  kubernetes {
+  kubernetes = {
     host                   = google_container_cluster.jenkins_cluster.endpoint
     cluster_ca_certificate = base64decode(google_container_cluster.jenkins_cluster.master_auth[0].cluster_ca_certificate)
     token                  = data.google_client_config.default.access_token
-    load_config_file       = false
   }
 }
 

@@ -1,0 +1,23 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Pending Bookings - Admin</title>
+</head>
+<body>
+  <h1>Pending Bookings</h1>
+  <ul>
+  {% for b in pending %}
+    <li>
+      ID: {{ b.id }} | Master: {{ b.master_id }} | Start: {{ b.start_time }} | End: {{ b.end_time }}
+      <form method="post" action="/admin/bookings/pending/{{ b.id }}/confirm">
+        <button type="submit">Confirm</button>
+      </form>
+      <form method="post" action="/admin/bookings/pending/{{ b.id }}/reject">
+        <button type="submit">Reject</button>
+      </form>
+    </li>
+  {% endfor %}
+  </ul>
+</body>
+</html>

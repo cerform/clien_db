@@ -1,0 +1,105 @@
+{% extends "base.html" %}
+
+{% block title %}Записи — Admin Panel{% endblock %}
+
+{% block content %}
+<div class="container mt-xxl">
+    <div class="section card card-interactive">
+        <div class="card-header flex space-between align-center">
+            <h1 class="card-title">Записи</h1>
+            <button class="btn btn-primary" data-modal-open="addBookingModal">Добавить запись</button>
+        </div>
+        <div class="card-body">
+            <div class="table-responsive">
+                <table class="table">
+                    <thead>
+                        <tr>
+                            <th>Клиент</th>
+                            <th>Мастер</th>
+                            <th>Дата</th>
+                            <th>Статус</th>
+                            <th>Действия</th>
+                        </tr>
+                    </thead>
+                    <tbody id="bookings-table-body"></tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Add Booking Modal -->
+<div class="modal-overlay" id="addBookingModal" style="display:none">
+    <div class="modal">
+        <div class="modal-header">
+            <div class="modal-title">Добавить запись</div>
+            <button class="modal-close" data-modal-close>&times;</button>
+        </div>
+        <div class="modal-body">
+            <form id="add-booking-form" class="form-grid gap-lg">
+                <div class="form-group"><label class="form-label">Client ID</label><input class="form-input" name="client_id" required></div>
+                <div class="form-group"><label class="form-label">Master ID</label><input class="form-input" name="master_id" required></div>
+                <div class="form-group"><label class="form-label">Service ID</label><input class="form-input" name="service_id" required></div>
+                <div class="form-group"><label class="form-label">Date (YYYY-MM-DD)</label><input class="form-input" name="date" required></div>
+                <div class="form-group"><label class="form-label">Start time (HH:MM)</label><input class="form-input" name="slot_start" required></div>
+                <div class="form-group"><label class="form-label">End time (HH:MM)</label><input class="form-input" name="slot_end" required></div>
+                <div class="form-group mt-lg"><button class="btn btn-primary btn-block" type="submit">Сохранить</button></div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<script>
+document.getElementById('add-booking-form').addEventListener('submit', async (e)=>{
+        e.preventDefault();
+        const form = e.target; const token = localStorage.getItem('inka_admin_token'); const headers = {'Content-Type':'application/json'}; if (token) headers['Authorization'] = 'Bearer ' + token;
+        const body = { client_id: parseInt(form.client_id.value,10), master_id: parseInt(form.master_id.value,10), service_id: parseInt(form.service_id.value,10), date: form.date.value, slot_start: form.slot_start.value, slot_end: form.slot_end.value };
+        const res = await fetch('/api/bookings', {method:'POST', headers, body: JSON.stringify(body)});
+        if (res.ok) { app.closeModal(document.getElementById('addBookingModal')); await loadBookings(); } else { alert('Failed to add booking'); }
+});
+</script>
+<script>
+async function loadBookings(){
+    const res = await fetch('/api/bookings');
+    const list = await res.json();
+    const body = document.getElementById('bookings-table-body');
+    body.innerHTML = '';
+    list.forEach(b => {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+            <td>${b.client_name || b.client_id || ''}</td>
+            <td>${b.master_name || b.master_id || ''}</td>
+            <td>${b.booking_date || ''} ${b.start_time || ''}</td>
+            <td>${b.status || ''}</td>
+            <td style="display:flex;gap:8px"><button class="btn edit-booking" data-booking-id="${b.id}">Edit</button><button class="btn btn-danger delete-booking" data-booking-id="${b.id}">Delete</button></td>
+        `;
+        body.appendChild(tr);
+    });
+}
+
+async function openEditBooking(id){
+    const res = await fetch(`/api/bookings/${id}`);
+    if (!res.ok) return alert('Failed to load booking');
+    const b = await res.json();
+    const data = JSON.stringify(b, null, 2);
+    // Show prompt edit for core fields (status as example)
+    const newStatus = prompt('Enter new status (confirmed, pending, completed, cancelled):', b.status || 'pending');
+    if (!newStatus) return;
+    const token = localStorage.getItem('inka_admin_token');
+    const headers = {'Content-Type': 'application/json'}; if (token) headers['Authorization'] = 'Bearer ' + token;
+    const body = { status: newStatus };
+    const put = await fetch(`/api/bookings/${id}`, {method:'PUT', headers, body: JSON.stringify(body)});
+    if (put.ok) await loadBookings(); else alert('Failed to update booking');
+}
+
+async function deleteBooking(id){ if (!confirm('Delete booking?')) return; const token = localStorage.getItem('inka_admin_token'); const headers = {}; if (token) headers['Authorization'] = 'Bearer ' + token; const res = await fetch(`/api/bookings/${id}`, {method:'DELETE', headers}); if (res.ok) await loadBookings(); else alert('Failed to delete booking'); }
+
+document.addEventListener('DOMContentLoaded', ()=>{ loadBookings(); });
+
+// Delegation for bookings edit/delete
+document.body.addEventListener('click', (e)=>{
+    const editBtn = e.target.closest('.edit-booking'); if (editBtn) openEditBooking(editBtn.dataset.bookingId);
+    const delBtn = e.target.closest('.delete-booking'); if (delBtn) deleteBooking(delBtn.dataset.bookingId);
+});
+</script>
+{% endblock %}

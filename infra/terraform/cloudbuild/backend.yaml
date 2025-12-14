@@ -31,6 +31,12 @@ steps:
           echo "Staging smoke test failed"; exit 1
         fi
 
+        # Run migrations using Cloud Run Job (create/replace then execute)
+        echo "Creating migrator job..."
+        gcloud run jobs replace --image=gcr.io/$PROJECT_ID/tattoo-backend:$SHORT_SHA tattoo-backend-migrator --region=${_REGION} --command python --args src/db/init_postgres.py || \
+          gcloud run jobs create --image=gcr.io/$PROJECT_ID/tattoo-backend:$SHORT_SHA tattoo-backend-migrator --region=${_REGION} --command python --args src/db/init_postgres.py --quiet
+        gcloud run jobs execute tattoo-backend-migrator --region=${_REGION} --wait --quiet
+
         # Deploy to production
         gcloud run deploy tattoo-backend \
           --image=gcr.io/$PROJECT_ID/tattoo-backend:$SHORT_SHA \

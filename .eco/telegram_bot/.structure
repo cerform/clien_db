@@ -1,0 +1,5 @@
+# TELEGRAM_BOT
+# Structure: api, telegram_integration
+api/
+telegram_integration/
+README.md

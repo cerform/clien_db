@@ -17,6 +17,7 @@ class Config:
     ENV: str
     OPENAI_API_KEY: str
     DEFAULT_SLOT_DURATION: int
+    AI_ONLY_MODE: bool
 
     @staticmethod
     def from_env():
@@ -30,8 +31,8 @@ class Config:
             return os.path.join(project_root, path)
         
         return Config(
-            BOT_TOKEN=os.getenv("BOT_TOKEN", ""),
-            USE_WEBHOOK=os.getenv("USE_WEBHOOK", "false").lower() in ("1","true","yes"),
+            BOT_TOKEN=os.getenv("TELEGRAM_BOT_TOKEN") or os.getenv("BOT_TOKEN", ""),
+            USE_WEBHOOK=os.getenv("USE_WEBHOOK", "true").lower() in ("1","true","yes"),
             WEBHOOK_URL=os.getenv("WEBHOOK_URL", ""),
             PORT=int(os.getenv("PORT", "8080")),
             GOOGLE_CREDENTIALS_PATH=to_absolute_path(os.getenv("GOOGLE_CREDENTIALS_PATH", "credentials.json")),
@@ -39,8 +40,21 @@ class Config:
             SPREADSHEET_ID=os.getenv("SPREADSHEET_ID", ""),
             MASTER_CALENDAR_ID=os.getenv("MASTER_CALENDAR_ID", ""),
             DEFAULT_TIMEZONE=os.getenv("DEFAULT_TIMEZONE", "Asia/Jerusalem"),
-            ADMIN_USER_IDS=[int(x.strip()) for x in os.getenv("ADMIN_USER_IDS", "").split(",") if x.strip()],
-            ENV=os.getenv("ENV", "development"),
+            # Accept comma or semicolon separated values for ADMIN_USER_IDS
+            ADMIN_USER_IDS=[int(x.strip()) for x in __import__('re').split('[,;]', os.getenv("ADMIN_USER_IDS", "")) if x.strip()],
+            ENV=os.getenv("ENV", "production"),
             OPENAI_API_KEY=os.getenv("OPENAI_API_KEY", ""),
             DEFAULT_SLOT_DURATION=int(os.getenv("DEFAULT_SLOT_DURATION", "120")),
+            AI_ONLY_MODE=os.getenv("AI_ONLY_MODE", "false").lower() in ("1","true","yes"),
         )
+
+    def validate(self):
+        """Validate critical config values and raise ValueError if critical missing"""
+        missing = []
+        if not self.BOT_TOKEN:
+            missing.append('TELEGRAM_BOT_TOKEN')
+        if not self.OPENAI_API_KEY:
+            # OpenAI key is optional, but warn if missing and INKA is required
+            pass
+        if missing:
+            raise ValueError(f"Missing required config: {', '.join(missing)}")
