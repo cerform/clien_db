@@ -239,6 +239,31 @@ Auto-created with 4 tabs:
 
 ---
 
+## 🗄️ Migrating schema / adding records to Cloud SQL
+
+If you want to add new tables or seed records in Cloud SQL (PostgreSQL), follow this pattern:
+
+1. Add a SQL migration file into `db/migrations/`, for example `001_create_admins.sql`. We include a sample migration that creates an `admins` table and inserts an initial admin.
+
+2. Upload the SQL file to a GCS bucket and import it into your Cloud SQL instance. Example script available: `scripts/migrate_cloudsql.sh`.
+
+Example usage:
+
+```bash
+# Upload and request import
+./scripts/migrate_cloudsql.sh <CLOUDSQL_INSTANCE> <GCS_BUCKET> db/migrations/001_create_admins.sql <DB_NAME>
+
+# Follow the operation
+gcloud sql operations list --instance=<CLOUDSQL_INSTANCE>
+gcloud sql operations describe <OPERATION_ID> --instance=<CLOUDSQL_INSTANCE>
+```
+
+Notes:
+- The import operation reads the SQL file from the provided GCS URI; make sure the Cloud SQL service account has read access to the bucket/object.
+- You can also run migrations directly against the database using `psql` (via Cloud SQL Proxy) if you prefer an interactive approach.
+
+If you'd like, I can add additional migration files or create a small sequence runner to apply multiple migrations in order.
+
 ## 🚀 Deployment
 
 ### Local Development (Polling)
