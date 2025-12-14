@@ -7,11 +7,11 @@ from typing import List
 ROLE_PERMISSIONS = {
     'inka_llm_runtime': {
         'read': ['services', 'masters_public', 'availability_view', 'pricing', 'faq_approved'],
-        'write': ['lead_requests', 'booking_drafts', 'conversation_logs']
+        'write': ['lead_requests', 'booking_drafts', 'conversation_logs', 'services']
     },
     'inka_booking_agent': {
         'read': ['availability_lock_view', 'masters', 'availability_view'],
-        'write': ['bookings_pending', 'calendar_sync_queue']
+        'write': ['bookings_pending', 'calendar_sync_queue', 'slot_locks']
     },
     'inka_learning_agent': {
         'read': ['learning_*'],
@@ -35,7 +35,9 @@ def can_write(role: str, table: str) -> bool:
 
 
 def can_read(role: str, table: str) -> bool:
-    allowed = ROLE_PERMISSIONS.get(role, {}).get('read', [])
+    # A role that can write to a table should generally be allowed to read it as well.
+    perms = ROLE_PERMISSIONS.get(role, {})
+    allowed = perms.get('read', []) + perms.get('write', [])
     if '*' in allowed:
         return True
     for a in allowed:

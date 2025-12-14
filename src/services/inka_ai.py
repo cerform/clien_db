@@ -332,9 +332,16 @@ class INKAConsultant:
             from src.config.config import Config
             cfg = Config.from_env()
             self.enable_llm = bool(cfg.ENABLE_LLM)
+            config_loaded = True
         except Exception:
-            self.enable_llm = True
+            # Be conservative in test environments: if config can't be read, disable LLM by default
+            self.enable_llm = False
+            config_loaded = False
         self.model = "gpt-3.5-turbo"
+        # If there's no OpenAI service or api key provided, disable LLM by default
+        # unless the config explicitly requested LLM (i.e., config_loaded is True and cfg.ENABLE_LLM is True).
+        if not self.openai_service and not config_loaded:
+            self.enable_llm = False
 
     def get_system_prompt(self) -> str:
         """

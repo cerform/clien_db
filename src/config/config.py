@@ -47,7 +47,8 @@ class Config:
             OPENAI_API_KEY=os.getenv("OPENAI_API_KEY", ""),
                         DEFAULT_SLOT_DURATION=int(os.getenv("DEFAULT_SLOT_DURATION", "120")),
                         AI_ONLY_MODE=os.getenv("AI_ONLY_MODE", "false").lower() in ("1","true","yes"),
-                        ENABLE_LLM=os.getenv("ENABLE_LLM", "true").lower() in ("1","true","yes"),
+                        # Default to disabling LLM unless explicitly enabled in the environment.
+                        ENABLE_LLM=os.getenv("ENABLE_LLM", "false").lower() in ("1","true","yes"),
         )
 
     def validate(self):
