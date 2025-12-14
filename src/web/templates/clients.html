@@ -54,6 +54,22 @@
     </div>
 </div>
 
+<!-- Modal edit client -->
+<div class="modal-overlay" id="editClientModal" style="display:none">
+    <div class="modal">
+        <div class="modal-header">
+            <h2>Редактировать клиента</h2>
+            <button class="modal-close" data-modal-close>&times;</button>
+        </div>
+        <form id="edit-client-form" class="form-grid gap-lg">
+            <input type="hidden" name="id">
+            <div class="form-group"><label class="form-label">Имя</label><input class="form-input" name="name" required></div>
+            <div class="form-group"><label class="form-label">Телефон</label><input class="form-input" name="phone" required></div>
+            <div class="form-group mt-lg"><button type="submit" class="btn btn-primary btn-block">Сохранить</button></div>
+        </form>
+    </div>
+</div>
+
 <script>
 function openAddClientModal() {
     document.getElementById('addClientModal').style.display = 'block';
@@ -61,9 +77,10 @@ function openAddClientModal() {
 function closeAddClientModal() {
     document.getElementById('addClientModal').style.display = 'none';
 }
-// TODO: AJAX для загрузки и добавления клиентов
+// AJAX для загрузки и добавления клиентов (улучшенный)
 async function loadClients() {
     const res = await fetch('/api/clients');
+    if (!res.ok) { app.showAlert('Не удалось загрузить клиентов', 'error'); return }
     const clients = await res.json();
     const body = document.getElementById('clients-table-body');
     body.innerHTML = '';
@@ -94,55 +111,63 @@ document.getElementById('add-client-form').addEventListener('submit', async (e) 
     const res = await fetch('/api/clients', {method:'POST', headers, body: JSON.stringify(body)});
     if (res.ok) {
         closeAddClientModal();
-        await loadClients();
-    } else {
-        alert('Failed to add client');
-            if (res.ok) {
-                closeAddClientModal();
-                await loadClients();
-                app.showAlert('Client added', 'success');
-            } else {
-                app.showAlert('Failed to add client', 'error');
-            }
-if (!document.getElementById('editClientModal')) document.body.insertAdjacentHTML('beforeend', editModalHtml);
-function openEditClient(id) {
-    // find client
-    const token = localStorage.getItem('inka_admin_token');
-    fetch(`/api/clients/${id}`).then(r => r.json()).then(c => {
-        const form = document.getElementById('edit-client-form');
-        form.id.value = c.id;
+        const body = {
+            name: form.name.value,
+            phone: form.phone.value
+        };
+        let res
+        try {
+            res = await fetch('/api/clients', {method:'POST', headers, body: JSON.stringify(body)});
+        } catch (err) {
+            app.showAlert('Ошибка сети при добавлении клиента', 'error');
+            return
+        }
+        if (res.ok) {
+            app.showAlert('Клиент добавлен', 'success');
+            app.closeModal(document.getElementById('addClientModal'));
+            await loadClients();
+        } else {
+            const txt = await res.text().catch(()=>null)
+            app.showAlert('Не удалось добавить клиента: ' + (txt || res.statusText), 'error');
+        }
         form.name.value = c.name || '';
-        form.phone.value = c.phone || '';
-        app.openModal('editClientModal');
-    }).catch(e => alert('Failed to load client'));
-}
-function closeEditClientModal() { app.closeModal(document.getElementById('editClientModal')); }
+    function openEditClient(id) {
+        fetch(`/api/clients/${id}`).then(r => {
+            if (!r.ok) throw new Error('Failed to load client');
+            return r.json()
+        }).then(c => {
+            const form = document.getElementById('edit-client-form');
+            form.id.value = c.id;
+            form.name.value = c.name || '';
+            form.phone.value = c.phone || '';
+            app.openModal('editClientModal');
+        }).catch(e => app.showAlert('Не удалось загрузить клиента', 'error'));
+    }
+    function closeEditClientModal() { app.closeModal(document.getElementById('editClientModal')); }
 
-document.getElementById('edit-client-form').addEventListener('submit', async (e) => {
-    e.preventDefault();
-    const form = e.target;
-    const id = form.id.value;
-    const token = localStorage.getItem('inka_admin_token');
-    const headers = {'Content-Type': 'application/json'};
-    if (token) headers['Authorization'] = 'Bearer ' + token;
-    const body = { name: form.name.value, phone: form.phone.value };
-    const res = await fetch(`/api/clients/${id}`, {method:'PUT', headers, body: JSON.stringify(body)});
-            if (res.ok) {
-                closeEditClientModal();
-                await loadClients();
-                app.showAlert('Client updated', 'success');
-            } else {
-                app.showAlert('Failed to update client', 'error');
-            }
-});
-
-async function deleteClient(id) {
-    if (!confirm('Are you sure you want to delete this client?')) return;
-    const token = localStorage.getItem('inka_admin_token');
-    const headers = {};
-    if (token) headers['Authorization'] = 'Bearer ' + token;
-    const res = await fetch(`/api/clients/${id}`, {method: 'DELETE', headers});
-            if (res.ok) { 
+    document.getElementById('edit-client-form').addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const form = e.target;
+        const id = form.id.value;
+        const token = localStorage.getItem('inka_admin_token');
+        const headers = {'Content-Type': 'application/json'}; if (token) headers['Authorization'] = 'Bearer ' + token;
+        const body = { name: form.name.value, phone: form.phone.value };
+        let res
+        try {
+            res = await fetch(`/api/clients/${id}`, {method:'PUT', headers, body: JSON.stringify(body)});
+        } catch (err) {
+            app.showAlert('Ошибка сети при обновлении клиента', 'error');
+            return
+        }
+        if (res.ok) {
+            app.showAlert('Клиент обновлён', 'success');
+            app.closeModal(document.getElementById('editClientModal'));
+            await loadClients();
+        } else {
+            const txt = await res.text().catch(()=>null)
+            app.showAlert('Не удалось обновить клиента: ' + (txt || res.statusText), 'error');
+        }
+    });
                 await loadClients(); 
                 app.showAlert('Client deleted', 'success'); 
             } else { 

@@ -29,3 +29,4 @@ pymysql
 gspread
 google-cloud-secret-manager
 psycopg2-binary
+jsonschema>=4.20.0

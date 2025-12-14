@@ -33,6 +33,20 @@ def get_admin_ids() -> List[int]:
     cfg = Config.from_env()
     ids_env = list(cfg.ADMIN_USER_IDS) if cfg.ADMIN_USER_IDS else []
 
+    # Also check local config.json saved by settings UI (best-effort)
+    try:
+        from src.core.config_manager import get_config as _get_local_config
+        local_cfg = _get_local_config()
+        local_admins = []
+        if local_cfg and local_cfg.get('admin_ids'):
+            if isinstance(local_cfg.get('admin_ids'), list):
+                local_admins = [int(x) for x in local_cfg.get('admin_ids') if x]
+            else:
+                local_admins = [int(x.strip()) for x in str(local_cfg.get('admin_ids')).split(',') if x.strip()]
+        ids_env = list(sorted(set(ids_env + local_admins)))
+    except Exception:
+        pass
+
     try:
         sc = SheetsClient(cfg.GOOGLE_CREDENTIALS_PATH, cfg.GOOGLE_TOKEN_PATH)
         from src.services.google_sheets_initializer import ensure_sheets_structure

@@ -51,4 +51,7 @@ async def endpoints_page(request: Request):
 
 @admin_router.get("/calendar-settings", response_class=HTMLResponse)
 async def calendar_settings_page(request: Request):
-    return templates.TemplateResponse("calendar_settings.html", {"request": request})
+    # Provide service account email to the template so masters can add it to their calendars
+    import os
+    service_account = os.getenv('GOOGLE_SERVICE_ACCOUNT') or os.getenv('SERVICE_ACCOUNT_EMAIL') or ''
+    return templates.TemplateResponse("calendar_settings.html", {"request": request, "service_account": service_account})

@@ -12,16 +12,19 @@
                 <button class="btn btn-danger" onclick="clearDB()">Clear</button>
             </div>
         </div>
-        <div class="card-body">
-            <p>Здесь вы можете управлять резервными копиями, экспортом и восстановлением данных.</p>
-            <input type="file" id="restoreFile" style="display:none" onchange="restoreDB(this.files[0])">
-        </div>
+            <div class="card-body">
+                <p>Управление базой данных (только админы): просмотр таблиц, экспорт и простые операции (PoC).</p>
+                <div style="display:flex;gap:8px;align-items:center;margin-bottom:10px">
+                    <select id="db-tables-select" style="min-width:240px"><option>Loading...</option></select>
+                    <button id="load-table" class="btn">Load</button>
+                    <button id="refresh-tables" class="btn">Refresh</button>
+                    <button id="export-table" class="btn btn-outline">Export CSV</button>
+                </div>
+                <div id="db-table" style="min-height:200px"></div>
+                <input type="file" id="restoreFile" style="display:none" onchange="restoreDB(this.files[0])">
+            </div>
     </div>
 </div>
 
-<script>
-function exportDB() { alert('Экспорт базы (placeholder)'); }
-function clearDB() { if (!confirm('Очистить базу?')) return; alert('Очистка базы (placeholder)'); }
-function restoreDB(file) { alert('Восстановление: ' + file.name); }
-</script>
+    <script src="/static/js/db_manager.js"></script>
 {% endblock %}

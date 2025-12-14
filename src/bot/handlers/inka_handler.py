@@ -4,6 +4,7 @@ Drop this into your handlers and it's ready to go
 """
 
 import logging
+import json
 from typing import Optional, Dict
 from src.services.inka_ai import INKA
 from src.config.config import Config
@@ -137,6 +138,29 @@ async def handle_client_message(
         
         # Process through INKA
         result = inka.process(message.text, client_context)
+
+        # Anti-repeat enforcement: check last antirepeat key in FSM state
+        meta = result.get("meta", {})
+        antikey = meta.get("antirepeat_key")
+        if antikey:
+            data = await state.get_data()
+            last = data.get("last_antirepeat_key")
+            if last == antikey:
+                # Don't repeat identical reply; ask for clarification
+                return {
+                    "response": "Можешь переформулировать, пожалуйста? Я стараюсь не повторяться и хочу лучше понять.",
+                    "next_action": "other",
+                    "classification": result.get("classification", {}),
+                }
+            # Store latest antirepeat key and client profile for future checks
+            await state.update_data({
+                "last_antirepeat_key": antikey,
+                "client_profile": meta.get("client_profile", {}),
+            })
+            # Persist simple stage info for FSM (S0..S7 can be built on this)
+            stage = result.get("classification", {}).get("stage")
+            if stage:
+                await state.update_data({"inka_stage": stage})
         
         # Log classification
         logger.debug(
@@ -178,7 +202,7 @@ def create_inka_router() -> Router:
 
         welcome_messages = {
             'ru': (
-                "👋 Здравствуйте! Я AI-ассистент тату студии.\n\n"
+                "👋 Здравствуйте! Я INKA — ассистент тату-студии.\n\n"
                 "Я помогу вам записаться на сеанс.\n"
                 "Просто напишите мне, что хотите сделать:\n\n"
                 "• Записаться на тату\n"
@@ -188,7 +212,7 @@ def create_inka_router() -> Router:
                 "Пишите свободно, я вас понимаю! 😊"
             ),
             'en': (
-                "👋 Hello! I'm the AI assistant of the tattoo studio.\n\n"
+                "👋 Hello! I'm INKA, the assistant of the tattoo studio.\n\n"
                 "I'll help you book a session.\n"
                 "Just tell me what you want to do:\n\n"
                 "• Book a tattoo\n"
@@ -198,7 +222,7 @@ def create_inka_router() -> Router:
                 "Write freely, I understand you! 😊"
             ),
             'he': (
-                "👋 שלום! אני העוזר הדיגיטלי של סטודיו הקעקועים.\n\n"
+                "👋 שלום! אני INKA — העוזר של סטודיו הקעקועים.\n\n"
                 "אעזור לך להזמין תור.\n"
                 "פשוט כתוב לי מה אתה רוצה לעשות:\n\n"
                 "• להזמין קעקוע\n"
@@ -256,6 +280,22 @@ def create_inka_router() -> Router:
             logger.error(f"Error in processing: {result}")
 
         # else: continue_consultation - just wait for next message
+
+    @router.message(Command("session"))
+    async def cmd_session(message: types.Message, state: FSMContext):
+        """Admin-only: dump FSM session data for debugging"""
+        user_is_admin = is_admin(message.from_user.id)
+        if not user_is_admin:
+            await message.answer("Только админ может использовать эту команду.")
+            return
+
+        data = await state.get_data()
+        # Limit output size for safety
+        dump = json.dumps(data or {}, ensure_ascii=False, indent=2)
+        if len(dump) > 1900:
+            dump = dump[:1900] + "\n...truncated..."
+
+        await message.answer(f"Сессия:\n{dump}")
 
     return router
 
