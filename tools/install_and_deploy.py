@@ -142,7 +142,10 @@ def run_install(
     secret_mappings = []
     if telegram_bot_token:
         # Cloud Run expects SECRET_NAME:VERSION (no projects/ prefix)
+        # Provide both TELEGAM_BOT_TOKEN (for code that reads that secret) and BOT_TOKEN
+        # (some entrypoints expect BOT_TOKEN env var). Map both to the same secret.
         secret_mappings.append(f"TELEGRAM_BOT_TOKEN=TELEGRAM_BOT_TOKEN:latest")
+        secret_mappings.append(f"BOT_TOKEN=TELEGRAM_BOT_TOKEN:latest")
     if llm_api_key:
         secret_mappings.append(f"LLM_API_KEY=LLM_API_KEY:latest")
     secrets_arg = " --set-secrets " + ",".join(secret_mappings) if secret_mappings else ""
