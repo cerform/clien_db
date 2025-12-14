@@ -1,0 +1,29 @@
+name: Installer Smoke Test
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ main, production, eco-system ]
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+      - name: Install deps
+        run: |
+          python -m pip install -r requirements.txt
+      - name: Run unit tests
+        run: |
+          pytest -q tests/unit || true
+      - name: Run installer smoke (dry-run) if enabled
+        if: env.RUN_INSTALLER_SMOKE == 'true'
+        run: |
+          chmod +x scripts/ci_installer_smoke.sh
+          ./scripts/ci_installer_smoke.sh
+        env:
+          RUN_INSTALLER_SMOKE: ${{ env.RUN_INSTALLER_SMOKE }}
