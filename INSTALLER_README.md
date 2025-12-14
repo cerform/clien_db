@@ -50,6 +50,7 @@ You can also drive the installer from the deployed web UI. Visit `<CLOUD_RUN_URL
 
 Notes:
 - The web installer creates a lockfile `.installer_complete` in the project root after a successful deploy to prevent accidental re-runs. Admin users (as configured via `ADMIN_USER_IDS`) may bypass this lock.
+ - The web installer creates a lockfile `.installer_complete` in the project root after a successful deploy to prevent accidental re-runs. Admin users (as configured via `ADMIN_USER_IDS`) may bypass this lock. Admins can remove the lock via `POST /installer/unlock` (requires admin token `Authorization: Bearer <token>`).
 - The UI is a multi-step wizard (6 steps). Use the final Deploy step to run the installer. For CI runs prefer `scripts/ci_installer_smoke.sh --dry-run` or the CLI `tools/install_and_deploy.py --dry-run`.
 
 ## Steps for Developers (local testing)
