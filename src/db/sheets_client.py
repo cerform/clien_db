@@ -18,6 +18,8 @@ SCOPES = [
 logger = logging.getLogger(__name__)
 
 class SheetsClient:
+    # Expose module-level SCOPES as a class attribute for tests and external usage
+    SCOPES = SCOPES
     def __init__(self, creds_path="credentials.json", token_path="token.json"):
         # Convert to absolute paths if relative
         if not os.path.isabs(creds_path):

@@ -1,8 +1,13 @@
 import os
 import json
 from typing import Dict, Any
-from google.cloud import secretmanager
-from google.api_core.exceptions import NotFound
+try:
+    # Import inside try/except to make tests work in environments without google-cloud-secret-manager
+    from google.cloud import secretmanager  # type: ignore
+    from google.api_core.exceptions import NotFound  # type: ignore
+except Exception:  # pragma: no cover - optional dependency
+    secretmanager = None
+    NotFound = Exception
 
 CONFIG_SHEET = os.getenv("CONFIG_SHEET_ID")
 GCP_PROJECT = os.getenv("GCP_PROJECT_ID") or os.getenv("PROJECT_ID") or os.getenv("GOOGLE_CLOUD_PROJECT")
@@ -25,6 +30,8 @@ def _detect_project() -> str | None:
     return None
 
 def _get_secret_client():
+    if not secretmanager:
+        return None
     return secretmanager.SecretManagerServiceClient()
 
 def get_secret(secret_id: str) -> str | None:
@@ -48,6 +55,8 @@ def get_secret(secret_id: str) -> str | None:
                 return secrets.get(secret_id)
             except Exception:
                 return None
+        return None
+    if not client:
         return None
     name = f"projects/{project}/secrets/{secret_id}/versions/latest"
     try:
@@ -77,6 +86,22 @@ def set_secret(secret_id: str, value: str) -> None:
             return
         except Exception:
             # Give up silently
+            return
+
+    if not client:
+        # Fallback: store in local config.json
+        try:
+            cfg = {}
+            if os.path.exists("config.json"):
+                with open("config.json", encoding="utf-8") as f:
+                    cfg = json.load(f) or {}
+            secrets = cfg.get("secrets", {})
+            secrets[secret_id] = value
+            cfg["secrets"] = secrets
+            with open("config.json", "w", encoding="utf-8") as f:
+                json.dump(cfg, f, indent=2, ensure_ascii=False)
+            return
+        except Exception:
             return
 
     parent = f"projects/{project}"

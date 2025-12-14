@@ -67,3 +67,6 @@ tmp/
 
 __pycache__/
 .venv_predeploy/
+test.db
+.installer_complete
+config.json

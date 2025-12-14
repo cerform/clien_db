@@ -3,6 +3,7 @@ from typing import List, Dict, Any, Optional
 import logging
 
 from src.db.sheets_client import SheetsClient
+from src.db.schemas import headers_for, build_row, pad_row_to_headers
 # Import get_config lazily inside functions to avoid importing google.cloud at module import time
 
 logger = logging.getLogger(__name__)
@@ -52,8 +53,14 @@ def update_row(sheet_name: str, row_id: str, values: Dict[str, Any]) -> bool:
 def append_row(sheet_name: str, values: Dict[str, Any]) -> Dict[str, Any]:
     sid = _get_spreadsheet_id()
     sc = SheetsClient()
-    # If sheet empty, headers will be missing; simply append values in order of keys
-    row = [values.get(k, "") for k in values.keys()]
+    # If we have a canonical header for the sheet, use build_row to align columns
+    hdrs = headers_for(sheet_name)
+    if hdrs:
+        row = build_row(sheet_name, values)
+        row = pad_row_to_headers(sheet_name, row)
+    else:
+        # fallback: append values in key order
+        row = [values.get(k, "") for k in values.keys()]
     sc.append_row(sid, sheet_name, row)
     return values
 

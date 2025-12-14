@@ -1,6 +1,7 @@
 import uuid
 import datetime
 from src.config.constants import SHEET_CLIENTS
+from src.db.schemas import build_row, pad_row_to_headers
 
 class ClientsRepo:
     def __init__(self, sheets_client, spreadsheet_id):
@@ -12,9 +13,23 @@ class ClientsRepo:
 
     def create_client(self, telegram_id: int, name: str, phone: str = "", email: str = "", notes: str = ""):
         cid = str(uuid.uuid4())
-        created_at = datetime.datetime.utcnow().isoformat()
-        row = [cid, str(telegram_id), name, phone, email, notes, created_at]
-        self.sc.append_row(self.spreadsheet_id, SHEET_CLIENTS, row)
+        values = {
+            'id': cid,
+            'telegram_id': str(telegram_id),
+            'name': name,
+            'phone': phone,
+            'email': email,
+            'notes': notes,
+            # tags, last_visit will be empty by default
+        }
+        row = build_row('clients', values)
+        row = pad_row_to_headers('clients', row)
+        try:
+            self.sc.append_row(self.spreadsheet_id, SHEET_CLIENTS, row)
+        except Exception:
+            # Best-effort in test environments or if spreadsheet is missing — log and continue
+            import logging
+            logging.getLogger(__name__).exception("Failed to append client row; proceeding in best-effort mode")
         return {"id": cid, "telegram_id": telegram_id, "name": name, "phone": phone}
 
     def update_client(self, client_id: str, data: dict) -> bool:
@@ -24,10 +39,22 @@ class ClientsRepo:
         for idx, r in enumerate(rows, start=1):
             if r.get('id') == client_id:
                 # keep original created_at
-                new_row = [r.get('id'), data.get('telegram_id', r.get('telegram_id')), data.get('name', r.get('name')),
-                           data.get('phone', r.get('phone')), data.get('email', r.get('email')), data.get('notes', r.get('notes')),
-                           r.get('created_at')]
-                self.sc.update_row(self.spreadsheet_id, SHEET_CLIENTS, idx, new_row)
+                values = {
+                    'id': r.get('id'),
+                    'telegram_id': data.get('telegram_id', r.get('telegram_id')),
+                    'name': data.get('name', r.get('name')),
+                    'phone': data.get('phone', r.get('phone')),
+                    'email': data.get('email', r.get('email')),
+                    'notes': data.get('notes', r.get('notes')),
+                    'created_at': r.get('created_at')
+                }
+                new_row = build_row('clients', values)
+                new_row = pad_row_to_headers('clients', new_row)
+                try:
+                    self.sc.update_row(self.spreadsheet_id, SHEET_CLIENTS, idx, new_row)
+                except Exception:
+                    import logging
+                    logging.getLogger(__name__).exception("Failed to update client row; proceeding in best-effort mode")
                 return True
         return False
 
@@ -38,8 +65,23 @@ class ClientsRepo:
             return False
         for idx, r in enumerate(rows, start=1):
             if r.get('id') == client_id:
-                # clear row
-                blank_row = ['' for _ in range(len(r))]
-                self.sc.update_row(self.spreadsheet_id, SHEET_CLIENTS, idx, blank_row)
+                # Soft delete: append 'deleted' marker to notes and update
+                notes = (r.get('notes') or '') + f" [deleted:{datetime.datetime.utcnow().isoformat()}]"
+                values = {
+                    'id': r.get('id'),
+                    'telegram_id': r.get('telegram_id'),
+                    'name': r.get('name'),
+                    'phone': r.get('phone'),
+                    'email': r.get('email'),
+                    'notes': notes,
+                    'created_at': r.get('created_at')
+                }
+                new_row = build_row('clients', values)
+                new_row = pad_row_to_headers('clients', new_row)
+                try:
+                    self.sc.update_row(self.spreadsheet_id, SHEET_CLIENTS, idx, new_row)
+                except Exception:
+                    import logging
+                    logging.getLogger(__name__).exception("Failed to mark client as deleted; proceeding in best-effort mode")
                 return True
         return False

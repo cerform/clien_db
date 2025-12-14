@@ -5,6 +5,7 @@ import json
 import logging
 
 from src.db.sheets_client import SheetsClient
+from src.db.schemas import build_row, pad_row_to_headers
 
 logger = logging.getLogger(__name__)
 
@@ -14,24 +15,35 @@ AUDIT_SHEET = 'audit_log'
 def append_audit_entry(spreadsheet_id: str, user_id: int, user_name: str, sheet: str, row_id: str, action: str, before: Dict[str, Any], after: Dict[str, Any]):
     sc = SheetsClient()
     ts = datetime.datetime.utcnow().isoformat()
-    payload = [ts, str(user_id) if user_id is not None else '', user_name or '', sheet, str(row_id), action, json.dumps(before or {}), json.dumps(after or {})]
+    values = {
+        'timestamp': ts,
+        'user_id': str(user_id) if user_id is not None else '',
+        'user_name': user_name or '',
+        'sheet': sheet,
+        'row_id': str(row_id),
+        'action': action,
+        'before': json.dumps(before or {}),
+        'after': json.dumps(after or {})
+    }
+    row = build_row('audit_log', values)
+    row = pad_row_to_headers('audit_log', row)
     try:
-        sc.append_row(spreadsheet_id, AUDIT_SHEET, payload)
+        sc.append_row(spreadsheet_id, AUDIT_SHEET, row)
     except Exception as e:
         logger.exception(f"Failed to write audit log: {e}")
 
 
-def list_audit_for_row(spreadsheet_id: str, sheet: str, row_id: str, offset: int = 0, limit: int = 50) -> Dict[str, Any]:
-    """Return paginated audit entries for a sheet row.
+def list_audit_for_row(spreadsheet_id: str, sheet: str, row_id: str, offset: int = 0, limit: int = 50) -> list:
+    """Return a (possibly paginated) list of audit entries for a sheet row.
 
-    Returns dict: {total: int, items: List[dict]}
+    Returns a list of matching rows (unpaginated by default); keep signature compatible with older callers/tests that expect a list.
     """
     sc = SheetsClient()
     rows = sc.read_sheet(spreadsheet_id, AUDIT_SHEET)
     res = [r for r in rows if r.get('sheet') == sheet and str(r.get('row_id')) == str(row_id)]
-    total = len(res)
-    items = res[offset: offset + limit]
-    return {'total': total, 'items': items}
+    if offset or limit:
+        return res[offset: offset + limit]
+    return res
 
 
 def get_latest_audit_for_row(spreadsheet_id: str, sheet: str, row_id: str) -> Dict[str, Any]:

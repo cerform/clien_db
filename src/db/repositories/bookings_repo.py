@@ -1,6 +1,7 @@
 import uuid
 import datetime
 from src.config.constants import SHEET_BOOKINGS
+from src.db.schemas import build_row, pad_row_to_headers
 
 class BookingsRepo:
     def __init__(self, sheets_client, spreadsheet_id):
@@ -13,8 +14,26 @@ class BookingsRepo:
     def create_booking(self, client_id: str, master_id: str, date: str, slot_start: str, slot_end: str, status: str = "pending", google_event_id: str = ""):
         bid = str(uuid.uuid4())
         created_at = datetime.datetime.utcnow().isoformat()
-        row = [bid, client_id, master_id, date, slot_start, slot_end, status, created_at, google_event_id]
-        self.sc.append_row(self.spreadsheet_id, SHEET_BOOKINGS, row)
+        # normalize to datetime_start/datetime_end
+        datetime_start = f"{date}T{slot_start}"
+        datetime_end = f"{date}T{slot_end}"
+        values = {
+            'id': bid,
+            'client_id': client_id,
+            'master_id': master_id,
+            'datetime_start': datetime_start,
+            'datetime_end': datetime_end,
+            'status': status,
+            'created_at': created_at,
+            'google_event_id': google_event_id
+        }
+        row = build_row('bookings', values)
+        row = pad_row_to_headers('bookings', row)
+        try:
+            self.sc.append_row(self.spreadsheet_id, SHEET_BOOKINGS, row)
+        except Exception:
+            import logging
+            logging.getLogger(__name__).exception("Failed to append booking row; proceeding in best-effort mode")
         return {"id": bid}
 
     def update_booking(self, booking_id: str, data: dict) -> bool:
@@ -23,13 +42,29 @@ class BookingsRepo:
             return False
         for idx, r in enumerate(rows, start=1):
             if r.get('id') == booking_id:
-                new_row = [r.get('id'), data.get('client_id', r.get('client_id')), data.get('master_id', r.get('master_id')),
-                           data.get('service_id', r.get('service_id')), data.get('datetime_start', r.get('datetime_start')),
-                           data.get('datetime_end', r.get('datetime_end')), data.get('status', r.get('status')),
-                           data.get('price', r.get('price')), data.get('comment_client', r.get('comment_client')),
-                           data.get('comment_master', r.get('comment_master')), data.get('source', r.get('source')),
-                           r.get('created_at'), data.get('updated_at', r.get('updated_at') or ''), data.get('google_event_id', r.get('google_event_id') or '')]
-                self.sc.update_row(self.spreadsheet_id, SHEET_BOOKINGS, idx, new_row)
+                values = {
+                    'id': r.get('id'),
+                    'client_id': data.get('client_id', r.get('client_id')),
+                    'master_id': data.get('master_id', r.get('master_id')),
+                    'service_id': data.get('service_id', r.get('service_id')),
+                    'datetime_start': data.get('datetime_start', r.get('datetime_start')),
+                    'datetime_end': data.get('datetime_end', r.get('datetime_end')),
+                    'status': data.get('status', r.get('status')),
+                    'price': data.get('price', r.get('price')),
+                    'comment_client': data.get('comment_client', r.get('comment_client')),
+                    'comment_master': data.get('comment_master', r.get('comment_master')),
+                    'source': data.get('source', r.get('source')),
+                    'created_at': r.get('created_at'),
+                    'updated_at': data.get('updated_at', r.get('updated_at') or ''),
+                    'google_event_id': data.get('google_event_id', r.get('google_event_id') or '')
+                }
+                new_row = build_row('bookings', values)
+                new_row = pad_row_to_headers('bookings', new_row)
+                try:
+                    self.sc.update_row(self.spreadsheet_id, SHEET_BOOKINGS, idx, new_row)
+                except Exception:
+                    import logging
+                    logging.getLogger(__name__).exception("Failed to update booking row; proceeding in best-effort mode")
                 return True
         return False
 

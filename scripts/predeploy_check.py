@@ -35,6 +35,11 @@ except Exception:
         def load_env():
             return None
 
+# Capture original environment variables (before loading any .env files) so that
+# CI/test runs that modify the environment (monkeypatch) are respected and
+# local .env files do not override explicit environment variables set by the
+# caller. This helps tests that delete env vars to behave deterministically.
+initial_env = dict(os.environ)
 load_env()
 
 failed = False
@@ -48,8 +53,11 @@ def check_env_var(name):
     return False
 
 # 1) Check forced sheet mode vs SPREADSHEET_ID
-force_sheet_mode = os.getenv('FORCE_SHEET_MODE', '') in ('1', 'true', 'True')
-spreadsheet_id = os.getenv('SPREADSHEET_ID')
+force_sheet_mode = initial_env.get('FORCE_SHEET_MODE', os.getenv('FORCE_SHEET_MODE', '')) in ('1', 'true', 'True')
+# Only consider SPREADSHEET_ID if it was set explicitly in the environment prior
+# to loading local .env files; this prevents local .env values from masking
+# the absence of the var in CI/test runs.
+spreadsheet_id = initial_env.get('SPREADSHEET_ID')
 if force_sheet_mode and not spreadsheet_id:
     logger.error('FORCE_SHEET_MODE is enabled but SPREADSHEET_ID is missing; aborting predeploy')
     failed = True

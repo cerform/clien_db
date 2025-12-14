@@ -28,25 +28,32 @@ MIGRATIONS_DIR = Path(__file__).parent.parent / 'db' / 'migrations' / 'sql'
 
 
 def apply_migrations(engine, apply=False):
+    """Scan for migrations and apply if required"""
     dry_run = not apply
     files = sorted(glob.glob(str(MIGRATIONS_DIR / '*.sql')))
     if not files:
         logger.warning('No SQL migration files found')
         return
-    with engine.begin() as conn:
-        for f in files:
-            logger.info('Processing migration: %s', f)
-            sql_text = Path(f).read_text(encoding='utf-8')
-            if dry_run:
-                logger.info('[DRY RUN] Would apply migration: %s', f)
-                logger.debug(sql_text)
-            else:
-                try:
+    for migration_file in sorted(MIGRATIONS_DIR.glob("*.sql")):
+        logger.info(f"Processing migration: {migration_file}")
+        with open(migration_file, "r") as f:
+            # Read whole file, do not split by ;
+            sql_text = f.read()
+            if not apply:
+                logger.info(f"[DRY RUN] Would apply migration: {migration_file}")
+                continue
+
+            try:
+                with engine.connect() as conn:
                     conn.execute(text(sql_text))
-                    logger.info('Applied migration: %s', f)
-                except Exception as e:
-                    logger.error('Failed to apply migration %s: %s', f, e)
-                    raise
+                    conn.commit()
+                logger.info(f"Applied migration: {migration_file}")
+            except Exception as e:
+                logger.error(
+                    f"Failed to apply migration {migration_file}: {e}"
+                )
+                # Exit on first failure
+                raise
 
 
 def main():

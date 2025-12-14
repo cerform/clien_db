@@ -86,9 +86,6 @@ def create_app() -> FastAPI:
             # and use OpenAI key at runtime for LLM calls inside INKA where needed.
             learning_system = INKALearningSystem()
             logger.info("✅ INKA Learning System initialized")
-            else:
-                logger.warning("⚠️ OpenAI API key not found, INKA learning disabled")
-                learning_system = None
         except Exception as inka_error:
             logger.warning(f"⚠️ INKA Learning System initialization failed: {inka_error}")
             learning_system = None

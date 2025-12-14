@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Request, Form, HTTPException
+from fastapi import APIRouter, Request, HTTPException
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from src.core.config_manager import get_config, save_config, save_config_to_sheet, load_config_from_sheet, set_secret, get_secret
 from src.db.sheets_client import SheetsClient
@@ -63,13 +63,15 @@ async def settings_get(request: Request):
 
 
 @router.post("/settings/save")
-async def settings_save(request: Request,
-                        salon_name: str = Form(None),
-                        timezone: str = Form(None),
-                        spreadsheet_id: str = Form(None),
-                        calendar_id: str = Form(None),
-                        admin_ids: str = Form(None)):
+async def settings_save(request: Request):
     # Save only non-secret fields
+    form = await request.form()
+    salon_name = form.get('salon_name')
+    timezone = form.get('timezone')
+    spreadsheet_id = form.get('spreadsheet_id')
+    calendar_id = form.get('calendar_id')
+    admin_ids = form.get('admin_ids')
+
     cfg = get_config()
     if salon_name:
         cfg["salon_name"] = salon_name
@@ -118,7 +120,7 @@ async def settings_save(request: Request,
 
 
 @router.post("/settings/migrate")
-async def settings_migrate(request: Request, admin_id: int = Form(None)):
+async def settings_migrate(request: Request):
     # Simple admin check: require admin_id to be in configured ADMIN_USER_IDS in env
     cfg = get_config()
     envcfg = Config.from_env()
@@ -135,8 +137,11 @@ async def settings_migrate(request: Request, admin_id: int = Form(None)):
     claimed_admin_id = None
     if hasattr(request, 'state') and getattr(request.state, 'admin_id', None):
         claimed_admin_id = request.state.admin_id
-    elif admin_id:
-        claimed_admin_id = int(admin_id)
+    else:
+        form = await request.form()
+        admin_id = form.get('admin_id')
+        if admin_id:
+            claimed_admin_id = int(admin_id)
     if claimed_admin_id and is_admin_service(claimed_admin_id):
         result = migrate_spreadsheet(sc, spreadsheet_id)
         return JSONResponse(content={"ok": True, "result": result})
@@ -144,12 +149,16 @@ async def settings_migrate(request: Request, admin_id: int = Form(None)):
 
 
 @router.post('/settings/test')
-async def settings_test(request: Request, chat_id: int = Form(...), text: str = Form('Test message from INKA'), admin_id: int = Form(None)):
+async def settings_test(request: Request):
     """Send a test Telegram message to a chat id. Requires admin privileges (admin_id param or Authorization header).
 
     This endpoint is intended for quick verification that webhook / bot connectivity works and that the bot can send messages.
     """
     # Determine claimed admin id
+    form = await request.form()
+    chat_id = form.get('chat_id')
+    text = form.get('text') or 'Test message from INKA'
+    admin_id = form.get('admin_id')
     claimed_admin_id = getattr(request.state, 'admin_id', None)
     if not claimed_admin_id and admin_id:
         claimed_admin_id = int(admin_id)
@@ -216,17 +225,19 @@ async def admin_reject_pending(request: Request, pending_id: str):
 
 
 @router.post("/masters/update_calendar")
-async def update_master_calendar(request: Request, master_id: str = Form(...), calendar_id: str = Form(...)):
+async def update_master_calendar(request: Request):
     """Admin endpoint to update a master's calendar ID in Google Sheets.
 
     Requires admin token via Authorization: Bearer <token> or admin_id form field.
     """
     envcfg = Config.from_env()
     # verify admin id either via token or param
+    body = await request.form()
+    master_id = body.get('master_id')
+    calendar_id = body.get('calendar_id')
     claimed_admin_id = getattr(request.state, 'admin_id', None)
     if not claimed_admin_id:
         # fallback to admin_id in form if provided
-        body = await request.form()
         claimed_admin_id = int(body.get('admin_id')) if body.get('admin_id') else None
     if not claimed_admin_id or not is_admin_service(claimed_admin_id):
         raise HTTPException(status_code=403, detail="Forbidden: admin_id not recognized")

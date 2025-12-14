@@ -51,7 +51,7 @@ class BookingService:
         load_env()
         cfg = Config.from_env()
         booking_id = None
-        if cfg.DATABASE_URL and pg_create_pending_booking:
+        if getattr(cfg, 'DATABASE_URL', None) and pg_create_pending_booking:
             # Convert start/end to datetimes
             try:
                 start_dt = datetime.fromisoformat(f"{date}T{slot_start}")
@@ -96,8 +96,13 @@ class BookingService:
         from src.config.config import Config
         load_env()
         cfg = Config.from_env()
-        if cfg.DATABASE_URL:
+        if getattr(cfg, 'DATABASE_URL', None):
             try:
+                # Import lazily - allow graceful failure in environments without postgres client
+                try:
+                    from src.db.db_client import get_db
+                except Exception:
+                    return False
                 db = get_db()
                 conn = db.get_connection()
                 cur = conn.cursor()
