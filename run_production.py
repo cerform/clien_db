@@ -59,6 +59,17 @@ def get_admin_messages_repo():
     """Get global admin messages repository instance"""
     return admin_messages_repo
 
+
+def _normalize_token(tok: str) -> str:
+    """Normalize a token string: strip whitespace and remove common control chars."""
+    if not tok:
+        return tok
+    # Remove BOM if present and common newline/whitespace around secret
+    tok = tok.strip()
+    # Remove stray CR/LF characters that may be embedded
+    tok = tok.replace('\r', '').replace('\n', '')
+    return tok
+
 async def setup_webhook():
     """Setup webhook - вызывается при первом запросе или при старте"""
     global bot, webhook_url, _webhook_setup_done, dp
@@ -66,23 +77,30 @@ async def setup_webhook():
     if _webhook_setup_done:
         return
     # If bot is not configured (invalid or missing token), try to initialize it now
-    if bot is None:
-        try:
-            cfg = Config.from_env()
-            if cfg.BOT_TOKEN:
-                try:
-                    # Log a short, masked summary to help debug formatting issues without
-                    # printing the full secret in logs.
-                    tok = cfg.BOT_TOKEN
-                    logger.info(f"🔑 BOT_TOKEN present (len={len(tok)}, prefix={tok[:6]!r})")
-                    bot = Bot(token=tok)
-                    logger.info("✅ Bot initialized during webhook setup")
-                except Exception as e:
-                    logger.error(f"❌ Failed to initialize Bot during webhook setup: {e}")
-            else:
-                logger.warning("⚠️ No BOT_TOKEN available to initialize bot during webhook setup")
-        except Exception as e:
-            logger.error(f"❌ Error reading config during webhook setup: {e}")
+        if bot is None:
+            try:
+                cfg = Config.from_env()
+                if cfg.BOT_TOKEN:
+                    try:
+                        # Normalize token and log a masked summary for diagnostics
+                        raw = cfg.BOT_TOKEN
+                        tok = _normalize_token(raw)
+                        logger.info(f"🔑 BOT_TOKEN present (len={len(tok)}, prefix={tok[:6]!r})")
+                        # Validate token format if possible
+                        try:
+                            from aiogram.utils.token import validate_token
+                            valid = validate_token(tok)
+                            logger.info(f"🔍 validate_token -> {valid}")
+                        except Exception:
+                            logger.info("🔍 validate_token not available or raised error")
+                        bot = Bot(token=tok)
+                        logger.info("✅ Bot initialized during webhook setup")
+                    except Exception as e:
+                        logger.error(f"❌ Failed to initialize Bot during webhook setup: {e}")
+                else:
+                    logger.warning("⚠️ No BOT_TOKEN available to initialize bot during webhook setup")
+            except Exception as e:
+                logger.error(f"❌ Error reading config during webhook setup: {e}")
 
         if bot is None:
             logger.warning("⚠️ Bot not configured or token invalid; skipping webhook setup")
@@ -261,10 +279,18 @@ def main():
                         cfg = Config.from_env()
                         if cfg.BOT_TOKEN:
                             try:
-                                bot = Bot(token=cfg.BOT_TOKEN)
+                                raw = cfg.BOT_TOKEN
+                                tok = _normalize_token(raw)
+                                logger.info(f"🔑 (webhook handler) BOT_TOKEN present (len={len(tok)}, prefix={tok[:6]!r})")
+                                from aiogram.utils.token import validate_token
+                                try:
+                                    logger.info(f"🔍 (webhook handler) validate_token -> {validate_token(tok)}")
+                                except Exception:
+                                    logger.info("🔍 (webhook handler) validate_token raised")
+                                bot = Bot(token=tok)
                                 logger.info("✅ Bot initialized from environment inside webhook handler")
                             except Exception as e:
-                                logger.error(f"Failed to construct Bot instance: {e}")
+                                logger.error(f"Failed to initialize Bot in webhook handler: {e}")
                         else:
                             logger.warning("⚠️ No BOT_TOKEN available to initialize bot in webhook handler")
                     except Exception as e:
