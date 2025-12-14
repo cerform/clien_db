@@ -127,6 +127,7 @@ async def installer_status(job_id: str):
         "started_at": job.get("started_at"),
         "ended_at": job.get("ended_at"),
         "exit_code": job.get("exit_code"),
+        "result_url": job.get("result_url"),
     })
 
 

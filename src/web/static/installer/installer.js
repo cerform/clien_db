@@ -29,6 +29,11 @@ async function pollLogs(jobId, offset){
     setTimeout(()=>pollLogs(jobId, newOffset), 1500);
   } else {
     document.getElementById('job-id').innerText = `Job ${jobId} finished: ${sj.status}`;
+    if(sj.result_url){
+      const el = document.createElement('div');
+      el.innerHTML = `Deployed URL: <a href="${sj.result_url}" target="_blank">${sj.result_url}</a>`;
+      document.body.insertBefore(el, document.getElementById('logs'));
+    }
   }
 }
 
