@@ -19,6 +19,21 @@
     <div id="job-id">No job yet</div>
     <pre id="logs" style="background:#111;color:#0f0;padding:10px;height:300px;overflow:auto;"></pre>
 
+    <script>
+      (async function(){
+        try{
+          const r = await fetch('/installer/allowed');
+          const j = await r.json();
+          if(!j.allowed){
+            document.getElementById('installer-form').style.display = 'none';
+            const msg = document.createElement('div');
+            msg.innerText = 'Installer locked after initial setup. Contact an admin to re-enable.';
+            msg.style.color = 'red';
+            document.body.insertBefore(msg, document.getElementById('job-id'));
+          }
+        }catch(e){console.error(e)}
+      })();
+    </script>
     <script src="/static/installer/installer.js"></script>
   </body>
   </html>

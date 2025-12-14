@@ -5,6 +5,9 @@ import uuid
 import threading
 import subprocess
 import tempfile
+from src.services.admin_manager import is_admin as is_admin_service
+
+LOCKFILE = os.path.join(os.getcwd(), ".installer_complete")
 import os
 import time
 import logging
@@ -45,6 +48,25 @@ def _run_install_subprocess(job_id: str, args: dict):
             ret = process.wait()
         job["exit_code"] = ret
         job["status"] = "succeeded" if ret == 0 else "failed"
+        # If succeeded, try to find the deployed URL in the logs and create a lockfile
+        if ret == 0:
+            try:
+                with open(logfile, "r", encoding="utf-8", errors="ignore") as rlf:
+                    txt = rlf.read()
+                # look for the line printed by tools/install_and_deploy.py
+                marker = "✅ Deploy completed. Visit "
+                idx = txt.find(marker)
+                if idx != -1:
+                    rest = txt[idx + len(marker):]
+                    url = rest.split()[0]
+                    job["result_url"] = url
+                # create lockfile
+                with open(LOCKFILE, "w") as lf2:
+                    lf2.write(f"installed_at={time.time()}\n")
+                    if job.get("result_url"):
+                        lf2.write(f"url={job.get('result_url')}\n")
+            except Exception:
+                logger.exception("failed to parse logs or write lockfile")
     except Exception as e:
         logger.exception("Installer job failed: %s", e)
         job["status"] = "failed"
@@ -58,11 +80,23 @@ def _run_install_subprocess(job_id: str, args: dict):
 async def installer_index(request: Request):
     # Render minimal installer UI
     templates_env = Jinja2Templates(directory=os.path.join(os.path.dirname(__file__), "templates"))
-    return templates_env.TemplateResponse("installer/index.html", {"request": request})
+    # determine if installer is allowed
+    allowed = (not os.path.exists(LOCKFILE)) or (getattr(request.state, "admin_id", None) and is_admin_service(request.state.admin_id))
+    return templates_env.TemplateResponse("installer/index.html", {"request": request, "allowed": allowed})
+
+
+@router.get("/allowed")
+async def installer_allowed(request: Request):
+    allowed = (not os.path.exists(LOCKFILE)) or (getattr(request.state, "admin_id", None) and is_admin_service(request.state.admin_id))
+    return JSONResponse({"allowed": bool(allowed)})
 
 
 @router.post("/start")
-async def installer_start(payload: dict):
+async def installer_start(request: Request, payload: dict):
+    # permission guard
+    allowed = (not os.path.exists(LOCKFILE)) or (getattr(request.state, "admin_id", None) and is_admin_service(request.state.admin_id))
+    if not allowed:
+        raise HTTPException(status_code=403, detail="Installer is locked after initial setup")
     # payload should include keys: project, region, service, telegram_token, set_webhook
     job_id = str(uuid.uuid4())
     fd, logfile = tempfile.mkstemp(prefix=f"installer_{job_id}_", suffix=".log")
