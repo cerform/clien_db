@@ -75,13 +75,13 @@ async def cmd_admin(message: types.Message):
         clients = admin.list_clients()
         masters = admin.list_masters()
         bookings = admin.list_bookings()
-        msg = f"""📊 Admin Dashboard
+            msg = f"""📊 Admin Dashboard
 
-👥 Clients: {len(clients)}
-👨‍🎨 Masters: {len(masters)}
-📅 Bookings: {len(bookings)}"""
-    msg += "\n\n*Admin controls:*\n`/grant_admin <telegram_id>` - add admin\n`/revoke_admin <telegram_id>` - remove admin"
-        await message.answer(msg, reply_markup=admin_menu(user_lang))
+    👥 Clients: {len(clients)}
+    👨‍🎨 Masters: {len(masters)}
+    📅 Bookings: {len(bookings)}"""
+            msg += "\n\n*Admin controls:*\n`/grant_admin <telegram_id>` - add admin\n`/revoke_admin <telegram_id>` - remove admin"
+            await message.answer(msg, reply_markup=admin_menu(user_lang))
     except Exception as e:
         await message.answer(f"❌ Error: {str(e)[:100]}")
         logger.exception("Admin error")
