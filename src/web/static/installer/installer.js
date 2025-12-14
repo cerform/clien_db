@@ -1,11 +1,23 @@
 async function startInstaller(ev){
   ev && ev.preventDefault();
-  const f = document.getElementById('installer-form');
-  const data = new FormData(f);
   const payload = {};
-  for(const [k,v] of data.entries()) payload[k] = v;
-  payload.set_webhook = !!data.get('set_webhook');
+  payload.telegram_token = document.getElementById('telegram_token').value;
+  payload.llm_api_key = document.getElementById('llm_api_key').value;
+  payload.use_cloudsql = document.getElementById('use_cloudsql').checked;
+  payload.spreadsheet_id = document.getElementById('spreadsheet_id').value;
+  payload.enable_inka = document.getElementById('enable_inka').checked;
+  payload.set_webhook = document.getElementById('set_webhook').checked;
+  payload.admin_ids = document.getElementById('admin_ids').value;
+  payload.project = document.getElementById('project').value;
+  payload.region = document.getElementById('region').value;
+  payload.service = document.getElementById('service').value;
+
   const res = await fetch('/installer/start', {method:'POST', body: JSON.stringify(payload), headers:{'Content-Type':'application/json'}});
+  if(!res.ok){
+    const err = await res.json();
+    alert('Installer error: ' + (err.detail || JSON.stringify(err)));
+    return;
+  }
   const j = await res.json();
   const jobId = j.job_id;
   document.getElementById('job-id').innerText = jobId;
@@ -38,3 +50,7 @@ async function pollLogs(jobId, offset){
 }
 
 document.getElementById('installer-form').addEventListener('submit', startInstaller);
+// wire up wizard nav
+document.querySelectorAll('[data-next]').forEach(b=>b.addEventListener('click', (e)=>{const cur = e.target.closest('.step'); const nxt = document.querySelector(`.step[data-step="${parseInt(cur.dataset.step)+1}"]`); if(cur) cur.style.display='none'; if(nxt) nxt.style.display='block';}));
+document.querySelectorAll('[data-prev]').forEach(b=>b.addEventListener('click', (e)=>{const cur = e.target.closest('.step'); const prv = document.querySelector(`.step[data-step="${parseInt(cur.dataset.step)-1}"]`); if(cur) cur.style.display='none'; if(prv) prv.style.display='block';}));
+document.getElementById('start-install').addEventListener('click', startInstaller);

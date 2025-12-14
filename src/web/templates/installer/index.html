@@ -5,16 +5,56 @@
     <title>Installer — Step 1</title>
   </head>
   <body>
-    <h1>Web Installer — Quick Setup</h1>
-    <form id="installer-form">
-      <label>GCP Project ID: <input type="text" name="project" /></label><br/>
-      <label>Region: <input type="text" name="region" value="europe-west1" /></label><br/>
-      <label>Service name: <input type="text" name="service" value="inka-bot" /></label><br/>
-      <label>Telegram token: <input type="text" name="telegram_token" /></label><br/>
-      <label>Set webhook: <input type="checkbox" name="set_webhook" /></label><br/>
-      <button type="submit">Start Install</button>
-    </form>
+    <h1>Web Installer — Setup Wizard</h1>
+    <div id="wizard">
+      <div class="step" data-step="1">
+        <h2>Step 1 — Welcome</h2>
+        <p>Welcome to the INKA eco-system installer. This wizard will walk you through configuration.</p>
+        <button data-next>Next</button>
+      </div>
 
+      <div class="step" data-step="2" style="display:none">
+        <h2>Step 2 — Bot Configuration</h2>
+        <label>Telegram Bot Token: <input type="text" name="telegram_token" id="telegram_token" /></label><br/>
+        <label>LLM API Key: <input type="text" name="llm_api_key" id="llm_api_key" /></label><br/>
+        <button data-prev>Back</button>
+        <button data-next>Next</button>
+      </div>
+
+      <div class="step" data-step="3" style="display:none">
+        <h2>Step 3 — Database</h2>
+        <label>Use Cloud SQL? <input type="checkbox" name="use_cloudsql" id="use_cloudsql" /></label><br/>
+        <label>Spreadsheet ID (if using Sheets): <input type="text" name="spreadsheet_id" id="spreadsheet_id" /></label><br/>
+        <button data-prev>Back</button>
+        <button data-next>Next</button>
+      </div>
+
+      <div class="step" data-step="4" style="display:none">
+        <h2>Step 4 — Services</h2>
+        <label>Enable INKA AI: <input type="checkbox" name="enable_inka" id="enable_inka" checked /></label><br/>
+        <label>Enable Webhook (recommended): <input type="checkbox" name="set_webhook" id="set_webhook" checked /></label><br/>
+        <button data-prev>Back</button>
+        <button data-next>Next</button>
+      </div>
+
+      <div class="step" data-step="5" style="display:none">
+        <h2>Step 5 — Admin</h2>
+        <label>Admin Telegram IDs (comma-separated): <input type="text" name="admin_ids" id="admin_ids" /></label><br/>
+        <button data-prev>Back</button>
+        <button data-next>Next</button>
+      </div>
+
+      <div class="step" data-step="6" style="display:none">
+        <h2>Step 6 — Deploy</h2>
+        <label>GCP Project ID: <input type="text" name="project" id="project" /></label><br/>
+        <label>Region: <input type="text" name="region" id="region" value="europe-west1" /></label><br/>
+        <label>Service name: <input type="text" name="service" id="service" value="inka-bot" /></label><br/>
+        <button data-prev>Back</button>
+        <button id="start-install">Start Install</button>
+      </div>
+    </div>
+
+    <hr/>
     <h3>Job</h3>
     <div id="job-id">No job yet</div>
     <pre id="logs" style="background:#111;color:#0f0;padding:10px;height:300px;overflow:auto;"></pre>
