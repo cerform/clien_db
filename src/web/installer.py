@@ -93,6 +93,20 @@ async def installer_allowed(request: Request):
     return JSONResponse({"allowed": bool(allowed)})
 
 
+@router.post("/unlock")
+async def installer_unlock(request: Request):
+    # Admin-only: remove the lockfile if present
+    claimed = getattr(request.state, "admin_id", None)
+    if not claimed or not is_admin_service(claimed):
+        raise HTTPException(status_code=403, detail="Forbidden: admin only")
+    if os.path.exists(LOCKFILE):
+        try:
+            os.unlink(LOCKFILE)
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=str(e))
+    return JSONResponse({"ok": True})
+
+
 @router.post("/start")
 async def installer_start(request: Request, payload: dict):
     # permission guard
