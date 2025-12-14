@@ -141,9 +141,10 @@ def run_install(
     logger.info("Deploying to Cloud Run: %s", service_name)
     secret_mappings = []
     if telegram_bot_token:
-        secret_mappings.append(f"TELEGRAM_BOT_TOKEN=projects/{project_id}/secrets/TELEGRAM_BOT_TOKEN:latest")
+        # Cloud Run expects SECRET_NAME:VERSION (no projects/ prefix)
+        secret_mappings.append(f"TELEGRAM_BOT_TOKEN=TELEGRAM_BOT_TOKEN:latest")
     if llm_api_key:
-        secret_mappings.append(f"LLM_API_KEY=projects/{project_id}/secrets/LLM_API_KEY:latest")
+        secret_mappings.append(f"LLM_API_KEY=LLM_API_KEY:latest")
     secrets_arg = " --set-secrets " + ",".join(secret_mappings) if secret_mappings else ""
     deploy_cmd = (
         f"gcloud run deploy {service_name} "
