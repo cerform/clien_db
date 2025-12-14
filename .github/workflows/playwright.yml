@@ -1,0 +1,70 @@
+name: Playwright E2E
+
+on:
+  push:
+    branches: [ main, master, 'feat/**', 'feature/**' ]
+  pull_request:
+    branches: [ main, master ]
+
+jobs:
+  e2e:
+    name: Run Playwright E2E against local backend + dev frontend
+    runs-on: ubuntu-latest
+    services: {}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+
+      - name: Install Python dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt || true
+          pip install uvicorn
+
+      - name: Start backend (uvicorn)
+        run: |
+          nohup uvicorn src.web.app:create_app --host 127.0.0.1 --port 8000 --factory > backend.log 2>&1 &
+          # wait for backend to become healthy
+          for i in {1..30}; do
+            if curl -sSf http://127.0.0.1:8000/ >/dev/null 2>&1; then
+              echo "backend up" && break
+            fi
+            sleep 1
+          done
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 18
+
+      - name: Install and build admin-ui (dev server)
+        working-directory: services/frontend/admin-ui
+        run: |
+          npm ci
+          npx playwright install --with-deps
+          nohup npm run dev > dev-frontend.log 2>&1 &
+          for i in {1..30}; do
+            if curl -sSf http://127.0.0.1:5173/ >/dev/null 2>&1; then
+              echo "frontend up" && break
+            fi
+            sleep 1
+          done
+
+      - name: Run Playwright tests
+        working-directory: services/frontend/admin-ui
+        env:
+          # ensure tests can use admin token
+          PLAYWRIGHT_BROWSERS_PATH: 0
+        run: |
+          npx playwright test --reporter=list
+
+      - name: Upload Playwright Reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-results
+          path: services/frontend/admin-ui/playwright-report || services/frontend/admin-ui/test-results || backend.log || dev-frontend.log

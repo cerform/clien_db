@@ -24,3 +24,12 @@ jobs:
           context: .
           push: true
           tags: ghcr.io/${{ github.repository }}:latest
+      - name: Build and push admin-ui image
+        uses: docker/build-push-action@v5
+        with:
+          context: services/frontend/admin-ui
+          file: services/frontend/admin-ui/Dockerfile
+          push: true
+          tags: |
+            ghcr.io/${{ github.repository }}:admin-ui-${{ github.sha }}
+            ghcr.io/${{ github.repository }}:admin-ui-latest
