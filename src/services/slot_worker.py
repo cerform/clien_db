@@ -2,7 +2,7 @@
 Slot worker: compute slots per master using `calendar_busy_intervals` and populate `calculated_slots`.
 This worker is meant to run periodically (cron) or on-demand (changes in calendar events notification).
 """
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 import logging
 from typing import List
 
@@ -73,7 +73,7 @@ def refresh_availability_materialized_view():
 
 if __name__ == '__main__':
     # Run daily for next 7 days
-    now = datetime.utcnow()
+    now = datetime.now(timezone.utc)
     until = now + timedelta(days=7)
     total = compute_slots_for_all_masters(now, until, duration=120)
     print(f"Computed {total} slots")

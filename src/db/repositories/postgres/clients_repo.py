@@ -3,7 +3,7 @@ PostgreSQL repository for clients
 Implements full CRUD operations with proper UUID support
 """
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import List, Dict, Optional
 from sqlalchemy import text
 import logging
@@ -69,7 +69,7 @@ class ClientsRepoPG:
                 "email": email,
                 "notes": notes,
                 "language": language,
-                "created_at": datetime.utcnow()
+                "created_at": datetime.now(timezone.utc)
             })
             conn.commit()
 
@@ -187,7 +187,7 @@ class ClientsRepoPG:
                 WHERE telegram_id = :telegram_id
             """), {
                 "telegram_id": telegram_id,
-                "now": datetime.utcnow()
+                "now": datetime.now(timezone.utc)
             })
             conn.commit()
             return result.rowcount > 0

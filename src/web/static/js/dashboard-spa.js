@@ -180,7 +180,7 @@ function renderClients(clients) {
     }
 
     container.innerHTML = clients.map(client => `
-        <div class="data-card">
+        <div class="data-card" onclick="openClientEditModal('${client.id}')">
             <div class="data-card-header">
                 <div>
                     <div class="data-card-title">${client.name}</div>
@@ -212,6 +212,82 @@ function renderClients(clients) {
             </div>
         </div>
     `).join('');
+}
+
+// Open edit modal for existing client
+async function openClientEditModal(clientId) {
+    let client = allClients.find(c => c.id === clientId);
+    if (!client) {
+        try {
+            const res = await fetch(`/api/clients/${clientId}`);
+            if (res.ok) client = await res.json();
+        } catch (e) {
+            console.error('Failed to fetch client', e);
+        }
+    }
+    openModal('Редактировать клиента', saveClientEdit);
+    // add delete button area
+    setModalBody(getClientFormHtml(client) + `
+        <div style="margin-top:12px;display:flex;gap:8px;">
+          <button id="modal-delete-btn" style="background:#e5533d;color:#fff">Удалить</button>
+          <button id="modal-close-btn">Закрыть</button>
+        </div>
+    `);
+
+    document.getElementById('modal-close-btn').addEventListener('click', () => closeModal());
+    document.getElementById('modal-delete-btn').addEventListener('click', async (e) => {
+        e.preventDefault();
+        if (!confirm('Вы уверены, что хотите удалить клиента?')) return;
+        try {
+            const resp = await fetch(`/api/clients/${clientId}`, { method: 'DELETE', headers: { 'Authorization': 'Bearer admin_token_1' } });
+            if (resp.ok) {
+                allClients = allClients.filter(c => c.id !== clientId);
+                renderClients(allClients);
+                closeModal();
+                showNotification('Клиент удалён');
+            } else {
+                showNotification('Не удалось удалить клиента', 'error');
+            }
+        } catch (err) {
+            console.error(err);
+            showNotification('Ошибка при удалении', 'error');
+        }
+    });
+}
+
+async function saveClientEdit() {
+    const form = document.getElementById('client-form');
+    const formData = new FormData(form);
+    const clientData = Object.fromEntries(formData.entries());
+    const clientId = clientData.id;
+
+    // basic validation
+    if (!clientData.name || clientData.name.trim().length < 2) {
+        showNotification('Имя должно быть не менее 2 символов', 'error');
+        return;
+    }
+
+    try {
+        const response = await fetch(`/api/clients/${clientId}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer admin_token_1' },
+            body: JSON.stringify(clientData)
+        });
+
+        if (response.ok) {
+            // update local cache
+            allClients = allClients.map(c => c.id === clientId ? { ...c, ...clientData } : c);
+            renderClients(allClients);
+            closeModal();
+            showNotification('Клиент сохранён');
+        } else {
+            const err = await response.json().catch(()=>({detail:'Ошибка'}));
+            showNotification(err.detail || 'Не удалось сохранить клиента', 'error');
+        }
+    } catch (error) {
+        console.error('Error saving client:', error);
+        showNotification('Ошибка при сохранении', 'error');
+    }
 }
 
 // ==================== MASTERS ====================
@@ -392,7 +468,7 @@ function renderServices(services) {
     }
 
     container.innerHTML = services.map(service => `
-        <div class="data-card">
+        <div class="data-card" onclick="openServiceEditModal('${service.id}')">
             <div class="data-card-header">
                 <div>
                     <div class="data-card-title">${service.name}</div>
@@ -418,6 +494,51 @@ function renderServices(services) {
             </div>
         </div>
     `).join('');
+}
+
+async function openServiceEditModal(serviceId) {
+    let svc = allServices.find(s => s.id === serviceId);
+    if (!svc) {
+        try {
+            const r = await fetch(`/api/services/${serviceId}`);
+            if (r.ok) svc = await r.json();
+        } catch (e) { console.error('Failed to fetch service', e); }
+    }
+    openModal('Редактировать услугу', saveServiceEdit);
+    setModalBody(getServiceFormHtml(svc) + `
+        <div style="margin-top:12px;display:flex;gap:8px;">
+          <button id="modal-delete-service" style="background:#e5533d;color:#fff">Удалить</button>
+          <button id="modal-close-service">Закрыть</button>
+        </div>
+    `);
+
+    document.getElementById('modal-close-service').addEventListener('click', () => closeModal());
+    document.getElementById('modal-delete-service').addEventListener('click', async (e) => {
+        e.preventDefault();
+        if (!confirm('Удалить услугу?')) return;
+        try{
+            const resp = await fetch(`/api/services/${serviceId}`, { method: 'DELETE', headers: { 'Authorization': 'Bearer admin_token_1' }});
+            if (resp.ok) {
+                allServices = allServices.filter(x => x.id !== serviceId);
+                renderServices(allServices);
+                closeModal();
+                showNotification('Услуга удалена');
+            } else showNotification('Не удалось удалить услугу','error');
+        }catch(err){ console.error(err); showNotification('Ошибка при удалении','error') }
+    });
+}
+
+async function saveServiceEdit(){
+    const form = document.getElementById('service-form');
+    const fd = new FormData(form);
+    const data = Object.fromEntries(fd.entries());
+    const id = data.id;
+    if(!data.name || data.name.trim().length<2){ showNotification('Название обязательно','error'); return }
+    try{
+        const r = await fetch(`/api/services/${id}`, { method: 'PUT', headers: {'Content-Type':'application/json','Authorization':'Bearer admin_token_1'}, body: JSON.stringify(data) })
+        if(r.ok){ allServices = allServices.map(s=> s.id===id? {...s,...data}: s); renderServices(allServices); closeModal(); showNotification('Услуга сохранена') }
+        else{ const err = await r.json().catch(()=>({detail:'Ошибка'})); showNotification(err.detail || 'Не удалось сохранить','error') }
+    }catch(e){ console.error(e); showNotification('Ошибка при сохранении','error') }
 }
 
 // ==================== INKA AI STATS ====================
@@ -684,6 +805,16 @@ function showError(containerId, message) {
             <p>${message}</p>
         </div>
     `;
+}
+
+// Simple notification helper
+function showNotification(message, type='success'){
+    const el = document.createElement('div');
+    el.className = 'notification ' + (type==='error'? 'error':'');
+    el.textContent = message;
+    Object.assign(el.style, {position:'fixed',right:'16px',bottom:'16px',background: type==='error' ? '#e5533d' : '#222',color:'#fff',padding:'8px 12px',borderRadius:'6px',zIndex:9999});
+    document.body.appendChild(el);
+    setTimeout(()=>{ el.style.opacity=0; setTimeout(()=>el.remove(),300); }, 3000);
 }
 
 // ==================== TRAINING TAB ====================

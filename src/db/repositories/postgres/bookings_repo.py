@@ -2,7 +2,7 @@
 PostgreSQL repository for bookings
 """
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import List, Dict, Optional
 from sqlalchemy import text
 import logging
@@ -71,8 +71,8 @@ class BookingsRepoPG:
                 "datetime_end": datetime_end,
                 "status": status,
                 "google_event_id": google_event_id,
-                "created_at": datetime.utcnow(),
-                "updated_at": datetime.utcnow()
+                "created_at": datetime.now(timezone.utc),
+                "updated_at": datetime.now(timezone.utc)
             })
             conn.commit()
 
@@ -141,7 +141,7 @@ class BookingsRepoPG:
     def update_booking(self, booking_id: str, data: Dict) -> bool:
         """Update booking"""
         fields = []
-        params = {"booking_id": booking_id, "updated_at": datetime.utcnow()}
+        params = {"booking_id": booking_id, "updated_at": datetime.now(timezone.utc)}
 
         for field in ["status", "price", "comment_client", "comment_master", "google_event_id"]:
             if field in data:
@@ -171,7 +171,7 @@ class BookingsRepoPG:
             """), {
                 "booking_id": booking_id,
                 "reason": reason,
-                "updated_at": datetime.utcnow()
+                "updated_at": datetime.now(timezone.utc)
             })
             conn.commit()
             return result.rowcount > 0

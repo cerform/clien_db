@@ -9,7 +9,7 @@ Slot Engine service: calculate available slots based on calendar events and pend
 This service does not directly confirm bookings; it only creates pending_bookings.
 """
 
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 import logging
 from typing import List, Dict, Optional
 
@@ -122,7 +122,7 @@ def lock_slot(master_id: str, start: datetime, lock_holder: str, ttl_seconds: in
     db = get_db()
     conn = db.get_connection()
     cur = conn.cursor()
-    expires_at = datetime.utcnow() + timedelta(seconds=ttl_seconds)
+    expires_at = datetime.now(timezone.utc) + timedelta(seconds=ttl_seconds)
     # Role check: only booking agent may lock slots
     if caller_role and not can_inka_write(caller_role, 'slot_locks'):
         logger.warning(f"lock_slot forbidden for role {caller_role}")
@@ -159,7 +159,7 @@ def create_pending_booking(user_id: int, master_id: str, service_id: str, start:
     if not lock_slot(master_id, start, lock_holder, ttl_seconds, caller_role=caller_role):
         return None
 
-    expires_at = datetime.utcnow() + timedelta(seconds=ttl_seconds)
+    expires_at = datetime.now(timezone.utc) + timedelta(seconds=ttl_seconds)
     try:
         cur.execute(
             "INSERT INTO bookings_pending (user_id, master_id, service_id, start_time, end_time, status, expires_at, locked_by) VALUES (%s, %s, %s, %s, %s, 'pending', %s, %s) RETURNING id",

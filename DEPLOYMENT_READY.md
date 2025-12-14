@@ -232,6 +232,10 @@ docker build -t tattoo-bot-test .
 docker run -p 8080:8080 --env-file .env tattoo-bot-test
 ```
 
+> Note: Recent cleanup reduced noisy deprecation warnings during pre-deploy/test runs. We replaced uses of
+> `datetime.utcnow()` with timezone-aware `datetime.now(timezone.utc)` and updated template rendering calls
+> to the new `TemplateResponse(request, template, context)` signature; tests were updated accordingly.
+
 ---
 
 ## 🔧 ПЕРЕМЕННЫЕ ОКРУЖЕНИЯ (Cloud Run)

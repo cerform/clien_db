@@ -6,6 +6,7 @@ use these helpers to ensure consistent column mapping.
 """
 from typing import List, Dict
 import datetime
+from datetime import timezone
 
 # Canonical headers for each Google Sheet used by the app.
 SHEETS_HEADERS = {
@@ -31,7 +32,7 @@ def build_row(sheet_name: str, values: Dict[str, object]) -> List[object]:
     when appropriate (created_at/updated_at).
     """
     headers = headers_for(sheet_name)
-    now = datetime.datetime.utcnow().isoformat()
+    now = datetime.datetime.now(timezone.utc).isoformat()
     out = []
     for h in headers:
         if h in values and values[h] is not None:

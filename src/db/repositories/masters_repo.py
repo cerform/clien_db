@@ -95,7 +95,7 @@ class MastersRepo:
         for idx, r in enumerate(rows, start=1):
             if r.get('id') == master_id:
                 # Soft delete: set status to 'no' and append deleted note
-                notes = (r.get('notes') or '') + f" [deleted:{datetime.datetime.utcnow().isoformat()}]"
+                notes = (r.get('notes') or '') + f" [deleted:{datetime.datetime.now(datetime.timezone.utc).isoformat()}]"
                 values = {
                     'id': r.get('id'),
                     'name': r.get('name'),

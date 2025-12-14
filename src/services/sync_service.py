@@ -1,6 +1,6 @@
 """Service for syncing Google Calendar free slots with Sheets"""
 import logging
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from src.db.repositories.calendar_repo import CalendarRepo
 from src.db.repositories.masters_repo import MastersRepo
 
@@ -26,7 +26,7 @@ class SyncService:
         """
         try:
             # Get all events from calendar for next N days
-            now = datetime.utcnow()
+            now = datetime.now(timezone.utc)
             start_date = now.date()
             end_date = start_date + timedelta(days=days_ahead)
             

@@ -2,7 +2,7 @@
 PostgreSQL repository for masters
 """
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import List, Dict, Optional
 from sqlalchemy import text
 import logging
@@ -65,7 +65,7 @@ class MastersRepoPG:
                 "calendar_id": calendar_id,
                 "status": status,
                 "telegram_id": telegram_id,
-                "created_at": datetime.utcnow()
+                "created_at": datetime.now(timezone.utc)
             })
             conn.commit()
 

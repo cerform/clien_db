@@ -81,11 +81,11 @@ if [ -f .env ]; then
         if [ -n "$SECRET_VALUE" ]; then
             # Check if secret exists
             if ! gcloud secrets describe $SECRET_NAME --project=${PROJECT_ID} &> /dev/null; then
-                echo "Creating secret: $SECRET_NAME"
-                echo -n "$SECRET_VALUE" | gcloud secrets create $SECRET_NAME --data-file=- --project=${PROJECT_ID}
+                 echo "Creating secret: $SECRET_NAME"
+                 echo -n "$SECRET_VALUE" | gcloud secrets create "$SECRET_NAME" --data-file=- --project="${PROJECT_ID}"
             else
-                echo "Updating secret: $SECRET_NAME"
-                echo -n "$SECRET_VALUE" | gcloud secrets versions add $SECRET_NAME --data-file=- --project=${PROJECT_ID}
+                 echo "Updating secret: $SECRET_NAME"
+                 echo -n "$SECRET_VALUE" | gcloud secrets versions add "$SECRET_NAME" --data-file=- --project="${PROJECT_ID}"
             fi
             SECRETS_TO_SET="${SECRETS_TO_SET}${SECRET_NAME}=:${SECRET_NAME},"
         fi
@@ -113,8 +113,9 @@ else
         fi
     else
         BOT_MODE=inka
-    MEM=512Mi
+        MEM=512Mi
         echo "🔧 No OpenAI key detected. Using INKA-only mode (BOT_MODE=inka) and memory ${MEM}"
+    fi
 fi
 
 # Ensure service account has access to secrets

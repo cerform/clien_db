@@ -66,7 +66,7 @@ class ClientsRepo:
         for idx, r in enumerate(rows, start=1):
             if r.get('id') == client_id:
                 # Soft delete: append 'deleted' marker to notes and update
-                notes = (r.get('notes') or '') + f" [deleted:{datetime.datetime.utcnow().isoformat()}]"
+                notes = (r.get('notes') or '') + f" [deleted:{datetime.datetime.now(datetime.timezone.utc).isoformat()}]"
                 values = {
                     'id': r.get('id'),
                     'telegram_id': r.get('telegram_id'),

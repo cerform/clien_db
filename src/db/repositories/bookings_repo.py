@@ -1,5 +1,6 @@
 import uuid
 import datetime
+from datetime import timezone
 from src.config.constants import SHEET_BOOKINGS
 from src.db.schemas import build_row, pad_row_to_headers
 
@@ -13,7 +14,7 @@ class BookingsRepo:
 
     def create_booking(self, client_id: str, master_id: str, date: str, slot_start: str, slot_end: str, status: str = "pending", google_event_id: str = ""):
         bid = str(uuid.uuid4())
-        created_at = datetime.datetime.utcnow().isoformat()
+        created_at = datetime.datetime.now(timezone.utc).isoformat()
         # normalize to datetime_start/datetime_end
         datetime_start = f"{date}T{slot_start}"
         datetime_end = f"{date}T{slot_end}"
@@ -97,7 +98,7 @@ class BookingsRepo:
                 # Update status to cancelled and add cancellation timestamp
                 data = {
                     'status': 'cancelled',
-                    'updated_at': datetime.datetime.utcnow().isoformat(),
+                    'updated_at': datetime.datetime.now(timezone.utc).isoformat(),
                     'comment_master': f"{r.get('comment_master', '')} | Cancelled: {reason}" if reason else r.get('comment_master', '')
                 }
                 return self.update_booking(booking_id, data)
@@ -128,7 +129,7 @@ class BookingsRepo:
                     'slot_end': new_end_time,
                     'datetime_start': f"{new_date}T{new_start_time}",
                     'datetime_end': f"{new_date}T{new_end_time}",
-                    'updated_at': datetime.datetime.utcnow().isoformat(),
+                    'updated_at': datetime.datetime.now(timezone.utc).isoformat(),
                     'status': 'rescheduled'  # Mark as rescheduled
                 }
                 return self.update_booking(booking_id, data)

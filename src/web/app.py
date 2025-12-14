@@ -296,13 +296,13 @@ def create_app() -> FastAPI:
     @app.get("/", response_class=HTMLResponse)
     async def root(request: Request):
         """Главная страница - SPA Dashboard"""
-        return app.templates.TemplateResponse("dashboard_spa.html", {"request": request})
+        return app.templates.TemplateResponse(request, "dashboard_spa.html", {"request": request})
 
     @app.get("/calendar", response_class=HTMLResponse)
     async def calendar_page(request: Request):
         """Calendar page"""
         calendar_id = config.MASTER_CALENDAR_ID if hasattr(config, 'MASTER_CALENDAR_ID') else None
-        return app.templates.TemplateResponse("calendar.html", {
+        return app.templates.TemplateResponse(request, "calendar.html", {
             "request": request,
             "calendar_id": calendar_id
         })

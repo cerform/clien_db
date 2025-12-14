@@ -59,7 +59,7 @@ async def settings_get(request: Request):
         "spreadsheet_id": current_config.get("spreadsheet_id") or envcfg.SPREADSHEET_ID,
         "calendar_id": current_config.get("calendar_id") or envcfg.MASTER_CALENDAR_ID,
     })
-    return request.app.templates.TemplateResponse("settings.html", {"request": request, "config": current_config, "status": status})
+    return request.app.templates.TemplateResponse(request, "settings.html", {"request": request, "config": current_config, "status": status})
 
 
 @router.post("/settings/save")
@@ -196,7 +196,7 @@ async def admin_pending_bookings(request: Request):
         pending = bs.list_pending_bookings()
     except Exception:
         pending = []
-    return request.app.templates.TemplateResponse('pending_bookings.html', {'request': request, 'pending': pending})
+    return request.app.templates.TemplateResponse(request, 'pending_bookings.html', {'request': request, 'pending': pending})
 
 
 @router.post('/bookings/pending/{pending_id}/confirm')

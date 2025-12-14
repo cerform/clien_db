@@ -12,7 +12,7 @@ router = APIRouter()
 async def setup_get(request: Request):
     if is_configured():
         return RedirectResponse("/admin")
-    return request.app.templates.TemplateResponse("setup.html", {"request": request, "step": 1})
+    return request.app.templates.TemplateResponse(request, "setup.html", {"request": request, "step": 1})
 
 @router.post("/setup", response_class=HTMLResponse)
 async def setup_post(request: Request):
@@ -71,7 +71,7 @@ async def setup_post(request: Request):
         llm_ok = False
 
     if not (sheets_ok and telegram_ok and llm_ok):
-        return request.app.templates.TemplateResponse("setup.html", {"request": request, "error": "Validation failed. Check your keys and access permissions."})
+        return request.app.templates.TemplateResponse(request, "setup.html", {"request": request, "error": "Validation failed. Check your keys and access permissions."})
 
     # Save config and secrets
     save_config(config)
