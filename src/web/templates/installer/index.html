@@ -1,0 +1,24 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>Installer — Step 1</title>
+  </head>
+  <body>
+    <h1>Web Installer — Quick Setup</h1>
+    <form id="installer-form">
+      <label>GCP Project ID: <input type="text" name="project" /></label><br/>
+      <label>Region: <input type="text" name="region" value="europe-west1" /></label><br/>
+      <label>Service name: <input type="text" name="service" value="inka-bot" /></label><br/>
+      <label>Telegram token: <input type="text" name="telegram_token" /></label><br/>
+      <label>Set webhook: <input type="checkbox" name="set_webhook" /></label><br/>
+      <button type="submit">Start Install</button>
+    </form>
+
+    <h3>Job</h3>
+    <div id="job-id">No job yet</div>
+    <pre id="logs" style="background:#111;color:#0f0;padding:10px;height:300px;overflow:auto;"></pre>
+
+    <script src="/static/installer/installer.js"></script>
+  </body>
+  </html>
