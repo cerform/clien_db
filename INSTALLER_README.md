@@ -48,6 +48,10 @@ Notes:
 ### Web-based installer
 You can also drive the installer from the deployed web UI. Visit `<CLOUD_RUN_URL>/installer/` to open the web setup wizard — fill in project, region, tokens and click "Start Install" to trigger a background deploy. Logs and status are available in the same UI (polling-based log viewer).
 
+Notes:
+- The web installer creates a lockfile `.installer_complete` in the project root after a successful deploy to prevent accidental re-runs. Admin users (as configured via `ADMIN_USER_IDS`) may bypass this lock.
+- The UI is a multi-step wizard (6 steps). Use the final Deploy step to run the installer. For CI runs prefer `scripts/ci_installer_smoke.sh --dry-run` or the CLI `tools/install_and_deploy.py --dry-run`.
+
 ## Steps for Developers (local testing)
 1. Ensure you have `credentials.json` in the project root and run `python -m pip install -r requirements.txt`.
 2. Run the web app locally:

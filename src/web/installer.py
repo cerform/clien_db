@@ -38,6 +38,8 @@ def _run_install_subprocess(job_id: str, args: dict):
     ]
     if args.get("set_webhook"):
         cmd.append("--set-webhook")
+    if args.get("dry_run"):
+        cmd.append("--dry-run")
 
     job["status"] = "running"
     job["started_at"] = time.time()
