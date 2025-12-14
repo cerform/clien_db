@@ -71,7 +71,11 @@ async def setup_webhook():
             cfg = Config.from_env()
             if cfg.BOT_TOKEN:
                 try:
-                    bot = Bot(token=cfg.BOT_TOKEN)
+                    # Log a short, masked summary to help debug formatting issues without
+                    # printing the full secret in logs.
+                    tok = cfg.BOT_TOKEN
+                    logger.info(f"🔑 BOT_TOKEN present (len={len(tok)}, prefix={tok[:6]!r})")
+                    bot = Bot(token=tok)
                     logger.info("✅ Bot initialized during webhook setup")
                 except Exception as e:
                     logger.error(f"❌ Failed to initialize Bot during webhook setup: {e}")

@@ -106,10 +106,10 @@
 
             <div class="sidebar-footer">
                 <div class="sidebar-user">
-                    <div class="sidebar-user-avatar">ВП</div>
+                    <div id="sidebar-user-avatar" class="sidebar-user-avatar">--</div>
                     <div class="sidebar-user-info">
-                        <div class="sidebar-user-name">Владимир Петров</div>
-                        <div class="sidebar-user-role">СуперАдмин</div>
+                        <div id="sidebar-user-name" class="sidebar-user-name">Guest</div>
+                        <div id="sidebar-user-role" class="sidebar-user-role">—</div>
                     </div>
                 </div>
             </div>
@@ -169,6 +169,30 @@
         </div>
     </div>
     <script>
+        // Load admin profile and display in sidebar (if logged in)
+        async function loadAdminProfile(){
+            try{
+                const headers = {};
+                const token = localStorage.getItem('inka_admin_token');
+                if(token) headers['Authorization'] = 'Bearer ' + token;
+                const res = await fetch('/api/admin/profile', {headers});
+                if(!res.ok) return;
+                const j = await res.json();
+                if(!j.ok || !j.profile) return;
+                const p = j.profile;
+                const avatar = document.getElementById('sidebar-user-avatar');
+                const nameEl = document.getElementById('sidebar-user-name');
+                const roleEl = document.getElementById('sidebar-user-role');
+                if(avatar) avatar.innerText = p.initials || (p.name ? p.name.split(' ').map(x=>x[0]).slice(0,2).join('') : '--');
+                if(nameEl) nameEl.innerText = p.name || `Admin #${p.id}`;
+                if(roleEl) roleEl.innerText = p.role || 'Admin';
+            }catch(e){
+                // ignore - leave mock values
+                console.debug('Could not load admin profile', e.message)
+            }
+        }
+        // Try to load on page ready
+        document.addEventListener('DOMContentLoaded', ()=>{ loadAdminProfile(); });
         document.getElementById('admin-tools-btn').addEventListener('click', ()=>{ app.openModal('adminToolsModal'); document.getElementById('admin-token-input').value = localStorage.getItem('inka_admin_token') || ''; document.getElementById('admin-tools-result').innerText = ''; });
         document.getElementById('save-admin-token').addEventListener('click', ()=>{ const v = document.getElementById('admin-token-input').value; localStorage.setItem('inka_admin_token', v); document.getElementById('admin-tools-result').innerText = 'Saved token locally'; });
         document.getElementById('clear-admin-token').addEventListener('click', ()=>{ localStorage.removeItem('inka_admin_token'); document.getElementById('admin-tools-result').innerText = 'Cleared token'; });
