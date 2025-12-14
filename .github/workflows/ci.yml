@@ -1,14 +1,17 @@
+jobs:
+jobs:
+jobs:
 name: CI
 
 on:
   push:
-    branches: [ main, master, '**' ]
+    branches: [ main, master, develop, feature/** ]
   pull_request:
-    branches: [ main, master ]
+    branches: [ main, master, develop ]
 
 jobs:
-  test:
-    name: Python tests & lint
+  python:
+    name: Python - Lint & Tests
     runs-on: ubuntu-latest
     strategy:
       matrix:
@@ -27,8 +30,6 @@ jobs:
         with:
           path: ~/.cache/pip
           key: ${{ runner.os }}-pip-${{ matrix.python-version }}-${{ hashFiles('**/requirements.txt') }}
-          restore-keys: |
-            ${{ runner.os }}-pip-${{ matrix.python-version }}-
 
       - name: Install dependencies
         run: |
@@ -49,119 +50,22 @@ jobs:
         run: pytest -q
 
   frontend:
-    name: Frontend build
+    name: Frontend build (optional)
     runs-on: ubuntu-latest
-    needs: test
+    needs: python
+    if: ${{ always() }}
     steps:
       - uses: actions/checkout@v4
-
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
           node-version: 18
-
-      - name: Install & build frontend PoC
+      - name: Install & build frontend (if present)
         working-directory: services/frontend/db-manager
         run: |
-          npm ci
-          npm run build
-name: CI
-
-on:
-  push:
-    branches: [ main, master, eco-system, fix/** ]
-  pull_request:
-    branches: [ main, master, eco-system ]
-
-jobs:
-  test:
-    runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        python-version: [3.10, 3.11]
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Set up Python
-        uses: actions/setup-python@v4
-        with:
-          python-version: ${{ matrix.python-version }}
-
-      - name: Install dependencies
-        run: |
-          python -m pip install --upgrade pip
-          # install project deps; continue even if requirements fail
-          pip install -r requirements.txt || true
-          # ensure pytest >= 8.0 is available for the test run
-          pip install 'pytest>=8.0'
-
-      - name: Run tests
-        run: |
-          pytest -q
-name: CI
-
-on:
-  push:
-    branches: [ main, master, develop, feature/** ]
-  pull_request:
-    branches: [ main, master, develop ]
-
-jobs:
-  tests:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - name: Set up Python
-        uses: actions/setup-python@v4
-        with:
-          python-version: '3.11'
-      - name: Install dependencies
-        run: |
-          python -m pip install --upgrade pip
-          python -m pip install -r requirements.txt
-      - name: Run predeploy check
-        run: python3 scripts/predeploy_check.py || true
-      - name: Run pytest
-        run: pytest -q -k "not selenium"
-      - name: Dry-run SQL migrations and RBAC updates
-        run: |
-          export DATABASE_URL=sqlite:////tmp/test.db
-          python3 scripts/apply_sql_migrations.py
-          python3 scripts/create_rbac_roles.py
-name: CI
-
-on:
-  push:
-    branches: [ main, eco-system-init ]
-  pull_request:
-    branches: [ main, eco-system-init ]
-
-jobs:
-  lint-and-tests:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - name: Set up Python
-        uses: actions/setup-python@v4
-        with:
-          python-version: '3.12'
-      - name: Install dependencies
-        run: |
-          python -m pip install --upgrade pip
-          pip install -r requirements.txt
-          pip install -r requirements-dev.txt || true
-      - name: Run unit tests
-        run: |
-          python -m pytest -q --disable-warnings --maxfail=1 || true
-      - name: Run predeploy checks (skips if tokens missing)
-        env:
-          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
-          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-        run: |
-          python3 scripts/predeploy_check.py || echo 'predeploy checks failed or skipped'
-      - name: Run validate env script (non-blocking)
-        env:
-          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
-          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-        run: |
-          python3 scripts/validate_env.py || echo 'validate env returned non-zero (missing secrets)'
+          if [ -f package.json ]; then
+            npm ci
+            npm run build
+          else
+            echo "No frontend package.json found; skipping"
+          fi
