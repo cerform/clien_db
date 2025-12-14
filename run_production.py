@@ -82,8 +82,11 @@ async def setup_webhook():
                 cfg = Config.from_env()
                 if cfg.BOT_TOKEN:
                     try:
+                        # Prefer Secret Manager value when available (may be more up-to-date than env)
+                        from src.core.config_manager import get_secret
+                        secret_val = get_secret("TELEGRAM_BOT_TOKEN") or get_secret("BOT_TOKEN") or cfg.BOT_TOKEN
                         # Normalize token and log a masked summary for diagnostics
-                        raw = cfg.BOT_TOKEN
+                        raw = secret_val
                         tok = _normalize_token(raw)
                         logger.info(f"🔑 BOT_TOKEN present (len={len(tok)}, prefix={tok[:6]!r})")
                         # Validate token format if possible
@@ -277,9 +280,12 @@ def main():
                 if bot is None:
                     try:
                         cfg = Config.from_env()
-                        if cfg.BOT_TOKEN:
+                        # Prefer Secret Manager value during lazy init
+                        from src.core.config_manager import get_secret
+                        secret_val = get_secret("TELEGRAM_BOT_TOKEN") or get_secret("BOT_TOKEN") or cfg.BOT_TOKEN
+                        if secret_val:
                             try:
-                                raw = cfg.BOT_TOKEN
+                                raw = secret_val
                                 tok = _normalize_token(raw)
                                 logger.info(f"🔑 (webhook handler) BOT_TOKEN present (len={len(tok)}, prefix={tok[:6]!r})")
                                 from aiogram.utils.token import validate_token
