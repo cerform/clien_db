@@ -1,8 +1,9 @@
 FROM node:18-alpine AS build
 WORKDIR /app
-COPY package*.json .
+# Copy package.json (and package-lock.json if present) explicitly
+COPY package.json ./
 RUN npm install --no-audit --no-fund
-COPY . .
+COPY . ./
 RUN npm run build
 
 FROM nginx:stable-alpine

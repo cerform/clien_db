@@ -1,0 +1,61 @@
+name: Image-based smoke tests
+
+on:
+  workflow_dispatch:
+  pull_request:
+    types: [opened, synchronize]
+
+jobs:
+  smoke-tests:
+    runs-on: ubuntu-latest
+    services: {}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v2
+
+      - name: Build api_stub image
+        run: |
+          docker build -t clien_api_stub:smoke ./tools/api_stub
+
+      - name: Build admin-ui image
+        run: |
+          docker build -t clien_admin_ui:smoke ./services/frontend/admin-ui
+
+      - name: Create docker network
+        run: docker network create smoke_net || true
+
+      - name: Start api stub container
+        run: |
+          docker run -d --name smoke_api --network smoke_net clien_api_stub:smoke
+
+      - name: Start admin-ui container
+        run: |
+          docker run -d --name smoke_admin --network smoke_net -p 8081:80 \
+            -v ${{ github.workspace }}/tools/nginx/default.conf:/etc/nginx/conf.d/default.conf \
+            clien_admin_ui:smoke
+
+      - name: Wait for admin UI to become available
+        run: |
+          for i in $(seq 1 20); do
+            if curl -sSf http://localhost:8081/ >/dev/null; then
+              echo 'admin-ui ready'; break
+            fi
+            sleep 1
+          done
+
+      - name: Run Playwright smoke tests
+        uses: actions/setup-node@v4
+        with:
+          node-version: 18
+      - run: |
+          cd services/frontend/admin-ui
+          npm install --no-audit --no-fund
+          npx playwright install --with-deps
+          npx playwright test --config=playwright.config.js --reporter=list
+
+      - name: Tear down
+        run: |
+          docker rm -f smoke_admin smoke_api || true
+          docker network rm smoke_net || true
