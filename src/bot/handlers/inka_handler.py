@@ -200,36 +200,19 @@ def create_inka_router() -> Router:
         # Welcome message in user's language (detect from Telegram settings)
         lang_code = message.from_user.language_code or 'ru'
 
+        # Phase 1 - Human Entry: simple, invitation to explain the idea
         welcome_messages = {
             'ru': (
-                "👋 Здравствуйте! Я INKA — ассистент тату-студии.\n\n"
-                "Я помогу вам записаться на сеанс.\n"
-                "Просто напишите мне, что хотите сделать:\n\n"
-                "• Записаться на тату\n"
-                "• Узнать цены\n"
-                "• Задать вопрос\n"
-                "• Перенести запись\n\n"
-                "Пишите свободно, я вас понимаю! 😊"
+                "Здравствуйте! Расскажите, что вы хотите сделать — опишите идею или пришлите референсы.\n"
+                "Это первая татуировка или у вас уже есть опыт?"
             ),
             'en': (
-                "👋 Hello! I'm INKA, the assistant of the tattoo studio.\n\n"
-                "I'll help you book a session.\n"
-                "Just tell me what you want to do:\n\n"
-                "• Book a tattoo\n"
-                "• Check prices\n"
-                "• Ask a question\n"
-                "• Reschedule appointment\n\n"
-                "Write freely, I understand you! 😊"
+                "Hello. Please tell me what you'd like to do — describe your idea or send references.\n"
+                "Is this your first tattoo or do you have previous tattoos?"
             ),
             'he': (
-                "👋 שלום! אני INKA — העוזר של סטודיו הקעקועים.\n\n"
-                "אעזור לך להזמין תור.\n"
-                "פשוט כתוב לי מה אתה רוצה לעשות:\n\n"
-                "• להזמין קעקוע\n"
-                "• לבדוק מחירים\n"
-                "• לשאול שאלה\n"
-                "• לשנות תור\n\n"
-                "כתוב בחופשיות, אני מבין אותך! 😊"
+                "שלום. ספר/י מה ברצונך לעשות — תאר/י את הרעיון או שלח/י רפרנס.\n"
+                "זו קעקוע ראשון עבורך או יש לך ניסיון קודם?"
             )
         }
 

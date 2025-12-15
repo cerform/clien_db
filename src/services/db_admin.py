@@ -72,6 +72,36 @@ def delete_row(sheet_name: str, row_id: str) -> bool:
     idx = find_row_index_by_id(rows, row_id)
     if idx is None:
         return False
+    # Archive the row into the central 'deleted' sheet
+    try:
+        import json
+        from datetime import datetime
+        deleted_at = datetime.now().isoformat()
+        # row content as json
+        row = rows[idx-1]
+        archive_values = {
+            'sheet': sheet_name,
+            'row_id': row_id,
+            'deleted_at': deleted_at,
+            'deleted_by': '',
+            'data': json.dumps(row)
+        }
+        # append to 'deleted' sheet; use headers/build_row for consistent format
+        try:
+            append_row('deleted', archive_values)
+        except Exception:
+            # fallback to direct sheets client append
+            hdrs = headers_for('deleted')
+            if hdrs:
+                r = build_row('deleted', archive_values)
+                r = pad_row_to_headers('deleted', r)
+            else:
+                r = [archive_values.get('sheet'), archive_values.get('row_id'), archive_values.get('deleted_at'), archive_values.get('deleted_by'), archive_values.get('data')]
+            sc.append_row(sid, 'deleted', r)
+
+    except Exception:
+        logger.exception('Failed to archive deleted row; proceeding to delete/fallback')
+
     # Perform a hard delete of the row from the sheet
     try:
         sc.delete_row(sid, sheet_name, idx)

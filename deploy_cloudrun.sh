@@ -75,10 +75,15 @@ if [ -f .env ]; then
     echo "📝 Reading .env file..."
     source .env
 
-    # Create secrets if they don't exist
+    # Create secrets if they don't exist (skip suspicious placeholder values)
     for SECRET_NAME in BOT_TOKEN OPENAI_API_KEY CLOUDSQL_PASSWORD SPREADSHEET_ID; do
         SECRET_VALUE="${!SECRET_NAME}"
         if [ -n "$SECRET_VALUE" ]; then
+            # Heuristic: skip obvious placeholders to avoid deploying invalid secrets
+            if echo "$SECRET_VALUE" | grep -Ei "your|replace|dummy|test|example|bot_token" >/dev/null || [ ${#SECRET_VALUE} -lt 30 ] || [[ "$SECRET_VALUE" != *":"* && "$SECRET_NAME" == "BOT_TOKEN" ]]; then
+                echo "⚠️ Skipping creation of secret $SECRET_NAME because its value looks like a placeholder or is too short"
+                continue
+            fi
             # Check if secret exists
             if ! gcloud secrets describe $SECRET_NAME --project=${PROJECT_ID} &> /dev/null; then
                  echo "Creating secret: $SECRET_NAME"

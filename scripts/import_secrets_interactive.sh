@@ -24,7 +24,30 @@ function create_or_update() {
   fi
 }
 
-create_or_update BOT_TOKEN "${BOT_TOKEN}"
+# Basic validation: prevent common placeholder values from being saved as secrets
+function looks_like_placeholder() {
+  v="$1"
+  l=${#v}
+  if [[ "$v" =~ your|replace|dummy|test|example|bot_token ]]; then
+    return 0
+  fi
+  if [[ "$l" -lt 30 || "$v" != *":"* ]]; then
+    return 0
+  fi
+  return 1
+}
+
+if looks_like_placeholder "${BOT_TOKEN}"; then
+  echo "\n⚠️ The BOT_TOKEN you entered looks like a placeholder or is too short."
+  read -p "Are you sure you want to store it as a secret? (y/N): " confirm
+  if [[ "$confirm" =~ ^[Yy]$ ]]; then
+    create_or_update BOT_TOKEN "${BOT_TOKEN}"
+  else
+    echo "Skipping BOT_TOKEN secret creation. Please create a proper secret before deploying."
+  fi
+else
+  create_or_update BOT_TOKEN "${BOT_TOKEN}"
+fi
 create_or_update OPENAI_API_KEY "${OPENAI_API_KEY}"
 create_or_update CLOUDSQL_PASSWORD "${CLOUDSQL_PASSWORD}"
 if [ -n "${SPREADSHEET_ID}" ]; then

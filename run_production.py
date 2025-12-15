@@ -76,39 +76,37 @@ async def setup_webhook():
 
     if _webhook_setup_done:
         return
-    # If bot is not configured (invalid or missing token), try to initialize it now
-        if bot is None:
-            try:
-                cfg = Config.from_env()
-                if cfg.BOT_TOKEN:
-                    try:
-                        # Prefer Secret Manager value when available (may be more up-to-date than env)
-                        from src.core.config_manager import get_secret
-                        secret_val = get_secret("TELEGRAM_BOT_TOKEN") or get_secret("BOT_TOKEN") or cfg.BOT_TOKEN
-                        # Normalize token and log a masked summary for diagnostics
-                        raw = secret_val
-                        tok = _normalize_token(raw)
-                        logger.info(f"🔑 BOT_TOKEN present (len={len(tok)}, prefix={tok[:6]!r})")
-                        # Validate token format if possible
-                        try:
-                            from aiogram.utils.token import validate_token
-                            valid = validate_token(tok)
-                            logger.info(f"🔍 validate_token -> {valid}")
-                        except Exception:
-                            logger.info("🔍 validate_token not available or raised error")
-                        bot = Bot(token=tok)
-                        logger.info("✅ Bot initialized during webhook setup")
-                    except Exception as e:
-                        logger.error(f"❌ Failed to initialize Bot during webhook setup: {e}")
-                else:
-                    logger.warning("⚠️ No BOT_TOKEN available to initialize bot during webhook setup")
-            except Exception as e:
-                logger.error(f"❌ Error reading config during webhook setup: {e}")
 
-        if bot is None:
-            logger.warning("⚠️ Bot not configured or token invalid; skipping webhook setup")
-            _webhook_setup_done = True
-            return
+    # If bot is not configured (invalid or missing token), try to initialize it now
+    if bot is None:
+        try:
+            from src.bot.token_utils import get_bot_token, mask_token
+            token = get_bot_token()
+            logger.info(f"🔧 setup_webhook: token summary: {mask_token(token)}")
+            if token:
+                tok = _normalize_token(token)
+                try:
+                    from aiogram.utils.token import validate_token
+                    try:
+                        logger.info(f"🔍 validate_token -> {validate_token(tok)}")
+                    except Exception:
+                        logger.info("🔍 validate_token raised or unavailable")
+                    bot = Bot(token=tok)
+                    logger.info("✅ Bot initialized during webhook setup")
+                except TokenValidationError as e:
+                    logger.error(f"❌ Bot token invalid during webhook setup: {e}")
+                    bot = None
+                except Exception as e:
+                    logger.error(f"❌ Failed to initialize Bot during webhook setup: {e}")
+            else:
+                logger.warning("⚠️ No BOT_TOKEN available to initialize bot during webhook setup")
+        except Exception as e:
+            logger.error(f"❌ Error reading config during webhook setup: {e}")
+
+    if bot is None:
+        logger.warning("⚠️ Bot not configured or token invalid; skipping webhook setup")
+        _webhook_setup_done = True
+        return
 
     try:
         # Get webhook secret for validation
@@ -257,6 +255,13 @@ def main():
             """Приложение готово - webhook можно настроить через /api/setup-webhook"""
             logger.info("✅ FastAPI started, ready to accept requests")
             logger.info(f"   Call POST {service_url}/api/setup-webhook to configure Telegram webhook")
+            # Kick off webhook setup in background so all instances attempt to register the webhook
+            try:
+                # Schedule background task; do not block startup
+                asyncio.create_task(setup_webhook())
+                logger.info("🔄 Scheduled background webhook setup")
+            except Exception as e:
+                logger.exception(f"Failed to schedule webhook setup: {e}")
         
         @app.post("/api/setup-webhook")
         async def setup_webhook_endpoint():
@@ -279,20 +284,20 @@ def main():
 
                 if bot is None:
                     try:
-                        cfg = Config.from_env()
-                        # Prefer Secret Manager value during lazy init
-                        from src.core.config_manager import get_secret
-                        secret_val = get_secret("TELEGRAM_BOT_TOKEN") or get_secret("BOT_TOKEN") or cfg.BOT_TOKEN
-                        if secret_val:
+                        from src.bot.token_utils import get_bot_token, mask_token
+                        token = get_bot_token()
+                        logger.info(f"🔑 (webhook handler) token summary: {mask_token(token)}")
+                        if token:
                             try:
-                                raw = secret_val
-                                tok = _normalize_token(raw)
-                                logger.info(f"🔑 (webhook handler) BOT_TOKEN present (len={len(tok)}, prefix={tok[:6]!r})")
-                                from aiogram.utils.token import validate_token
+                                tok = _normalize_token(token)
                                 try:
-                                    logger.info(f"🔍 (webhook handler) validate_token -> {validate_token(tok)}")
+                                    from aiogram.utils.token import validate_token
+                                    try:
+                                        logger.info(f"🔍 (webhook handler) validate_token -> {validate_token(tok)}")
+                                    except Exception:
+                                        logger.info("🔍 (webhook handler) validate_token raised")
                                 except Exception:
-                                    logger.info("🔍 (webhook handler) validate_token raised")
+                                    pass
                                 bot = Bot(token=tok)
                                 logger.info("✅ Bot initialized from environment inside webhook handler")
                             except Exception as e:

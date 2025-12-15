@@ -5,42 +5,48 @@ import hmac
 from fastapi import APIRouter, Request, HTTPException
 from aiogram import Bot, Dispatcher, types
 from src.core.config_manager import get_secret
+from src.bot.token_utils import get_bot_token, mask_token
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
-TELEGRAM_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "") or os.getenv("BOT_TOKEN", "") or get_secret("TELEGRAM_BOT_TOKEN") or get_secret("TELEGRAM_TOKEN")
 WEBHOOK_SECRET = os.getenv("WEBHOOK_SECRET", "") or get_secret("WEBHOOK_SECRET")
 
+# Lazy-safe bot/dispatcher initialization. Prefer token from env (BOT_TOKEN) or
+# explicitly mapped TELEGRAM_BOT_TOKEN; fall back to Secret Manager or config.
 bot = None
 dp = None
-if TELEGRAM_TOKEN:
-    bot = Bot(token=TELEGRAM_TOKEN)
-    dp = Dispatcher()
-    # Register handlers
-    try:
-        from src.bot.handlers import admin_handlers, master_handlers, language_handler, inka_handler
-        # Default to INKA-only for webhook processing
-        bot_mode = os.getenv('BOT_MODE', 'inka').lower()
-        if bot_mode == 'advanced':
-            try:
-                from src.bot.handlers import ai_handler
-                dp.include_router(ai_handler.create_ai_router())
-            except Exception:
-                # If AI handler fails to import, fall back to INKA
-                dp.include_router(inka_handler.create_inka_router())
-        else:
-            dp.include_router(inka_handler.create_inka_router())
-        admin_handlers.setup(dp)
-        master_handlers.setup(dp)
-        # language_handler may contain router-style setup; attempt to register if available
+try:
+    token = get_bot_token()
+    if token:
         try:
-            language_handler.setup(dp)
-        except Exception:
-            pass
-    except Exception:
-        # Non-fatal: continue with empty dispatcher
-        pass
+            bot = Bot(token=token)
+            dp = Dispatcher()
+            # Register handlers
+            from src.bot.handlers import admin_handlers, master_handlers, language_handler, inka_handler
+            bot_mode = os.getenv('BOT_MODE', 'inka').lower()
+            if bot_mode == 'advanced':
+                try:
+                    from src.bot.handlers import ai_handler
+                    dp.include_router(ai_handler.create_ai_router())
+                except Exception:
+                    dp.include_router(inka_handler.create_inka_router())
+            else:
+                dp.include_router(inka_handler.create_inka_router())
+            admin_handlers.setup(dp)
+            master_handlers.setup(dp)
+            try:
+                language_handler.setup(dp)
+            except Exception:
+                pass
+            logger.info(f"✅ Bot initialized from environment: {mask_token(token)}")
+        except Exception as e:
+            logger.error(f"Failed to initialize Bot at import time: {e}")
+            bot = None
+            dp = None
+except Exception:
+    bot = None
+    dp = None
 
 
 def verify_telegram_webhook(secret_token: str, request_token: str) -> bool:
@@ -64,6 +70,48 @@ async def telegram_webhook(request: Request):
     - Validates X-Telegram-Bot-Api-Secret-Token header if WEBHOOK_SECRET is configured
     - Prevents unauthorized webhook calls
     """
+    global bot, dp
+
+    # If dispatcher isn't configured yet, attempt lazy initialization using the
+    # same token helper. This allows us to recover if secrets became available
+    # after process start or a previous init failed.
+    if not dp:
+        logger.info("Dispatcher not configured - attempting lazy bot initialization")
+        try:
+            token = get_bot_token()
+            if token:
+                try:
+                    bot = Bot(token=token)
+                    dp = Dispatcher()
+                    try:
+                        from src.bot.handlers import admin_handlers, master_handlers, language_handler, inka_handler
+                        bot_mode = os.getenv('BOT_MODE', 'inka').lower()
+                        if bot_mode == 'advanced':
+                            try:
+                                from src.bot.handlers import ai_handler
+                                dp.include_router(ai_handler.create_ai_router())
+                            except Exception:
+                                dp.include_router(inka_handler.create_inka_router())
+                        else:
+                            dp.include_router(inka_handler.create_inka_router())
+                        admin_handlers.setup(dp)
+                        master_handlers.setup(dp)
+                        try:
+                            language_handler.setup(dp)
+                        except Exception:
+                            pass
+                    except Exception:
+                        logger.exception("Non-fatal: failed to register one or more handlers during lazy init")
+                    logger.info(f"✅ Bot initialized during lazy webhook handling: {mask_token(token)}")
+                except Exception as e:
+                    logger.error(f"Failed to initialize Bot in webhook handler: {e}")
+                    bot = None
+                    dp = None
+            else:
+                logger.warning("No token available during lazy init")
+        except Exception as e:
+            logger.exception(f"Error during lazy init: {e}")
+
     if not dp:
         logger.error("Telegram webhook called but dispatcher not configured")
         return {"ok": False, "error": "Bot not configured"}

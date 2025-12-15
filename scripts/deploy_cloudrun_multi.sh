@@ -52,7 +52,12 @@ for SECRET_NAME in BOT_TOKEN OPENAI_API_KEY CLOUDSQL_PASSWORD SPREADSHEET_ID DAT
     if [ -f .env ]; then
       SECRET_VALUE=$(grep -E "^${SECRET_NAME}=" .env | sed -e 's/^${SECRET_NAME}=//') || true
       if [ -n "${SECRET_VALUE}" ]; then
-        echo -n "${SECRET_VALUE}" | gcloud secrets create ${SECRET_NAME} --replication-policy="automatic" --data-file=- --project=${PROJECT_ID} || true
+        # Skip obvious placeholders to avoid creating invalid secrets
+        if echo "${SECRET_VALUE}" | grep -Ei "your|replace|dummy|test|example|bot_token" >/dev/null || [ ${#SECRET_VALUE} -lt 30 ] || [[ "${SECRET_NAME}" == "BOT_TOKEN" && "${SECRET_VALUE}" != *":"* ]]; then
+          echo "⚠️ Skipping creation of secret ${SECRET_NAME} because its value looks like a placeholder or is too short"
+        else
+          echo -n "${SECRET_VALUE}" | gcloud secrets create ${SECRET_NAME} --replication-policy="automatic" --data-file=- --project=${PROJECT_ID} || true
+        fi
       else
         echo "Secret ${SECRET_NAME} not found and no value in .env; create it in Secret Manager or set it in .env" || true
       fi

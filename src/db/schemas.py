@@ -18,6 +18,7 @@ SHEETS_HEADERS = {
     'config': ['key', 'value', 'description'],
     'conversations': ['id', 'client_id', 'message', 'assistant_reply', 'timestamp', 'source']
     , 'audit_log': ['timestamp', 'user_id', 'user_name', 'sheet', 'row_id', 'action', 'before', 'after']
+    , 'deleted': ['sheet', 'row_id', 'deleted_at', 'deleted_by', 'data']
 }
 
 

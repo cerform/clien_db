@@ -13,6 +13,9 @@ from enum import Enum
 from src.services.openai_service import OpenAIService
 from src.ai.advanced_inka import get_advanced_inka
 from src.ai.inka_learning import get_inka_learning
+from src.ai.inka_processor import INKAProcessor
+from src.core.config_manager import get_config
+import os
 from src.services.service_factory import (
     get_admin_service,
     get_booking_service,
@@ -113,6 +116,14 @@ class AIDialogEngine:
             self.inka_learning = get_inka_learning()
         except Exception:
             self.inka_learning = None
+        # INKA staged processor (S1/S2)
+        try:
+            self.inka_processor = INKAProcessor(self.openai_service, services={
+                'booking_service': get_booking_service(),
+                'calendar_service': get_calendar_service(),
+            })
+        except Exception:
+            self.inka_processor = None
         
     def _get_system_prompt(self, user_role: UserRole, user_info: Dict) -> str:
         """
@@ -134,32 +145,47 @@ class AIDialogEngine:
 - Помогаешь с записями, консультациями и информацией
 - Можешь выполнять административные функции"""
 
+        # Allow operator override of persona via config or env var
+        try:
+            cfg = get_config() or {}
+            persona_override = cfg.get('ai_personality') or os.getenv('AI_PERSONALITY')
+            if persona_override:
+                base_personality = persona_override + "\n\n" + base_personality
+        except Exception:
+            # best-effort; ignore errors
+            pass
+
         if user_role == UserRole.CLIENT:
-            prompt = f"""{base_personality}
+                # Clear, strict behavior rules for client-facing persona
+                prompt = f"""{base_personality}
 
-КАК КЛИЕНТСКИЙ АССИСТЕНТ ты можешь:
+ТЫ — ЖИВОЙ АДМИНИСТРАТОР ТАТУ-СТУДИИ (письменная роль). ВЕДИ СЕБЯ КАК ЧЕЛОВЕК.
 
-1. **Консультировать** по татуировкам:
-   - Стили, размеры, расположение
-   - Время заживления и уход
-   - Ориентировочные цены и длительность
+ОСНОВНЫЕ ПРАВИЛА ПОВЕДЕНИЯ (строго):
+- Говори спокойным, уверенным и профессиональным тоном, без шаблонности.
+- Задавай ровно один уточняющий вопрос в одном сообщении, когда нужно больше информации.
+- Не предлагай даты или времени, пока клиент явно не показывает готовность к записи.
+- Не высылай контрольные списки, не копируй анкету и не задавай несколько вопросов одновременно.
+- Не используй слова: "choose", "fill", "select", "pick" и не проси "заполнить форму".
+- Никогда не обещай результатов, не называй цены без подтверждения от админа, не придумывай доступность или даты.
+- Не говори "я бот" или "я ИИ"; представляйся как живой администратор (коротко и естественно).
+- Не используй эмодзи, сленг или маркдаун, не отправляй списки вопросов.
+- Автоматически определи психотип клиента и действуй согласно правилам:
+  1) Агрессивный/напорный — замедляй диалог, короткие вежливые ответы, не поддавайся давлению.
+  2) Колеблющийся/тревожный — успокой, объясняй небольшими шагами, не торопи.
+  3) VIP/уверенный — уважай время, будь краток и эффективен; можешь ускорить прогресс.
+  4) Нейтральный — стандартная, плавная скорость.
 
-2. **Управлять записями**:
-   - Показывать свободное время
-   - Создавать бронирования
-   - Переносить и отменять записи
-   - Показывать текущие записи клиента
+ДИАЛОГОВАЯ СТРУКТУРА (следуй тихо, без озвучивания этапов):
+- Сначала приветствуй и пригласи клиента рассказать, что он хочет (без просьб о дате/времени).
+- Выясняй мотивацию, опыт, значение идеи, стиль, примерные референсы и место на теле — по одному вопросу за раз.
+- Обучай и корректируй мягко: давай спокойные объяснения о процессе и ожиданиях, без медсоветов.
+- Проверяй готовность: перед предложением слотов убедись, что клиент понимает процесс и тон диалога корректен.
+- Только при явной готовности предложи небольшое число реальных вариантов и опиши их как предложения, а не команды.
 
-3. **Общаться естественно**:
-   - Отвечать на любые вопросы
-   - Поддерживать контекст разговора
-   - Быть эмпатичным и полезным
+ЯЗЫК: всегда отвечай ТОЛЬКО на языке клиента. Никогда не смешивай языки.
 
-ВАЖНО:
-- Всегда отвечай на ЯЗЫКЕ КЛИЕНТА
-- Если нужно выполнить действие (запись, отмена), верни JSON с action
-- Никогда не придумывай даты и время - только из реальной БД
-- Если что-то непонятно - уточни у клиента
+В СЛУЧАЕ СОМНЕНИЯ: задай один уточняющий вопрос и замедли темп.
 
 Текущий клиент: {user_info.get('name', 'Гость')}
 Предпочитаемый язык: {user_info.get('language', 'ru')}"""
@@ -557,6 +583,24 @@ class AIDialogEngine:
             messages = [
                 {"role": "system", "content": system_prompt}
             ] + self.conversation_history[user_id]
+
+            # Run INKA S1 classifier to bias the LLM with structured intent
+            try:
+                if getattr(self, 'inka_processor', None):
+                    s1 = self.inka_processor.stage_1_classify(message, user_info)
+                    # Attach S1 classification as a system hint (JSON)
+                    messages.insert(0, {"role": "system", "content": f"INKA_S1_CLASSIFICATION: {json.dumps(s1, ensure_ascii=False)}"})
+                    logger.debug(f"INKA S1 classification: {s1}")
+                    # If S1 indicates booking_needed, run S2 to get suggested slots and availability
+                    try:
+                        if s1.get('booking_needed'):
+                            s2 = self.inka_processor.stage_2_booking_engine(s1, message, context)
+                            messages.insert(0, {"role": "system", "content": f"INKA_S2_SUGGESTIONS: {json.dumps(s2, ensure_ascii=False)}"})
+                            logger.debug(f"INKA S2 suggestions: {s2}")
+                    except Exception as e:
+                        logger.debug(f"INKA S2 processing failed: {e}")
+            except Exception as e:
+                logger.debug(f"INKA S1 classification failed: {e}")
             
             logger.info(f"🔄 Calling {self.provider} API...")
             logger.info(f"   Model: {self.model}")
