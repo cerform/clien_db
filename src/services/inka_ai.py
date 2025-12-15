@@ -508,6 +508,12 @@ Booking type: {booking_type}
             return self._rule_based_response(message, context, language)
 
         try:
+            # Debug: record that we are about to consult the LLM (if enabled)
+            try:
+                uid = context.get('user_id') if context else None
+            except Exception:
+                uid = None
+            logger.info("🔎 respond_to_consultation: user=%s booking_type=%s llm_enabled=%s", uid, booking_type, self.enable_llm)
             system_prompt = self.get_system_prompt_multilingual(language)
             booking_type = context.get("booking_type", "tattoo") if context else "tattoo"
 
@@ -515,6 +521,7 @@ Booking type: {booking_type}
 
             # Telemetry: llm call
             incr("llm_calls_total", 1)
+            logger.info("💬 Calling LLM (respond_to_consultation) for user=%s...", uid)
             response = self.openai_service.chat_completion(
                 messages=[{"role": "system", "content": system_prompt}, {"role": "user", "content": user_prompt}],
                 temperature=0.7,
@@ -557,6 +564,8 @@ Booking type: {booking_type}
         # Try LLM first
         if self.openai_service and self.openai_service.api_enabled and self.enable_llm:
             try:
+                uid = context.get('user_id') if context else None
+                logger.info("🔎 respond_structured: user=%s booking_type=%s calling LLM", uid, booking_type)
                 system = self.get_system_prompt_multilingual(language)
                 instruction = (
                     "You MUST output ONLY a JSON object with the following keys:\n"
@@ -571,6 +580,7 @@ Booking type: {booking_type}
 
                 # Telemetry: llm call
                 incr("llm_calls_total", 1)
+                logger.info("💬 Calling LLM (respond_structured) for user=%s...", uid)
                 response = self.openai_service.chat_completion(
                     messages=[{"role": "system", "content": system}, {"role": "user", "content": user_prompt}],
                     temperature=0.25,

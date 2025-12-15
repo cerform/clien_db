@@ -78,6 +78,21 @@ cp .env.example .env
 docker compose up --build
 ```
 
+---
+
+## 🔍 LLM diagnostics and hard checks
+
+When deploying the bot with LLM support enabled, the project now includes additional safety and diagnostic features:
+
+- If `ENABLE_LLM=true` and **no** `OPENAI_API_KEY` is present in production (`ENV=production`), the service will fail fast on startup (better to crash than to silently run in fallback mode). ✅
+- Use the admin-only Telegram command `/debug_llm` to get a quick report of:
+    - Whether LLM is enabled
+    - Provider and model in use
+    - Whether the OpenAI key is present (the key itself is never revealed)
+    - Search provider/key presence and a short test-call result
+
+This makes it much easier to diagnose why the bot is returning fallback/template answers (missing keys, misconfigured env, or LLM errors). 💡
+
 Services started:
 - Backend API: http://localhost:8081
 - Bot webhook: http://localhost:8082

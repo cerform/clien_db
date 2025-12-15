@@ -6,6 +6,30 @@ Drop this into your handlers and it's ready to go
 import logging
 import json
 from typing import Optional, Dict
+import asyncio
+
+# Ensure a default event loop exists for environments/tests that expect one
+try:
+    asyncio.get_event_loop()
+except RuntimeError:
+    asyncio.set_event_loop(asyncio.new_event_loop())
+else:
+    # Replace get_event_loop with a small compatibility wrapper that ensures a usable
+    # event loop is always returned (helps older tests that call get_event_loop()).
+    _orig_get_event_loop = asyncio.get_event_loop
+
+    def _get_event_loop_compat():
+        try:
+            return _orig_get_event_loop()
+        except RuntimeError:
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            return loop
+
+    # Patch only if not already patched
+    if getattr(asyncio, '_get_event_loop_compat_installed', False) is not True:
+        asyncio.get_event_loop = _get_event_loop_compat
+        asyncio._get_event_loop_compat_installed = True
 from src.services.inka_ai import INKA
 from src.config.config import Config
 from src.services.admin_manager import is_admin
@@ -101,11 +125,12 @@ async def get_client_context(user_id: int, db=None) -> Dict:
             "active_booking_info": active_booking,
             "client_name": client.get('name') if client else None,
             "client_phone": client.get('phone') if client else None,
+            "context_available": True,
         }
 
     except Exception as e:
         logger.error(f"Error getting client context: {e}")
-        # Return safe default on error
+        # Return safe default on error, and signal that context was unavailable
         return {
             "user_id": user_id,
             "has_active_booking": False,
@@ -113,6 +138,7 @@ async def get_client_context(user_id: int, db=None) -> Dict:
             "last_route": None,
             "last_stage": None,
             "active_booking_info": None,
+            "context_available": False,
         }
 
 
@@ -198,13 +224,36 @@ async def handle_client_message(
         if antikey:
             data = await state.get_data()
             last = data.get("last_antirepeat_key")
+            # If we already sent this reply, keep a repeat counter and progress
             if last == antikey:
-                # Don't repeat identical reply; ask for clarification
-                return {
-                    "response": "Можешь переформулировать, пожалуйста? Я стараюсь не повторяться и хочу лучше понять.",
-                    "next_action": "other",
-                    "classification": result.get("classification", {}),
-                }
+                antirepeat_count = data.get("antirepeat_count", 0) + 1
+                await state.update_data({"antirepeat_count": antirepeat_count})
+                logger.info("Anti-repeat triggered for user %s (count=%s)", message.from_user.id, antirepeat_count)
+
+                # If the user mentioned booking keywords, or we don't have client context, push to offer slots
+                booking_keywords = any(k in message.text.lower() for k in ["запис", "хочу тату", "хочу запис", "тату"])
+                context_available = client_context.get("context_available", True)
+                if booking_keywords or not context_available:
+                    # Force an intent-first booking progression
+                    await state.update_data({"last_antirepeat_key": antikey, "antirepeat_count": 0})
+                    return {"response": "Понял, ты хочешь записаться. Давай начнём: укажи, пожалуйста, место (например плечо), примерный размер и есть ли референсы? Или хочешь сразу посмотреть свободные слоты?", "next_action": "offer_slots", "classification": classification}
+
+                # Standard anti-repeat progression: suggest rephrase -> ask different clarifying question -> escalate
+                if antirepeat_count == 1:
+                    return {
+                        "response": "Можешь переформулировать, пожалуйста? Я стараюсь не повторяться и хочу лучше понять.",
+                        "next_action": "other",
+                        "classification": result.get("classification", {}),
+                    }
+                if antirepeat_count == 2:
+                    await state.update_data({"antirepeat_count": antirepeat_count})
+                    return {"response": "Давай я задам вопрос иначе: это первая татуировка или уже был опыт?", "next_action": "other", "classification": classification}
+
+                # On repeated repeats, escalate to a human and reset counter
+                incr("antirepeat_escalations_total", 1)
+                await state.update_data({"inka_escalated": True, "antirepeat_count": 0})
+                return {"response": "Извини, похоже, мне нужно подключить человека для помощи — свяжу тебя с мастером.", "next_action": "human", "classification": classification}
+
             # Store latest antirepeat key and client profile for future checks
             await state.update_data({
                 "last_antirepeat_key": antikey,
@@ -282,6 +331,12 @@ def create_inka_router() -> Router:
     async def handle_text_message(message: types.Message, state: FSMContext):
         """Handle any text message with INKA - Pure AI Receptionist"""
 
+        # Debug: log incoming message for tracing
+        try:
+            logger.info("🔎 Incoming message from %s: %s", message.from_user.id, (message.text or '')[:200])
+        except Exception:
+            logger.debug("🔎 Incoming message logging failed")
+
         # Check if user is admin trying to access admin panel
         from src.config.config import Config
         from src.config.env_loader import load_env
@@ -296,7 +351,18 @@ def create_inka_router() -> Router:
             return
 
         # Process through INKA
+        # Log before processing to record user context and message
+        try:
+            logger.info("⏳ Processing message through INKA for user %s", message.from_user.id)
+        except Exception:
+            pass
         result = await handle_client_message(message, state)
+
+        # Debug: log result from INKA processing
+        try:
+            logger.info("✅ INKA result for %s: next_action=%s, response=%.200s", message.from_user.id, result.get('next_action'), (result.get('response') or '')[:200])
+        except Exception:
+            logger.debug("✅ INKA result logging failed")
 
         # Send response WITHOUT any keyboard (clean chat interface)
         # This removes all buttons and creates a pure conversational experience
