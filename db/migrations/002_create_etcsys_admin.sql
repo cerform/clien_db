@@ -7,6 +7,7 @@ ALTER TABLE admins
   ADD COLUMN IF NOT EXISTS password_hash TEXT;
 
 -- Insert admin user (or update hash if telegram_id exists)
-INSERT INTO admins (name, telegram_id, role, username, password_hash) VALUES
-  ('etcsys', 438407739, 'admin', 'etcsys', 'pbkdf2_sha256$150000$670be8c9e32b34f061967214c81a525b$62843a42c1adf0aec6a8a1887ee41b3b8fcda2752e3be100b46edd3793dd94c6')
-ON CONFLICT (telegram_id) DO UPDATE SET username = EXCLUDED.username, password_hash = EXCLUDED.password_hash;
+-- NOTE: Inserting a default admin user (with plaintext or example passwords)
+-- in migrations is a security risk. Remove any hard-coded credentials and use
+-- a secure provisioning process to create admin accounts post-deployment
+-- (e.g. `scripts/create_admin.py` or a one-time SQL run via the admin console).

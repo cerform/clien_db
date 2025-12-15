@@ -327,23 +327,24 @@ class INKAConsultant:
                 self.openai_service = None
         # Default model
         self.model = "gpt-3.5-turbo"
-        # Enable LLM only if explicitly allowed in env (default False)
-        # Default to False when configuration isn't available to avoid
-        # requiring an external LLM in tests or local runs without keys.
-        self.enable_llm = False
+
+        # Enforce LLM usage by default. If configuration explicitly disables it,
+        # honor that, otherwise require the LLM path and escalate when unavailable.
+        self.enable_llm = True
         try:
             from src.config.config import Config
             cfg = Config.from_env()
-            self.enable_llm = bool(cfg.ENABLE_LLM)
+            # If an operator explicitly set ENABLE_LLM to false, respect it
+            if hasattr(cfg, 'ENABLE_LLM') and not bool(cfg.ENABLE_LLM):
+                self.enable_llm = False
         except Exception:
-            # Keep default False if config cannot be loaded
-            self.enable_llm = False
+            # keep default True if config cannot be read
+            pass
 
         # Note: We do not override `enable_llm` if OpenAI service is absent.
         # When `ENABLE_LLM` is explicitly set to true in the environment but
         # there is no valid OpenAI service, `respond_structured` will escalate
         # to a human handler (model_unavailable) as intended by policy.
-        self.model = "gpt-3.5-turbo"
 
     def get_system_prompt(self) -> str:
         """
@@ -503,9 +504,11 @@ Booking type: {booking_type}
         Returns:
             Text response from consultant in user's language
         """
-        if not self.openai_service or not self.openai_service.api_enabled:
-            # Fallback: rule-based response
-            return self._rule_based_response(message, context, language)
+        # If LLM is enforced but the OpenAI service is unavailable, escalate
+        if getattr(self, "enable_llm", False) and (not self.openai_service or not self.openai_service.api_enabled):
+            incr("llm_enforced_unavailable", 1)
+            logger.warning("LLM enforced but unavailable for user=%s; escalating to human", context.get('user_id') if context else None)
+            return "Извините, временные трудности с системой — сейчас свяжу с человеком."
 
         try:
             # Debug: record that we are about to consult the LLM (if enabled)
@@ -623,10 +626,16 @@ Booking type: {booking_type}
                     return {"text": text, "next_action": next_action, "meta": meta}
                 except ContractValidationError as e:
                     incr("llm_parse_failures", 1)
-                    logger.warning(f"Model returned invalid contract: {e}; falling back to deterministic contract")
+                    logger.warning(f"Model returned invalid contract: {e}; escalating to human because LLM is enforced")
+                    # When LLM is enforced, invalid contract means we cannot safely continue.
+                    return {"text": "Извините, временные трудности с системой — свяжу с человеком.", "next_action": "human", "meta": {"stage": "s1", "antirepeat_key": self._make_antirepeat_key(message, context.get("route", "other"), booking_type), "client_profile": {"booking_type": booking_type}, "model_unavailable": True}}
 
             except Exception as e:
                 logger.exception(f"Structured LLM response failed: {e}")
+                # If LLM is enforced, escalate instead of falling back to deterministic contract
+                if getattr(self, "enable_llm", False):
+                    incr("llm_errors_total", 1)
+                    return {"text": "Извините, временные трудности с системой — свяжу с человеком.", "next_action": "human", "meta": {"stage": "s1", "antirepeat_key": self._make_antirepeat_key(message, context.get("route", "other"), booking_type), "client_profile": {"booking_type": booking_type}, "model_unavailable": True}}
 
         # Fallback deterministic contract
         text = self._rule_based_response(message, context, language)
@@ -769,7 +778,19 @@ class INKA:
     def __init__(self, api_key: Optional[str] = None):
         """Initialize INKA with all components including S2 Booking Engine"""
         self.classifier = INKAClassifier()
-        self.consultant = INKAConsultant(api_key)
+        # If an API key is provided, prefer the new LLM-only consultant (INKAConsultantV2)
+        if api_key:
+            try:
+                from src.services.inka_consultant_v2 import INKAConsultantV2
+
+                self.consultant = INKAConsultantV2(api_key=api_key)
+            except Exception:
+                # Fall back to legacy consultant if anything goes wrong during import/initialization
+                logger = logging.getLogger(__name__)
+                logger.exception("Failed to initialize INKAConsultantV2, falling back to legacy INKAConsultant")
+                self.consultant = INKAConsultant(api_key)
+        else:
+            self.consultant = INKAConsultant(api_key)
         self.booking_assistant = INKABookingAssistant()
         self.booking_engine = INKABookingEngine()  # New S2 Booking Engine
 
@@ -906,6 +927,7 @@ __all__ = [
     "INKA",
     "INKAClassifier",
     "INKAConsultant",
+    "INKAConsultantV2",
     "INKABookingAssistant",
     "INKABookingEngine",
     "BookingType",

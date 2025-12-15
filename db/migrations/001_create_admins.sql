@@ -15,8 +15,8 @@ CREATE TABLE IF NOT EXISTS admins (
 );
 
 -- Seed example admin records (do not overwrite existing entries)
-INSERT INTO admins (name, telegram_id, role, email) VALUES
-  ('Владимир Петров', 1, 'owner', NULL)
-ON CONFLICT (telegram_id) DO NOTHING;
-
--- You can add more records here if needed
+-- NOTE: Example admin records have been removed from migrations to avoid
+-- shipping embedded credentials or personally-identifiable data in repo.
+-- Create initial admin users using the administrative CLI or via a secure
+-- external provisioning process (e.g. run `scripts/create_admin.py` or
+-- use the web admin interface after first deploy).

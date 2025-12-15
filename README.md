@@ -258,7 +258,7 @@ Auto-created with 4 tabs:
 
 If you want to add new tables or seed records in Cloud SQL (PostgreSQL), follow this pattern:
 
-1. Add a SQL migration file into `db/migrations/`, for example `001_create_admins.sql`. We include a sample migration that creates an `admins` table and inserts an initial admin.
+1. Add a SQL migration file into `db/migrations/`, for example `001_create_admins.sql`. Migrations should create schema only; avoid embedding example admin records or credentials. Use the `scripts/create_user.py` CLI to provision initial admin users securely after the database is ready.
 
 2. Upload the SQL file to a GCS bucket and import it into your Cloud SQL instance. Example script available: `scripts/migrate_cloudsql.sh`.
 
@@ -279,7 +279,7 @@ Notes:
 
 If you'd like, I can add additional migration files or create a small sequence runner to apply multiple migrations in order.
 
-Note: A migration `db/migrations/002_create_etcsys_admin.sql` has been added which creates a user with username `etcsys` and sets a salted password hash. If you used the provided password during the request, it's been hashed and stored — please rotate the password after first login (or update via a secure admin UI). Do NOT store plaintext passwords in repo files.
+Note: This repository no longer seeds admin users via migrations. To create initial admin/super-admin accounts, use `scripts/create_user.py` which securely handles password generation and hashing.
 
 ## 🚀 Deployment
 

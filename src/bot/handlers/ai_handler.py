@@ -4,6 +4,8 @@ AI Handler - Главный обработчик всех сообщений ч�
 """
 
 import logging
+import asyncio
+import os
 from typing import Optional
 from aiogram import Router, types, F
 from aiogram.fsm.context import FSMContext
@@ -29,18 +31,23 @@ def get_ai_engine() -> AIDialogEngine:
         try:
             load_env()
             cfg = Config.from_env()
-            
-            # Check if API key is valid and has quota
-            api_key = cfg.OPENAI_API_KEY
-            if not api_key or api_key == "YOUR_OPENAI_API_KEY":
-                logger.warning("⚠️ No valid OpenAI API key - using fallback mode")
-                api_key = None
-            
+
+            # If LLM explicitly enabled but key missing, enforce in production
+            if cfg.ENABLE_LLM and not cfg.OPENAI_API_KEY:
+                if (cfg.ENV or '').lower() == 'production':
+                    logger.error('ENABLE_LLM is true but OPENAI_API_KEY is missing in production')
+                    raise RuntimeError('ENABLE_LLM is true but OPENAI_API_KEY is missing in production')
+                else:
+                    logger.warning('ENABLE_LLM is true but OPENAI_API_KEY is missing; continuing in non-production mode')
+
+            api_key = cfg.OPENAI_API_KEY if cfg.OPENAI_API_KEY else None
+
             _ai_engine = AIDialogEngine(
                 api_key=api_key,
                 default_language="ru"
             )
-            logger.info("✅ AI Dialog Engine initialized")
+            logger.info("✅ AI Dialog Engine initialized: provider=%s model=%s enabled=%s",
+                        getattr(_ai_engine, 'provider', 'unknown'), getattr(_ai_engine, 'model', 'unknown'), getattr(_ai_engine, 'api_enabled', False))
         except Exception as e:
             logger.error(f"Failed to initialize AI Engine: {e}")
             raise
@@ -261,6 +268,69 @@ def create_ai_router() -> Router:
 Просто пишите команды естественным языком!
 """
         await message.answer(admin_text, parse_mode="Markdown")
+
+    @router.message(Command("debug_llm"))
+    async def cmd_debug_llm(message: types.Message):
+        """Admin-only: report LLM & search diagnostics and perform a short test call"""
+        user_role = determine_user_role(message.from_user.id, admin_ids)
+        if user_role != UserRole.ADMIN:
+            await message.answer("⛔️ У вас нет доступа к этой команде")
+            return
+
+        # Gather config
+        try:
+            cfg = Config.from_env()
+        except Exception as e:
+            logger.exception(f"Failed to load config for debug: {e}")
+            await message.answer(f"Failed to load config: {e}")
+            return
+
+        # Engine info
+        try:
+            engine = get_ai_engine()
+            provider = getattr(engine, 'provider', 'unknown')
+            model = getattr(engine, 'model', 'unknown')
+            api_enabled = bool(getattr(engine, 'openai_service', None) and getattr(engine.openai_service, 'api_enabled', False))
+        except Exception as e:
+            provider = 'uninitialized'
+            model = 'n/a'
+            api_enabled = False
+
+        # Search info (best-effort)
+        search_enabled = os.getenv('SEARCH_ENABLED', 'false').lower() in ('1', 'true', 'yes')
+        search_provider = os.getenv('SEARCH_PROVIDER') or os.getenv('SEARCH_API_PROVIDER') or 'none'
+        search_key_present = bool(os.getenv('SERPER_API_KEY') or os.getenv('SEARCH_API_KEY') or os.getenv('BRAVE_API_KEY'))
+
+        lines = [
+            f"LLM_ENABLED: {'yes' if cfg.ENABLE_LLM else 'no'}",
+            f"Provider: {provider}",
+            f"Model: {model}",
+            f"OPENAI_API_KEY present: {'yes' if bool(cfg.OPENAI_API_KEY) else 'no'}",
+            f"OpenAI client enabled: {'yes' if api_enabled else 'no'}",
+            f"SEARCH_ENABLED: {'yes' if search_enabled else 'no'}",
+            f"Search provider: {search_provider}",
+            f"Search key present: {'yes' if search_key_present else 'no'}",
+        ]
+
+        # Try a small LLM test call if possible (async-safe)
+        test_result = 'skipped'
+        if api_enabled:
+            try:
+                # Use simple_summary via thread to avoid blocking event loop
+                res = await asyncio.to_thread(lambda: engine.openai_service.simple_summary([{'role': 'user', 'content': 'Ping'}], max_tokens=20))
+                if res:
+                    test_result = 'OK'
+                    lines.append(f"Test call: OK (summary len={len(res)})")
+                else:
+                    test_result = 'FAIL (empty response)'
+                    lines.append(f"Test call: FAIL (empty response)")
+            except Exception as e:
+                test_result = f'FAIL ({str(e)})'
+                lines.append(f"Test call: FAIL: {e}")
+        else:
+            lines.append("Test call: skipped (OpenAI client not enabled)")
+
+        await message.answer("\n".join(lines))
     
     @router.message(F.text)
     async def handle_text_message(message: types.Message, state: FSMContext):
@@ -328,14 +398,27 @@ def create_ai_router() -> Router:
             logger.error(f"   Error: {str(e)}")
             logger.exception("Full traceback:")
             logger.error("="*80)
-            
+            # Log diagnostic details that help explain fallback behavior
+            try:
+                cfg = Config.from_env()
+                logger.info("🔧 Diagnostic: ENABLE_LLM=%s OPENAI_KEY=%s ENV=%s",
+                            cfg.ENABLE_LLM, 'present' if cfg.OPENAI_API_KEY else 'missing', cfg.ENV)
+            except Exception:
+                logger.info("🔧 Diagnostic: Failed to load config for diagnostics")
+            try:
+                engine = get_ai_engine()
+                logger.info("🔧 Engine diagnostic: provider=%s model=%s api_enabled=%s",
+                            getattr(engine, 'provider', 'unknown'), getattr(engine, 'model', 'unknown'), getattr(engine, 'api_enabled', False))
+            except Exception as ex_diag:
+                logger.info(f"🔧 Engine diagnostic failed: {ex_diag}")
+
             # Последняя попытка - прямой fallback ответ
             try:
                 logger.info("🔄 Trying fallback response...")
                 engine = get_ai_engine()
                 result = engine._fallback_response(message.text, user_role, "ru")
                 fallback_text = result.get("response", "Извините, произошла ошибка.")
-                
+
                 logger.info(f"💬 Fallback response: {fallback_text[:100]}")
                 await message.answer(fallback_text, parse_mode=None)
                 logger.info("✅ Fallback response sent")
