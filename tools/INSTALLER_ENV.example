@@ -1,0 +1,45 @@
+# Example .env for manual installation (fill values before running installer)
+# Copy this file to your workspace root as `.env` or use when running the CLI installer
+# IMPORTANT: Do NOT commit real secrets to git. Keep this file locally and secure.
+
+# GCP and Cloud Run
+PROJECT_ID=tattoo-480007
+CLOUD_RUN_SERVICE=tattoo-bot
+REGION=europe-west1
+
+# Container image to deploy (optional)
+# Example: gcr.io/<project-id>/tattoo-bot:latest or gcr.io/<project-id>/tattoo-bot@sha256:...
+IMAGE=gcr.io/tattoo-480007/tattoo-bot:latest
+
+# Telegram Bot token (supply one of these or use Secret Manager flow)
+# If you plan to use Secret Manager, the installer will create a secret with this value
+TELEGRAM_BOT_TOKEN=
+
+# Admin Telegram IDs (comma-separated)
+ADMIN_USER_IDS=438407739,457343487
+
+# Optional: keys that can be imported to Secret Manager automatically
+# These are common names the installer will suggest if present in .env
+OPENAI_API_KEY=
+CLOUDSQL_PASSWORD=
+DATABASE_URL=
+
+# Google Sheets / API credentials paths (used by the app runtime, not the installer)
+# If using Service Account / ADC, these can be left blank and rely on ADC
+GOOGLE_CREDENTIALS_PATH=/path/to/credentials.json
+GOOGLE_TOKEN_PATH=/path/to/token.json
+SPREADSHEET_ID=your_spreadsheet_id_here
+
+# Optional database / cloudsql settings
+CLOUDSQL_CONNECTION_NAME=project-id:region:instance-name
+CLOUDSQL_DB=inka
+CLOUDSQL_USER=root
+
+# App mode flags
+BOT_MODE=advanced
+ENABLE_LLM=true
+
+# Notes:
+# - For secrets (BOT token, DB passwords, API keys) prefer using Secret Manager.
+# - Use the installer CLI to import these keys into Secret Manager and set IAM binding automatically.
+# - After populating this file, run: python3 tools/installer_cli.py and choose to import from .env

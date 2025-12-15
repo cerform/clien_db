@@ -1,4 +1,5 @@
 import os
+import logging
 from dataclasses import dataclass
 from typing import List
 
@@ -47,7 +48,6 @@ class Config:
             OPENAI_API_KEY=os.getenv("OPENAI_API_KEY", ""),
                         DEFAULT_SLOT_DURATION=int(os.getenv("DEFAULT_SLOT_DURATION", "120")),
                         AI_ONLY_MODE=os.getenv("AI_ONLY_MODE", "false").lower() in ("1","true","yes"),
-                        # Default to disabling LLM unless explicitly enabled in the environment.
                         ENABLE_LLM=os.getenv("ENABLE_LLM", "false").lower() in ("1","true","yes"),
         )
 
@@ -56,8 +56,13 @@ class Config:
         missing = []
         if not self.BOT_TOKEN:
             missing.append('TELEGRAM_BOT_TOKEN')
-        if not self.OPENAI_API_KEY:
-            # OpenAI key is optional, but warn if missing and INKA is required
-            pass
+        # If LLM is explicitly enabled, require OPENAI_API_KEY in production
+        if self.ENABLE_LLM and not self.OPENAI_API_KEY:
+            if (self.ENV or '').lower() == 'production':
+                raise ValueError('ENABLE_LLM is true but OPENAI_API_KEY is missing in production')
+            else:
+                logging.getLogger(__name__).warning(
+                    'ENABLE_LLM is true but OPENAI_API_KEY is missing; continuing in non-production mode'
+                )
         if missing:
             raise ValueError(f"Missing required config: {', '.join(missing)}")

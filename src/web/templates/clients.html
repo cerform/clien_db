@@ -108,71 +108,85 @@ document.getElementById('add-client-form').addEventListener('submit', async (e) 
         name: form.name.value,
         phone: form.phone.value
     };
-    const res = await fetch('/api/clients', {method:'POST', headers, body: JSON.stringify(body)});
-    if (res.ok) {
-        closeAddClientModal();
-        const body = {
-            name: form.name.value,
-            phone: form.phone.value
-        };
-        let res
-        try {
-            res = await fetch('/api/clients', {method:'POST', headers, body: JSON.stringify(body)});
-        } catch (err) {
-            app.showAlert('Ошибка сети при добавлении клиента', 'error');
-            return
-        }
-        if (res.ok) {
-            app.showAlert('Клиент добавлен', 'success');
-            app.closeModal(document.getElementById('addClientModal'));
-            await loadClients();
-        } else {
-            const txt = await res.text().catch(()=>null)
-            app.showAlert('Не удалось добавить клиента: ' + (txt || res.statusText), 'error');
-        }
-        form.name.value = c.name || '';
-    function openEditClient(id) {
-        fetch(`/api/clients/${id}`).then(r => {
-            if (!r.ok) throw new Error('Failed to load client');
-            return r.json()
-        }).then(c => {
-            const form = document.getElementById('edit-client-form');
-            form.id.value = c.id;
-            form.name.value = c.name || '';
-            form.phone.value = c.phone || '';
-            app.openModal('editClientModal');
-        }).catch(e => app.showAlert('Не удалось загрузить клиента', 'error'));
+    // Single POST to create client
+    let res;
+    try {
+        res = await fetch('/api/clients', {method:'POST', headers, body: JSON.stringify(body)});
+    } catch (err) {
+        app.showAlert('Ошибка сети при добавлении клиента', 'error');
+        return;
     }
-    function closeEditClientModal() { app.closeModal(document.getElementById('editClientModal')); }
+    if (res.ok) {
+        app.showAlert('Клиент добавлен', 'success');
+        closeAddClientModal();
+        form.name.value = '';
+        form.phone.value = '';
+        await loadClients();
+    } else {
+        const txt = await res.text().catch(()=>null);
+        app.showAlert('Не удалось добавить клиента: ' + (txt || res.statusText), 'error');
+    }
+}
 
-    document.getElementById('edit-client-form').addEventListener('submit', async (e) => {
-        e.preventDefault();
-        const form = e.target;
-        const id = form.id.value;
-        const token = localStorage.getItem('inka_admin_token');
-        const headers = {'Content-Type': 'application/json'}; if (token) headers['Authorization'] = 'Bearer ' + token;
-        const body = { name: form.name.value, phone: form.phone.value };
-        let res
-        try {
-            res = await fetch(`/api/clients/${id}`, {method:'PUT', headers, body: JSON.stringify(body)});
-        } catch (err) {
-            app.showAlert('Ошибка сети при обновлении клиента', 'error');
-            return
-        }
-        if (res.ok) {
-            app.showAlert('Клиент обновлён', 'success');
-            app.closeModal(document.getElementById('editClientModal'));
-            await loadClients();
-        } else {
-            const txt = await res.text().catch(()=>null)
-            app.showAlert('Не удалось обновить клиента: ' + (txt || res.statusText), 'error');
-        }
-    });
-                await loadClients(); 
-                app.showAlert('Client deleted', 'success'); 
-            } else { 
-                app.showAlert('Failed to delete client', 'error'); 
-            }
+// Edit client helper functions (top-level, not nested)
+function openEditClient(id) {
+    fetch(`/api/clients/${id}`).then(r => {
+        if (!r.ok) throw new Error('Failed to load client');
+        return r.json();
+    }).then(c => {
+        const form = document.getElementById('edit-client-form');
+        form.id.value = c.id;
+        form.name.value = c.name || '';
+        form.phone.value = c.phone || '';
+        app.openModal('editClientModal');
+    }).catch(e => app.showAlert('Не удалось загрузить клиента', 'error'));
+}
+
+function closeEditClientModal() { app.closeModal(document.getElementById('editClientModal')); }
+
+document.getElementById('edit-client-form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const form = e.target;
+    const id = form.id.value;
+    const token = localStorage.getItem('inka_admin_token');
+    const headers = {'Content-Type': 'application/json'}; if (token) headers['Authorization'] = 'Bearer ' + token;
+    const body = { name: form.name.value, phone: form.phone.value };
+    let res;
+    try {
+        res = await fetch(`/api/clients/${id}`, {method:'PUT', headers, body: JSON.stringify(body)});
+    } catch (err) {
+        app.showAlert('Ошибка сети при обновлении клиента', 'error');
+        return;
+    }
+    if (res.ok) {
+        app.showAlert('Клиент обновлён', 'success');
+        closeEditClientModal();
+        await loadClients();
+    } else {
+        const txt = await res.text().catch(()=>null);
+        app.showAlert('Не удалось обновить клиента: ' + (txt || res.statusText), 'error');
+    }
+});
+
+// Delete client
+async function deleteClient(id) {
+    if (!confirm('Удалить клиента?')) return;
+    const token = localStorage.getItem('inka_admin_token');
+    const headers = {};
+    if (token) headers['Authorization'] = 'Bearer ' + token;
+    let res;
+    try {
+        res = await fetch(`/api/clients/${id}`, {method: 'DELETE', headers});
+    } catch (err) {
+        app.showAlert('Ошибка сети при удалении клиента', 'error');
+        return;
+    }
+    if (res.ok) {
+        await loadClients();
+        app.showAlert('Клиент удалён', 'success');
+    } else {
+        app.showAlert('Не удалось удалить клиента', 'error');
+    }
 }
 
 document.addEventListener('DOMContentLoaded', () => { loadClients(); });

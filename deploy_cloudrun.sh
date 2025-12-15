@@ -75,10 +75,15 @@ if [ -f .env ]; then
     echo "📝 Reading .env file..."
     source .env
 
-    # Create secrets if they don't exist
+    # Create secrets if they don't exist (skip suspicious placeholder values)
     for SECRET_NAME in BOT_TOKEN OPENAI_API_KEY CLOUDSQL_PASSWORD SPREADSHEET_ID; do
         SECRET_VALUE="${!SECRET_NAME}"
         if [ -n "$SECRET_VALUE" ]; then
+            # Heuristic: skip obvious placeholders to avoid deploying invalid secrets
+            if echo "$SECRET_VALUE" | grep -Ei "your|replace|dummy|test|example|bot_token" >/dev/null || [ ${#SECRET_VALUE} -lt 30 ] || [[ "$SECRET_VALUE" != *":"* && "$SECRET_NAME" == "BOT_TOKEN" ]]; then
+                echo "⚠️ Skipping creation of secret $SECRET_NAME because its value looks like a placeholder or is too short"
+                continue
+            fi
             # Check if secret exists
             if ! gcloud secrets describe $SECRET_NAME --project=${PROJECT_ID} &> /dev/null; then
                  echo "Creating secret: $SECRET_NAME"
@@ -97,6 +102,7 @@ if [ -n "${OPENAI_API_KEY}" ]; then
     BOT_MODE=advanced
     MEM=1Gi
     echo "🔧 Detected OPENAI_API_KEY. Enabling AI mode (BOT_MODE=advanced) and setting memory to ${MEM}"
+    ENABLE_LLM=true
 else
     # If OPENAI_API_KEY not in .env, check Secret Manager for OPENAI_API_KEY
     # If secret exists, use advanced mode as well
@@ -110,11 +116,13 @@ else
             BOT_MODE=inka
             MEM=512Mi
             echo "🔧 OpenAI secret exists but is empty. Using INKA-only mode (BOT_MODE=inka) and memory ${MEM}"
+            ENABLE_LLM=false
         fi
     else
         BOT_MODE=inka
         MEM=512Mi
         echo "🔧 No OpenAI key detected. Using INKA-only mode (BOT_MODE=inka) and memory ${MEM}"
+        ENABLE_LLM=false
     fi
 fi
 
@@ -142,6 +150,7 @@ gcloud run deploy ${SERVICE_NAME} \
     --timeout 300 \
     --add-cloudsql-instances ${CLOUDSQL_CONNECTION_NAME} \
     --set-env-vars "CLOUD_RUN_ENV=true,DB_SOCKET_DIR=/cloudsql,CLOUDSQL_CONNECTION_NAME=${CLOUDSQL_CONNECTION_NAME},CLOUDSQL_DB=admin_messages,CLOUDSQL_USER=root,BOT_MODE=${BOT_MODE}" \
+    --set-env-vars "ENABLE_LLM=${ENABLE_LLM}" \
     --set-secrets "BOT_TOKEN=BOT_TOKEN:latest,OPENAI_API_KEY=OPENAI_API_KEY:latest,CLOUDSQL_PASSWORD=CLOUDSQL_PASSWORD:latest,SPREADSHEET_ID=SPREADSHEET_ID:latest" \
     --service-account ${SERVICE_NAME}@${PROJECT_ID}.iam.gserviceaccount.com
 

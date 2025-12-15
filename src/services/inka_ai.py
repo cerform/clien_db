@@ -327,21 +327,24 @@ class INKAConsultant:
                 self.openai_service = None
         # Default model
         self.model = "gpt-3.5-turbo"
-        # Enable LLM only if explicitly allowed in env (default True)
+
+        # Enforce LLM usage by default. If configuration explicitly disables it,
+        # honor that, otherwise require the LLM path and escalate when unavailable.
+        self.enable_llm = True
         try:
             from src.config.config import Config
             cfg = Config.from_env()
-            self.enable_llm = bool(cfg.ENABLE_LLM)
-            config_loaded = True
+            # If an operator explicitly set ENABLE_LLM to false, respect it
+            if hasattr(cfg, 'ENABLE_LLM') and not bool(cfg.ENABLE_LLM):
+                self.enable_llm = False
         except Exception:
-            # Be conservative in test environments: if config can't be read, disable LLM by default
-            self.enable_llm = False
-            config_loaded = False
-        self.model = "gpt-3.5-turbo"
-        # If there's no OpenAI service or api key provided, disable LLM by default
-        # unless the config explicitly requested LLM (i.e., config_loaded is True and cfg.ENABLE_LLM is True).
-        if not self.openai_service and not config_loaded:
-            self.enable_llm = False
+            # keep default True if config cannot be read
+            pass
+
+        # Note: We do not override `enable_llm` if OpenAI service is absent.
+        # When `ENABLE_LLM` is explicitly set to true in the environment but
+        # there is no valid OpenAI service, `respond_structured` will escalate
+        # to a human handler (model_unavailable) as intended by policy.
 
     def get_system_prompt(self) -> str:
         """
@@ -358,19 +361,8 @@ class INKAConsultant:
 Ты работаешь в Telegram-формате: коротко, тепло, по делу, без навязчивости.
 
 🟥 ЗАПРЕТЫ — никогда не делай этого:
-- Не придумывай даты, слоты, время
-- Не предлагай свободные дни без реальных данных
-- Не называй стоимость, если нет информации
-- Не давай медицинские советы
-- Не спорь с клиентом
-- Не пиши длинные лекции
-- Не обещай то, чего нет
-- Не осуждай идеи клиента
 
 🟧 ТЕБЯ ВЫЗЫВАЮТ, КОГДА:
-- route = consultation (клиент обсуждает идею)
-- route = info (клиент спрашивает про боль, уход, цены, место)
-- route = other (неясное намерение)
 
 Твой тон:
 ✓ Профессиональный, спокойный, дружелюбный
@@ -380,11 +372,11 @@ class INKAConsultant:
 ✓ Стиль: тёплый, уважительный
 
 ВАЖНО:
-- Если спросят, представься кратко как INKA (например: "Я — INKA, я помогу с записью").
-- Отвечай естественно, как реальный человек; избегай односложных, однословных ответов
+    • НЕЛЬЗЯ задавать пользователю просьбы переформулировать один и тот же запрос более одного раза.
+    • Если намерение клиента частично ясно, ты ДОЛЖЕН: сделать разумное предположение, продвинуть диалог и задать конкретный направляющий вопрос.
+    • Всегда избегай бесконечных циклов уточнений и переформулировок.
 
-ОТВЕТЫ КОРОТКО, НО НАТУРАЛЬНО (1-3 предложения)."""
-
+"""
     def get_system_prompt_multilingual(self, language: str = "ru") -> str:
         """
         Get system prompt in the user's language
@@ -423,7 +415,9 @@ Your tone:
 ✓ Natural, conversational replies (avoid single-word answers)
 ✓ Short but human-like (1-3 sentences when possible)
 
-PREFER: concise, helpful, human-sounding responses. If asked about your name, reply briefly: "I am INKA.""" 
+PREFER: concise, helpful, human-sounding responses. If asked about your name, reply briefly: "I am INKA." 
+
+You are NOT allowed to ask the user to rephrase the same request more than once. If user intent is partially clear, make a reasonable assumption, move the conversation forward, and ask a specific guiding question."""
 
         elif language == "he":
             return """אתה INKA, העוזר האישי של הסטודיו.
@@ -510,11 +504,19 @@ Booking type: {booking_type}
         Returns:
             Text response from consultant in user's language
         """
-        if not self.openai_service or not self.openai_service.api_enabled:
-            # Fallback: rule-based response
-            return self._rule_based_response(message, context, language)
+        # If LLM is enforced but the OpenAI service is unavailable, escalate
+        if getattr(self, "enable_llm", False) and (not self.openai_service or not self.openai_service.api_enabled):
+            incr("llm_enforced_unavailable", 1)
+            logger.warning("LLM enforced but unavailable for user=%s; escalating to human", context.get('user_id') if context else None)
+            return "Извините, временные трудности с системой — сейчас свяжу с человеком."
 
         try:
+            # Debug: record that we are about to consult the LLM (if enabled)
+            try:
+                uid = context.get('user_id') if context else None
+            except Exception:
+                uid = None
+            logger.info("🔎 respond_to_consultation: user=%s booking_type=%s llm_enabled=%s", uid, booking_type, self.enable_llm)
             system_prompt = self.get_system_prompt_multilingual(language)
             booking_type = context.get("booking_type", "tattoo") if context else "tattoo"
 
@@ -522,6 +524,7 @@ Booking type: {booking_type}
 
             # Telemetry: llm call
             incr("llm_calls_total", 1)
+            logger.info("💬 Calling LLM (respond_to_consultation) for user=%s...", uid)
             response = self.openai_service.chat_completion(
                 messages=[{"role": "system", "content": system_prompt}, {"role": "user", "content": user_prompt}],
                 temperature=0.7,
@@ -564,11 +567,14 @@ Booking type: {booking_type}
         # Try LLM first
         if self.openai_service and self.openai_service.api_enabled and self.enable_llm:
             try:
+                uid = context.get('user_id') if context else None
+                logger.info("🔎 respond_structured: user=%s booking_type=%s calling LLM", uid, booking_type)
                 system = self.get_system_prompt_multilingual(language)
                 instruction = (
                     "You MUST output ONLY a JSON object with the following keys:\n"
                     "{\"text\": string, \"next_action\": string, \"meta\": {\"antirepeat_key\": string, \"client_profile\": object}}\n"
                     "next_action must be one of: continue_consultation, offer_slots, other.\n"
+                    "IMPORTANT: You are NOT allowed to ask the user to rephrase the same request more than once.\n"
                     "client_profile should be a short object with any extracted facts (style, size, preferred days, constraints).\n"
                     "Do NOT include any extra commentary outside the JSON. Keep text 1-3 short sentences.\n"
                 )
@@ -577,9 +583,10 @@ Booking type: {booking_type}
 
                 # Telemetry: llm call
                 incr("llm_calls_total", 1)
+                logger.info("💬 Calling LLM (respond_structured) for user=%s...", uid)
                 response = self.openai_service.chat_completion(
                     messages=[{"role": "system", "content": system}, {"role": "user", "content": user_prompt}],
-                    temperature=0.6,
+                    temperature=0.25,
                     max_tokens=400,
                     model=self.model
                 )
@@ -593,6 +600,18 @@ Booking type: {booking_type}
                     text = payload.get("text", "Извини, не поняла — уточни, пожалуйста.")
                     next_action = payload.get("next_action", "other")
                     meta = payload.get("meta", {})
+                    # Safety: avoid simple echo loops where model repeats client's message
+                    try:
+                        norm_text = " ".join(text.lower().split())
+                        norm_msg = " ".join(message.lower().split())
+                        if norm_text == norm_msg or norm_msg in norm_text:
+                            # Replace with a clarifying prompt instead of echoing
+                            text = "Извини, не совсем понимаю — уточни, пожалуйста: где именно (место), какого размера примерно и есть ли референсы?"
+                            next_action = "other"
+                            meta["antirepeat_key"] = self._make_antirepeat_key(text, context.get("route", "other"), booking_type)
+                    except Exception:
+                        # If normalization check fails, ignore and proceed
+                        pass
                     # Ensure antirepeat & client_profile exist
                     if "antirepeat_key" not in meta or not meta.get("antirepeat_key"):
                         meta["antirepeat_key"] = self._make_antirepeat_key(text, context.get("route", "other"), booking_type)
@@ -607,10 +626,16 @@ Booking type: {booking_type}
                     return {"text": text, "next_action": next_action, "meta": meta}
                 except ContractValidationError as e:
                     incr("llm_parse_failures", 1)
-                    logger.warning(f"Model returned invalid contract: {e}; falling back to deterministic contract")
+                    logger.warning(f"Model returned invalid contract: {e}; escalating to human because LLM is enforced")
+                    # When LLM is enforced, invalid contract means we cannot safely continue.
+                    return {"text": "Извините, временные трудности с системой — свяжу с человеком.", "next_action": "human", "meta": {"stage": "s1", "antirepeat_key": self._make_antirepeat_key(message, context.get("route", "other"), booking_type), "client_profile": {"booking_type": booking_type}, "model_unavailable": True}}
 
             except Exception as e:
                 logger.exception(f"Structured LLM response failed: {e}")
+                # If LLM is enforced, escalate instead of falling back to deterministic contract
+                if getattr(self, "enable_llm", False):
+                    incr("llm_errors_total", 1)
+                    return {"text": "Извините, временные трудности с системой — свяжу с человеком.", "next_action": "human", "meta": {"stage": "s1", "antirepeat_key": self._make_antirepeat_key(message, context.get("route", "other"), booking_type), "client_profile": {"booking_type": booking_type}, "model_unavailable": True}}
 
         # Fallback deterministic contract
         text = self._rule_based_response(message, context, language)
@@ -753,7 +778,19 @@ class INKA:
     def __init__(self, api_key: Optional[str] = None):
         """Initialize INKA with all components including S2 Booking Engine"""
         self.classifier = INKAClassifier()
-        self.consultant = INKAConsultant(api_key)
+        # If an API key is provided, prefer the new LLM-only consultant (INKAConsultantV2)
+        if api_key:
+            try:
+                from src.services.inka_consultant_v2 import INKAConsultantV2
+
+                self.consultant = INKAConsultantV2(api_key=api_key)
+            except Exception:
+                # Fall back to legacy consultant if anything goes wrong during import/initialization
+                logger = logging.getLogger(__name__)
+                logger.exception("Failed to initialize INKAConsultantV2, falling back to legacy INKAConsultant")
+                self.consultant = INKAConsultant(api_key)
+        else:
+            self.consultant = INKAConsultant(api_key)
         self.booking_assistant = INKABookingAssistant()
         self.booking_engine = INKABookingEngine()  # New S2 Booking Engine
 
@@ -890,6 +927,7 @@ __all__ = [
     "INKA",
     "INKAClassifier",
     "INKAConsultant",
+    "INKAConsultantV2",
     "INKABookingAssistant",
     "INKABookingEngine",
     "BookingType",

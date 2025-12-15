@@ -19,6 +19,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'src'))
 from dotenv import load_dotenv
 from fastapi import FastAPI
 from aiogram import Bot, Dispatcher
+from aiogram.utils.token import TokenValidationError
 from aiogram.fsm.storage.memory import MemoryStorage
 from aiogram.types import Update, BotCommand
 import uvicorn
@@ -58,11 +59,53 @@ def get_admin_messages_repo():
     """Get global admin messages repository instance"""
     return admin_messages_repo
 
+
+def _normalize_token(tok: str) -> str:
+    """Normalize a token string: strip whitespace and remove common control chars."""
+    if not tok:
+        return tok
+    # Remove BOM if present and common newline/whitespace around secret
+    tok = tok.strip()
+    # Remove stray CR/LF characters that may be embedded
+    tok = tok.replace('\r', '').replace('\n', '')
+    return tok
+
 async def setup_webhook():
     """Setup webhook - вызывается при первом запросе или при старте"""
-    global bot, webhook_url, _webhook_setup_done
+    global bot, webhook_url, _webhook_setup_done, dp
 
     if _webhook_setup_done:
+        return
+
+    # If bot is not configured (invalid or missing token), try to initialize it now
+    if bot is None:
+        try:
+            from src.bot.token_utils import get_bot_token, mask_token
+            token = get_bot_token()
+            logger.info(f"🔧 setup_webhook: token summary: {mask_token(token)}")
+            if token:
+                tok = _normalize_token(token)
+                try:
+                    from aiogram.utils.token import validate_token
+                    try:
+                        logger.info(f"🔍 validate_token -> {validate_token(tok)}")
+                    except Exception:
+                        logger.info("🔍 validate_token raised or unavailable")
+                    bot = Bot(token=tok)
+                    logger.info("✅ Bot initialized during webhook setup")
+                except TokenValidationError as e:
+                    logger.error(f"❌ Bot token invalid during webhook setup: {e}")
+                    bot = None
+                except Exception as e:
+                    logger.error(f"❌ Failed to initialize Bot during webhook setup: {e}")
+            else:
+                logger.warning("⚠️ No BOT_TOKEN available to initialize bot during webhook setup")
+        except Exception as e:
+            logger.error(f"❌ Error reading config during webhook setup: {e}")
+
+    if bot is None:
+        logger.warning("⚠️ Bot not configured or token invalid; skipping webhook setup")
+        _webhook_setup_done = True
         return
 
     try:
@@ -127,10 +170,15 @@ def main():
         logger.info(f"   BOT_TOKEN: {'установлен' if config.BOT_TOKEN else 'отсутствует'}")
         logger.info(f"   OPENAI_API_KEY: {'установлен' if config.OPENAI_API_KEY else 'отсутствует'}")
         
-        # Инициализация бота
+        # Инициализация бота — не прерываем запуск приложения, если токен неверен
         storage = MemoryStorage()
-        bot = Bot(token=config.BOT_TOKEN)
-        dp = Dispatcher(storage=storage)
+        try:
+            bot = Bot(token=config.BOT_TOKEN)
+            dp = Dispatcher(storage=storage)
+        except TokenValidationError as e:
+            logger.error(f"❌ Bot token invalid; running in web-only mode: {e}")
+            bot = None
+            dp = Dispatcher(storage=storage)
         
         # Register handlers based on BOT_MODE. Default to INKA-only for safety.
         bot_mode = os.getenv('BOT_MODE', 'inka').lower()
@@ -207,6 +255,13 @@ def main():
             """Приложение готово - webhook можно настроить через /api/setup-webhook"""
             logger.info("✅ FastAPI started, ready to accept requests")
             logger.info(f"   Call POST {service_url}/api/setup-webhook to configure Telegram webhook")
+            # Kick off webhook setup in background so all instances attempt to register the webhook
+            try:
+                # Schedule background task; do not block startup
+                asyncio.create_task(setup_webhook())
+                logger.info("🔄 Scheduled background webhook setup")
+            except Exception as e:
+                logger.exception(f"Failed to schedule webhook setup: {e}")
         
         @app.post("/api/setup-webhook")
         async def setup_webhook_endpoint():
@@ -223,6 +278,41 @@ def main():
             """Telegram webhook endpoint"""
             try:
                 update_obj = Update(**update)
+
+                # Lazy initialize Bot if token was invalid at startup but later fixed
+                global bot, dp
+
+                if bot is None:
+                    try:
+                        from src.bot.token_utils import get_bot_token, mask_token
+                        token = get_bot_token()
+                        logger.info(f"🔑 (webhook handler) token summary: {mask_token(token)}")
+                        if token:
+                            try:
+                                tok = _normalize_token(token)
+                                try:
+                                    from aiogram.utils.token import validate_token
+                                    try:
+                                        logger.info(f"🔍 (webhook handler) validate_token -> {validate_token(tok)}")
+                                    except Exception:
+                                        logger.info("🔍 (webhook handler) validate_token raised")
+                                except Exception:
+                                    pass
+                                bot = Bot(token=tok)
+                                logger.info("✅ Bot initialized from environment inside webhook handler")
+                            except Exception as e:
+                                logger.error(f"Failed to initialize Bot in webhook handler: {e}")
+                        else:
+                            logger.warning("⚠️ No BOT_TOKEN available to initialize bot in webhook handler")
+                    except Exception as e:
+                        logger.error(f"Failed to initialize Bot in webhook handler: {e}")
+
+                # If bot is still None, skip feeding update to dispatcher and return 200 to Telegram
+                if bot is None:
+                    logger.warning("Bot not initialized; ignoring incoming webhook update")
+                    return {"ok": False, "error": "bot not initialized"}
+
+                # Feed update to dispatcher with a valid Bot instance
                 await dp.feed_update(bot=bot, update=update_obj)
                 return {"ok": True}
             except Exception as e:

@@ -39,3 +39,7 @@ These endpoints are protected by the existing admin token / RBAC system. Use `Au
 - Add a pagination UI and column type formatting
 - Optionally implement a full SPA management UI or integrate an external tool (pgweb/pgAdmin) for full DB administration
 
+## Deleted rows archive
+
+To help with auditability and recovery, the application now archives deleted rows from the main sheets (clients, masters, services) into a central sheet named `deleted` (a localized sheet titled `Удалёные` is also created by the initializer). When a row is deleted it is appended to that archive with metadata (`sheet`, `row_id`, `deleted_at`, `deleted_by`, `data`) and then the original row is removed from the source sheet. This behavior helps ensure deleted items do not reappear and provides an audit trail for restores.
+

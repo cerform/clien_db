@@ -78,6 +78,21 @@ cp .env.example .env
 docker compose up --build
 ```
 
+---
+
+## 🔍 LLM diagnostics and hard checks
+
+When deploying the bot with LLM support enabled, the project now includes additional safety and diagnostic features:
+
+- If `ENABLE_LLM=true` and **no** `OPENAI_API_KEY` is present in production (`ENV=production`), the service will fail fast on startup (better to crash than to silently run in fallback mode). ✅
+- Use the admin-only Telegram command `/debug_llm` to get a quick report of:
+    - Whether LLM is enabled
+    - Provider and model in use
+    - Whether the OpenAI key is present (the key itself is never revealed)
+    - Search provider/key presence and a short test-call result
+
+This makes it much easier to diagnose why the bot is returning fallback/template answers (missing keys, misconfigured env, or LLM errors). 💡
+
 Services started:
 - Backend API: http://localhost:8081
 - Bot webhook: http://localhost:8082
@@ -238,6 +253,33 @@ Auto-created with 4 tabs:
 | **bookings** | Appointments | id, client_id, master_id, date, slot_start, slot_end, status, created_at, google_event_id |
 
 ---
+
+## 🗄️ Migrating schema / adding records to Cloud SQL
+
+If you want to add new tables or seed records in Cloud SQL (PostgreSQL), follow this pattern:
+
+1. Add a SQL migration file into `db/migrations/`, for example `001_create_admins.sql`. Migrations should create schema only; avoid embedding example admin records or credentials. Use the `scripts/create_user.py` CLI to provision initial admin users securely after the database is ready.
+
+2. Upload the SQL file to a GCS bucket and import it into your Cloud SQL instance. Example script available: `scripts/migrate_cloudsql.sh`.
+
+Example usage:
+
+```bash
+# Upload and request import
+./scripts/migrate_cloudsql.sh <CLOUDSQL_INSTANCE> <GCS_BUCKET> db/migrations/001_create_admins.sql <DB_NAME>
+
+# Follow the operation
+gcloud sql operations list --instance=<CLOUDSQL_INSTANCE>
+gcloud sql operations describe <OPERATION_ID> --instance=<CLOUDSQL_INSTANCE>
+```
+
+Notes:
+- The import operation reads the SQL file from the provided GCS URI; make sure the Cloud SQL service account has read access to the bucket/object.
+- You can also run migrations directly against the database using `psql` (via Cloud SQL Proxy) if you prefer an interactive approach.
+
+If you'd like, I can add additional migration files or create a small sequence runner to apply multiple migrations in order.
+
+Note: This repository no longer seeds admin users via migrations. To create initial admin/super-admin accounts, use `scripts/create_user.py` which securely handles password generation and hashing.
 
 ## 🚀 Deployment
 

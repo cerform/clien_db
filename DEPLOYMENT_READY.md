@@ -132,10 +132,14 @@ gcloud services enable \
 
 ```bash
 # Создать секреты в Secret Manager
-echo -n "YOUR_TELEGRAM_BOT_TOKEN" | gcloud secrets create TELEGRAM_BOT_TOKEN --data-file=-
-echo -n "YOUR_OPENAI_API_KEY" | gcloud secrets create OPENAI_API_KEY --data-file=-
-echo -n "YOUR_SPREADSHEET_ID" | gcloud secrets create SPREADSHEET_ID --data-file=-
-echo -n "YOUR_WEBHOOK_SECRET" | gcloud secrets create WEBHOOK_SECRET --data-file=-
+# IMPORTANT: do NOT store literal placeholders (e.g. "YOUR_TELEGRAM_BOT_TOKEN")
+# as secret values - this will make your bot token invalid and prevent Telegram
+# updates from reaching your service. Instead, put the real token value here
+# or use `scripts/import_secrets_interactive.sh` to safely add secrets.
+echo -n "<your_real_telegram_bot_token>" | gcloud secrets create TELEGRAM_BOT_TOKEN --data-file=-
+echo -n "<your_openai_api_key>" | gcloud secrets create OPENAI_API_KEY --data-file=-
+echo -n "<your_spreadsheet_id>" | gcloud secrets create SPREADSHEET_ID --data-file=-
+echo -n "<your_webhook_secret>" | gcloud secrets create WEBHOOK_SECRET --data-file=-
 
 # Предоставить доступ Cloud Run к секретам
 PROJECT_NUMBER=$(gcloud projects describe tattoo-480007 --format="value(projectNumber)")

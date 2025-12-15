@@ -151,12 +151,11 @@ class INKAAdminTools:
                 # expected fields: client_id or client_name/phone, master_id, service_id, date, time
                 args = arguments
                 client_id = args.get("client_id")
-                if not client_id:
-                    client_name = args.get("client_name")
-                    client_phone = args.get("client_phone")
-                    if client_name and client_phone:
-                        c_res = self.services.get("clients_service").repo.create_client(client_phone, client_name, client_phone)
-                        client_id = c_res.get('id')
+                client_name = args.get("client_name") or "Client"
+                client_phone = args.get("client_phone") or ""
+                if not client_id and client_name and client_phone:
+                    c_res = self.services.get("clients_service").repo.create_client(client_phone, client_name, client_phone)
+                    client_id = c_res.get('id')
                 # slot start & end
                 slot_start = args.get("time")
                 duration_mins = args.get("duration", 60)
@@ -167,9 +166,20 @@ class INKAAdminTools:
                     dt = datetime.strptime(args.get("date"), "%Y-%m-%d").replace(hour=hh, minute=mm)
                     slot_end = (dt + timedelta(minutes=duration_mins)).strftime("%H:%M")
                 except Exception:
-                    slot_end = None
-                res = bs.create_booking(int(client_id), args.get("client_name", "Client"), args.get("client_phone", ""), args.get("date"), args.get("master_id"), slot_start, slot_end or slot_start, args.get("notes", ""))
-                return res
+                    slot_end = args.get('end_time', slot_start)
+                # Use INKAProcessor S3 path via AdvancedINKA wrapper (already in advanced_inka)
+                # If booking service isn't present, fallback to direct call
+                if bs:
+                    try:
+                        from src.ai.inka_processor import INKAProcessor
+                        ip = INKAProcessor(None, services={'booking_service': bs})
+                        slot = {'date': args.get('date'), 'time': slot_start, 'end_time': slot_end, 'master_id': args.get('master_id'), 'service': args.get('service_id') or args.get('service')}
+                        out = ip.stage_3_reserve_slot(slot, int(client_id) if client_id else 0, client_name, client_phone, args.get('notes', ''))
+                        return out
+                    except Exception:
+                        pass
+                res = bs.create_booking(int(client_id) if client_id else 0, client_name, client_phone, args.get("date"), args.get("master_id"), slot_start, slot_end or slot_start, args.get("notes", ""))
+                return {"success": bool(res.get('booking_id')), "booking_id": res.get('booking_id'), "event_id": res.get('event_id'), "message": "Created via fallback"}
 
             if function_name == "get_master_availability":
                 bs = self.services.get("booking_service")

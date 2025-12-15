@@ -94,22 +94,50 @@ class MastersRepo:
             return False
         for idx, r in enumerate(rows, start=1):
             if r.get('id') == master_id:
-                # Soft delete: set status to 'no' and append deleted note
-                notes = (r.get('notes') or '') + f" [deleted:{datetime.datetime.now(datetime.timezone.utc).isoformat()}]"
-                values = {
-                    'id': r.get('id'),
-                    'name': r.get('name'),
-                    'specialization': r.get('specialization'),
-                    'status': 'no',
-                    'calendar_id': r.get('calendar_id'),
-                    'notes': notes
-                }
-                new_row = build_row('masters', values)
-                new_row = pad_row_to_headers('masters', new_row)
                 try:
-                    self.sc.update_row(self.spreadsheet_id, SHEET_MASTERS, idx, new_row)
+                    # Archive master row
+                    from src.services.db_admin import append_row
+                    import json, datetime
+                    archive_values = {
+                        'sheet': 'masters', 'row_id': master_id,
+                        'deleted_at': datetime.datetime.now(datetime.timezone.utc).isoformat(),
+                        'deleted_by': '', 'data': json.dumps(r)
+                    }
+                    try:
+                        # Prefer repo sheets client first
+                        from src.db.schemas import headers_for, build_row, pad_row_to_headers
+                        hdrs = headers_for('deleted')
+                        if hdrs:
+                            r = build_row('deleted', archive_values)
+                            r = pad_row_to_headers('deleted', r)
+                            self.sc.append_row(self.spreadsheet_id, 'deleted', r)
+                        else:
+                            self.sc.append_row(self.spreadsheet_id, 'deleted', [archive_values['sheet'], archive_values['row_id'], archive_values['deleted_at'], archive_values['deleted_by'], archive_values['data']])
+                    except Exception:
+                        try:
+                            append_row('deleted', archive_values)
+                        except Exception:
+                            self.sc.append_row(self.spreadsheet_id, 'deleted', [archive_values['sheet'], archive_values['row_id'], archive_values['deleted_at'], archive_values['deleted_by'], archive_values['data']])
+                    # delete the master row
+                    if hasattr(self.sc, 'delete_row'):
+                        self.sc.delete_row(self.spreadsheet_id, SHEET_MASTERS, idx)
+                    else:
+                        # fallback to soft delete
+                        notes = (r.get('notes') or '') + f" [deleted:{datetime.datetime.now(datetime.timezone.utc).isoformat()}]"
+                        values = {
+                            'id': r.get('id'),
+                            'name': r.get('name'),
+                            'specialization': r.get('specialization'),
+                            'status': 'no',
+                            'calendar_id': r.get('calendar_id'),
+                            'notes': notes
+                        }
+                        new_row = build_row('masters', values)
+                        new_row = pad_row_to_headers('masters', new_row)
+                        self.sc.update_row(self.spreadsheet_id, SHEET_MASTERS, idx, new_row)
+                    return True
                 except Exception:
                     import logging
-                    logging.getLogger(__name__).exception("Failed to soft-delete master; proceeding in best-effort mode")
-                return True
+                    logging.getLogger(__name__).exception("Failed to delete/archive master; proceeding in best-effort mode")
+                    return False
         return False

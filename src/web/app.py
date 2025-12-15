@@ -37,8 +37,19 @@ def create_app() -> FastAPI:
     try:
         from src.core.config_manager import get_config as get_aggregate_config, get_secret
         ag_cfg = get_aggregate_config()
-        if ag_cfg.get("spreadsheet_id"):
-            config.SPREADSHEET_ID = ag_cfg.get("spreadsheet_id")
+        # Prefer an explicit spreadsheet_id from aggregate config if it looks valid
+        s_id = ag_cfg.get("spreadsheet_id")
+        if s_id and isinstance(s_id, str) and not any(x in s_id.lower() for x in ("your", "replace", "dummy", "test", "example")) and len(s_id) > 10:
+            config.SPREADSHEET_ID = s_id
+        else:
+            # Fallback: try Secret Manager for SPREADSHEET_ID (useful when secret was provided but not injected as env)
+            try:
+                sheet_secret = get_secret("SPREADSHEET_ID")
+                if sheet_secret and isinstance(sheet_secret, str) and not any(x in sheet_secret.lower() for x in ("your", "replace", "dummy", "test", "example")) and len(sheet_secret) > 10:
+                    config.SPREADSHEET_ID = sheet_secret
+            except Exception:
+                # Ignore secret reading errors here and continue with existing config
+                pass
         if ag_cfg.get("master_calendar_id"):
             config.MASTER_CALENDAR_ID = ag_cfg.get("master_calendar_id")
         # If secret for bot token exists in secret manager, ensure Config uses it

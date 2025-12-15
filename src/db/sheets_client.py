@@ -165,6 +165,33 @@ class SheetsClient:
             valueInputOption="RAW", body=body
         ).execute()
 
+    def delete_row(self, spreadsheet_id: str, sheet_name: str, row_index: int):
+        """Delete a row from a sheet by its 1-based row index (excluding header)."""
+        # Need sheetId for the sheet name
+        try:
+            meta = self.service_sheets.spreadsheets().get(spreadsheetId=spreadsheet_id, fields="sheets.properties").execute()
+            sheet_map = {s['properties']['title']: s['properties'].get('sheetId') for s in meta.get('sheets', [])}
+            sheet_id = sheet_map.get(sheet_name)
+            if sheet_id is None:
+                raise ValueError(f"Sheet '{sheet_name}' not found in spreadsheet")
+            # Convert to 0-based startIndex for rows, but keep header row (row_index is 1-based including header)
+            # We expect callers pass the row index (1-based counting headers as row 1). To delete the data row, use that index.
+            start = row_index - 1
+            req = {
+                "deleteDimension": {
+                    "range": {
+                        "sheetId": sheet_id,
+                        "dimension": "ROWS",
+                        "startIndex": start,
+                        "endIndex": start + 1
+                    }
+                }
+            }
+            return self.service_sheets.spreadsheets().batchUpdate(spreadsheetId=spreadsheet_id, body={"requests": [req]}).execute()
+        except Exception:
+            logger.exception("Failed to delete row from sheet")
+            raise
+
     def create_calendar_event(self, calendar_id: str, start_iso: str, end_iso: str, summary: str, description: str="") -> str:
         event = {"summary": summary, "description": description, "start": {"dateTime": start_iso}, "end": {"dateTime": end_iso}}
         created = self.service_calendar.events().insert(calendarId=calendar_id, body=event).execute()
