@@ -156,8 +156,18 @@ class AdvancedINKA:
                     time = arguments.get("time")
                     master_id = arguments.get("master_id")
                     service_name = arguments.get("service") or arguments.get("service_id")
-                    res = svc.create_booking(int(user_id) if user_id else 0, client_name, client_phone, date, master_id, time, arguments.get("end_time", time))
-                    return res
+                    # Use INKAProcessor style Stage-3 reservation if available to get structured outcome
+                    try:
+                        from src.ai.inka_processor import INKAProcessor
+                        ip = INKAProcessor(None, services={'booking_service': svc})
+                        slot = {'date': date, 'time': time, 'end_time': arguments.get('end_time', time), 'master_id': master_id, 'service': service_name}
+                        out = ip.stage_3_reserve_slot(slot, int(user_id) if user_id else 0, client_name, client_phone, arguments.get('notes', ''))
+                        # Normalize returned structure
+                        return out
+                    except Exception:
+                        # Fallback to direct booking_service call
+                        res = svc.create_booking(int(user_id) if user_id else 0, client_name, client_phone, date, master_id, time, arguments.get("end_time", time))
+                        return {"success": bool(res.get('booking_id')), "booking_id": res.get('booking_id'), "event_id": res.get('event_id'), "message": "Created via fallback"}
                 return {"error": "Booking service not found"}
 
             # Admin functions: delegate to admin_tools (get_all_masters, add_master, edit_master, etc.)

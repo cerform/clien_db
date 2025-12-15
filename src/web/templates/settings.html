@@ -35,6 +35,10 @@
           <label>Admin IDs (comma separated)</label>
           <input name="admin_ids" class="form-input" value="{{config.admin_ids | join(',') if config.admin_ids else ''}}">
         </div>
+        <div class="form-group">
+          <label>AI Personality / System Prompt override (optional)</label>
+          <textarea name="ai_personality" class="form-input" rows="6" placeholder="Describe persona, tone, and dialog vision">{{config.ai_personality or ''}}</textarea>
+        </div>
         <div class="form-group mt-lg">
             <button type="submit" class="btn btn-primary" id="save-btn">Сохранить</button>
         </div>

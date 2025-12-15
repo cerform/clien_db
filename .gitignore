@@ -71,3 +71,4 @@ config.json
 # Ignore frontend node_modules for PoC apps
 services/frontend/db-manager/node_modules/
 services/frontend/admin-ui/node_modules/
+.env.bak

@@ -6,7 +6,7 @@ from typing import List
 # Minimal role-based access matrix
 ROLE_PERMISSIONS = {
     'inka_llm_runtime': {
-        'read': ['services', 'masters_public', 'availability_view', 'pricing', 'faq_approved'],
+        'read': ['services', 'masters_public', 'availability_view', 'pricing', 'faq_approved', 'lead_requests'],
         'write': ['lead_requests', 'booking_drafts', 'conversation_logs', 'services']
     },
     'inka_booking_agent': {
@@ -35,9 +35,7 @@ def can_write(role: str, table: str) -> bool:
 
 
 def can_read(role: str, table: str) -> bool:
-    # A role that can write to a table should generally be allowed to read it as well.
-    perms = ROLE_PERMISSIONS.get(role, {})
-    allowed = perms.get('read', []) + perms.get('write', [])
+    allowed = ROLE_PERMISSIONS.get(role, {}).get('read', [])
     if '*' in allowed:
         return True
     for a in allowed:

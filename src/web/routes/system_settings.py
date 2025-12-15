@@ -8,6 +8,7 @@ from src.core.llm_client import LLMClient
 from aiogram import Bot
 from src.config.config import Config
 from src.services.admin_manager import is_admin as is_admin_service
+from src.bot.token_utils import get_bot_token, mask_token
 
 router = APIRouter(prefix="/admin", tags=["admin_settings"])  # mounted at /admin
 
@@ -62,6 +63,41 @@ async def settings_get(request: Request):
     return request.app.templates.TemplateResponse(request, "settings.html", {"request": request, "config": current_config, "status": status})
 
 
+@router.get('/bot-status')
+async def bot_status(request: Request):
+    """Return a brief bot connectivity status for debugging (masked token only)."""
+    status = {
+        'token_summary': None,
+        'bot_ok': False,
+        'webhook_url': None,
+        'error': None,
+    }
+    try:
+        token = get_bot_token() or request.app.state.config.BOT_TOKEN
+        status['token_summary'] = mask_token(token)
+        if token:
+            try:
+                b = Bot(token=token)
+                try:
+                    info = await b.get_webhook_info()
+                    status['webhook_url'] = info.url if hasattr(info, 'url') else (info.get('url') if isinstance(info, dict) else None)
+                except Exception:
+                    # best-effort; record nothing
+                    status['webhook_url'] = None
+                try:
+                    await b.get_me()
+                    status['bot_ok'] = True
+                except Exception as e:
+                    status['bot_ok'] = False
+                    status['error'] = str(e)
+            except Exception as e:
+                status['error'] = str(e)
+    except Exception as e:
+        status['error'] = str(e)
+
+    return JSONResponse(status)
+
+
 @router.post("/settings/save")
 async def settings_save(request: Request):
     # Save only non-secret fields
@@ -83,6 +119,10 @@ async def settings_save(request: Request):
         cfg["calendar_id"] = calendar_id
     if admin_ids:
         cfg["admin_ids"] = [int(i.strip()) for i in admin_ids.split(",") if i.strip()]
+    # AI personality override (free text)
+    ai_personality = form.get('ai_personality')
+    if ai_personality is not None:
+        cfg['ai_personality'] = ai_personality
     save_config(cfg)
     # store into sheet too
     try:

@@ -279,7 +279,7 @@ async function saveClientEdit() {
             allClients = allClients.map(c => c.id === clientId ? { ...c, ...clientData } : c);
             renderClients(allClients);
             closeModal();
-            showNotification('Клиент сохранён');
+                showNotification('Клиент сохранён', 'success');
         } else {
             const err = await response.json().catch(()=>({detail:'Ошибка'}));
             showNotification(err.detail || 'Не удалось сохранить клиента', 'error');
@@ -536,7 +536,7 @@ async function saveServiceEdit(){
     if(!data.name || data.name.trim().length<2){ showNotification('Название обязательно','error'); return }
     try{
         const r = await fetch(`/api/services/${id}`, { method: 'PUT', headers: {'Content-Type':'application/json','Authorization':'Bearer admin_token_1'}, body: JSON.stringify(data) })
-        if(r.ok){ allServices = allServices.map(s=> s.id===id? {...s,...data}: s); renderServices(allServices); closeModal(); showNotification('Услуга сохранена') }
+        if(r.ok){ allServices = allServices.map(s=> s.id===id? {...s,...data}: s); renderServices(allServices); closeModal(); showNotification('Услуга сохранена', 'success') }
         else{ const err = await r.json().catch(()=>({detail:'Ошибка'})); showNotification(err.detail || 'Не удалось сохранить','error') }
     }catch(e){ console.error(e); showNotification('Ошибка при сохранении','error') }
 }
@@ -1491,14 +1491,15 @@ async function saveClient() {
 
         if (response.ok) {
             closeModal();
-            loadClients();
-            // TODO: Show success message
+            await loadClients();
+            showNotification('Клиент добавлен', 'success');
         } else {
-            // TODO: Show error message
+            const err = await response.json().catch(()=>({detail:'Не удалось создать клиента'}));
+            showNotification(err.detail || 'Не удалось создать клиента', 'error');
         }
     } catch (error) {
         console.error('Error saving client:', error);
-        // TODO: Show error message
+        showNotification('Ошибка при сохранении клиента', 'error');
     }
 }
 
@@ -1564,9 +1565,14 @@ async function saveBooking() {
 
         if (response.ok) {
             closeModal();
-            loadBookings();
+            await loadBookings();
+            showNotification('Запись создана', 'success');
+        } else {
+            const err = await response.json().catch(()=>({detail:'Не удалось создать запись'}));
+            showNotification(err.detail || 'Не удалось создать запись', 'error');
         }
     } catch (error) {
         console.error('Error saving booking:', error);
+        showNotification('Ошибка при сохранении записи', 'error');
     }
 }

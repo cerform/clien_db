@@ -13,6 +13,9 @@ EXPECTED_SHEETS_HEADERS = {
     "bookings": ["id","client_id","master_id","service_id","datetime_start","datetime_end","status","price","comment_client","comment_master","source","created_at","updated_at","google_event_id"],
     "config": ["key","value","description"],
     "conversations": ["id","client_id","message","assistant_reply","timestamp","source"],
+    "deleted": ["sheet","row_id","deleted_at","deleted_by","data"],
+    # Friendly Russian-named sheet for admins who prefer localized name
+    "Удалёные": ["sheet","row_id","deleted_at","deleted_by","data"],
 }
 
 def ensure_sheets_structure(sheets_client, spreadsheet_id: str) -> None:

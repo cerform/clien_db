@@ -119,7 +119,7 @@ def get_available_slots(master_id: str, service_duration_min: int,
 
 def lock_slot(master_id: str, start: datetime, lock_holder: str, ttl_seconds: int = DEFAULT_LOCK_TTL_SECONDS, caller_role: str = '') -> bool:
     """Try to lock slot via atomic insert into slot_locks. Return True if succeeded."""
-    # Role check: only booking agent may lock slots. Perform this check before touching DB.
+    # Role check: only booking agent may lock slots
     if caller_role and not can_inka_write(caller_role, 'slot_locks'):
         logger.warning(f"lock_slot forbidden for role {caller_role}")
         return False
@@ -147,7 +147,7 @@ def create_pending_booking(user_id: int, master_id: str, service_id: str, start:
     """Create a pending booking and return the pending_id on success.
     This does a lock + insert into bookings_pending.
     """
-    # Permission check: do not touch DB if caller not allowed
+    # Permission check
     if caller_role and not can_inka_write(caller_role, 'bookings_pending'):
         logger.warning(f"create_pending_booking forbidden for role {caller_role}")
         return None

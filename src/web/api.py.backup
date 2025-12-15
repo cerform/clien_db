@@ -15,92 +15,17 @@ api_router = APIRouter()
 # Export for app
 routers = type('routers', (), {'api_router': api_router})
 
-# ==================== MOCK DATA ====================
+# The file `src/web/api.py.backup` previously contained mock data used for
+# offline development and examples. That in-repo mock dataset included
+# personally-identifiable example emails, phone numbers and generated
+# bookings. Shipping such sample data in the repository is undesirable for
+# production or public forks.
 
-# Mock stats data
-MOCK_STATS = {
-    "total_clients": 147,
-    "total_masters": 5,
-    "total_bookings": 89,
-    "total_services": 12,
-    "active_bookings": 23,
-    "revenue_month": 125000,
-    "revenue_week": 32000,
-    "new_clients_week": 8,
-    "completion_rate": 94.5
-}
-
-# Mock masters
-MOCK_MASTERS = [
-    {"id": 1, "name": "Алексей Мастеров", "specialization": "Black & Grey", "email": "alexey@tattoo.com", "phone": "+7 900 123-45-67", "is_active": True, "rating": 4.9, "completed_works": 234},
-    {"id": 2, "name": "Мария Иванова", "specialization": "Color Realism", "email": "maria@tattoo.com", "phone": "+7 900 234-56-78", "is_active": True, "rating": 4.8, "completed_works": 189},
-    {"id": 3, "name": "Дмитрий Петров", "specialization": "Traditional", "email": "dmitry@tattoo.com", "phone": "+7 900 345-67-89", "is_active": True, "rating": 4.7, "completed_works": 156},
-    {"id": 4, "name": "Екатерина Смирнова", "specialization": "Minimalism", "email": "ekaterina@tattoo.com", "phone": "+7 900 456-78-90", "is_active": True, "rating": 4.9, "completed_works": 201},
-    {"id": 5, "name": "Игорь Волков", "specialization": "Ornamental", "email": "igor@tattoo.com", "phone": "+7 900 567-89-01", "is_active": False, "rating": 4.6, "completed_works": 98},
-]
-
-# Mock clients
-MOCK_CLIENTS = [
-    {"id": 1, "name": "Иван Петров", "email": "ivan@mail.com", "phone": "+7 900 111-22-33", "telegram_id": 123456789, "created_at": "2024-01-15", "last_visit": "2024-12-01", "visits_count": 5},
-    {"id": 2, "name": "Анна Сидорова", "email": "anna@mail.com", "phone": "+7 900 222-33-44", "telegram_id": 234567890, "created_at": "2024-02-20", "last_visit": "2024-11-28", "visits_count": 3},
-    {"id": 3, "name": "Сергей Козлов", "email": "sergey@mail.com", "phone": "+7 900 333-44-55", "telegram_id": 345678901, "created_at": "2024-03-10", "last_visit": "2024-12-05", "visits_count": 7},
-    {"id": 4, "name": "Ольга Морозова", "email": "olga@mail.com", "phone": "+7 900 444-55-66", "telegram_id": 456789012, "created_at": "2024-04-05", "last_visit": "2024-11-15", "visits_count": 2},
-    {"id": 5, "name": "Павел Новиков", "email": "pavel@mail.com", "phone": "+7 900 555-66-77", "telegram_id": 567890123, "created_at": "2024-05-12", "last_visit": "2024-12-10", "visits_count": 4},
-]
-
-# Mock services
-MOCK_SERVICES = [
-    {"id": 1, "name": "Маленькая татуировка", "description": "До 5см", "duration_minutes": 60, "price": 5000, "category": "tattoo", "is_active": True},
-    {"id": 2, "name": "Средняя татуировка", "description": "5-15см", "duration_minutes": 120, "price": 12000, "category": "tattoo", "is_active": True},
-    {"id": 3, "name": "Большая татуировка", "description": "15см+", "duration_minutes": 180, "price": 25000, "category": "tattoo", "is_active": True},
-    {"id": 4, "name": "Консультация", "description": "Обсуждение эскиза", "duration_minutes": 30, "price": 0, "category": "consultation", "is_active": True},
-    {"id": 5, "name": "Перекрытие", "description": "Cover-up старой работы", "duration_minutes": 150, "price": 20000, "category": "coverup", "is_active": True},
-]
-
-# Mock bookings
-def generate_mock_bookings():
-    statuses = ["confirmed", "pending", "completed", "cancelled"]
-    bookings = []
-    for i in range(1, 26):
-        booking_date = date.today() + timedelta(days=random.randint(-10, 30))
-        bookings.append({
-            "id": i,
-            "client_id": random.randint(1, 5),
-            "client_name": random.choice(MOCK_CLIENTS)["name"],
-            "master_id": random.randint(1, 5),
-            "master_name": random.choice(MOCK_MASTERS)["name"],
-            "service_id": random.randint(1, 5),
-            "service_name": random.choice(MOCK_SERVICES)["name"],
-            "booking_date": booking_date.isoformat(),
-            "start_time": f"{random.randint(9, 18)}:00",
-            "end_time": f"{random.randint(10, 20)}:00",
-            "status": random.choice(statuses),
-            "notes": "Клиент хочет эскиз в стиле минимализм",
-            "created_at": (booking_date - timedelta(days=random.randint(1, 5))).isoformat()
-        })
-    return bookings
-
-MOCK_BOOKINGS = generate_mock_bookings()
-
-# Mock INKA training stats
-MOCK_INKA_STATS = {
-    "total_conversations": 1247,
-    "total_messages": 8934,
-    "avg_response_time": 1.2,
-    "satisfaction_rate": 96.3,
-    "top_intents": [
-        {"intent": "booking_inquiry", "count": 342, "percentage": 27.4},
-        {"intent": "price_question", "count": 289, "percentage": 23.2},
-        {"intent": "portfolio_request", "count": 234, "percentage": 18.8},
-        {"intent": "cancellation", "count": 156, "percentage": 12.5},
-        {"intent": "general_info", "count": 226, "percentage": 18.1},
-    ],
-    "languages": {
-        "ru": 892,
-        "en": 245,
-        "he": 110
-    }
-}
+# This backup file has been sanitized to remove the inline mock dataset.
+# If you need sample data for local development or demos, use the
+# `scripts/seed_services.py` and `scripts/seed_example_data.py` (if present)
+# or create separate fixtures in your test suite. Keep demo/sample data
+# out of production migrations and main branches.
 
 
 @api_router.get('/api/endpoints')
