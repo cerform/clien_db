@@ -9,6 +9,7 @@ from typing import Optional, Dict
 from src.services.inka_ai import INKA
 from src.config.config import Config
 from src.services.admin_manager import is_admin
+from src.services.telemetry import incr
 from aiogram import types, Router, F
 from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
@@ -138,6 +139,58 @@ async def handle_client_message(
         
         # Process through INKA
         result = inka.process(message.text, client_context)
+
+        # Session metadata for dialog control
+        data = await state.get_data()
+        clarify_attempts = data.get("clarify_attempts", 0)
+
+        # Helper: detect if the response is a clarifying fallback
+        def is_clarifying_response(text: str, classification: Dict) -> bool:
+            if not text:
+                return False
+            text_l = text.lower()
+            triggers = ["переформулир", "расскажи", "не совсем поним", "уточни", "подробнее"]
+            if any(t in text_l for t in triggers):
+                return True
+            if classification.get("route") == "other" and classification.get("confidence", 0) < 0.6:
+                return True
+            return False
+
+        classification = result.get("classification", {})
+        response_text = result.get("response", "")
+
+        # INTENT-FIRST: if classifier indicates booking, assume booking and move forward
+        if is_booking_request(classification):
+            await state.update_data({"clarify_attempts": 0, "dialog_state": "SLOT_OFFER"})
+            if is_clarifying_response(response_text, classification):
+                response_text = (
+                    "Понял, ты хочешь записаться. Давай начнём с идеи — что именно ты хочешь сделать? "
+                    "Например: где, размер, и есть ли референсы? Или хочешь сразу посмотреть свободные слоты?"
+                )
+                result["response"] = response_text
+                result["next_action"] = "offer_slots"
+                meta = result.get("meta", {})
+                meta["antirepeat_key"] = get_inka().consultant._make_antirepeat_key(response_text, classification.get("route","other"), classification.get("booking_type","tattoo"))
+                result["meta"] = meta
+            await state.update_data({"inka_stage": classification.get("stage")})
+            return result
+
+        # Clarify/fallback guard: limit clarifications and force progression
+        if is_clarifying_response(response_text, classification):
+            if clarify_attempts == 0:
+                await state.update_data({"clarify_attempts": 1, "last_user_message": message.text})
+                incr("clarify_attempts_total", 1)
+                if any(k in message.text.lower() for k in ["запис", "хочу тату", "хочу запис", "тату"]):
+                    return {"response": "Понял, ты хочешь записаться. Давай начнём: укажи, пожалуйста, место (например плечо), примерный размер и есть ли референсы?", "next_action": "other", "classification": classification}
+                return {"response": "Спасибо — расскажи, пожалуйста, подробнее: где примерно, какого размера и есть ли референсы? Или хочешь увидеть свободные слоты?", "next_action": "other", "classification": classification}
+            else:
+                clarify_attempts += 1
+                await state.update_data({"clarify_attempts": clarify_attempts})
+                if clarify_attempts == 2:
+                    return {"response": "Давай я задам вопрос иначе: это первая татуировка или уже был опыт?", "next_action": "other", "classification": classification}
+                incr("clarify_escalations_total", 1)
+                await state.update_data({"inka_escalated": True, "clarify_attempts": 0})
+                return {"response": "Извини, похоже, мне нужно подключить человека для помощи — свяжу тебя с мастером.", "next_action": "human", "classification": classification}
 
         # Anti-repeat enforcement: check last antirepeat key in FSM state
         meta = result.get("meta", {})

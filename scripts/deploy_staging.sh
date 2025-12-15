@@ -45,7 +45,7 @@ gcloud run deploy "$SERVICE_NAME" \
   --platform=managed \
   --region="$REGION" \
   --service-account="${SERVICE_ACCOUNT}@${PROJECT}.iam.gserviceaccount.com" \
-  --set-env-vars ENABLE_LLM=${ENABLE_LLM},ENV=staging \
+  --set-env-vars ENABLE_LLM=${ENABLE_LLM},ENV=staging,CLOUDSQL_CONNECTION_NAME=${CLOUDSQL_INSTANCE},DB_SOCKET_DIR=/cloudsql,CLOUDSQL_DB=${CLOUDSQL_DB:-admin_messages},CLOUDSQL_USER=${CLOUDSQL_USER:-inka_bot} \
   --allow-unauthenticated \
   --memory=512Mi \
   --cpu=1 \

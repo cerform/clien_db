@@ -360,19 +360,8 @@ class INKAConsultant:
 Ты работаешь в Telegram-формате: коротко, тепло, по делу, без навязчивости.
 
 🟥 ЗАПРЕТЫ — никогда не делай этого:
-- Не придумывай даты, слоты, время
-- Не предлагай свободные дни без реальных данных
-- Не называй стоимость, если нет информации
-- Не давай медицинские советы
-- Не спорь с клиентом
-- Не пиши длинные лекции
-- Не обещай то, чего нет
-- Не осуждай идеи клиента
 
 🟧 ТЕБЯ ВЫЗЫВАЮТ, КОГДА:
-- route = consultation (клиент обсуждает идею)
-- route = info (клиент спрашивает про боль, уход, цены, место)
-- route = other (неясное намерение)
 
 Твой тон:
 ✓ Профессиональный, спокойный, дружелюбный
@@ -382,11 +371,11 @@ class INKAConsultant:
 ✓ Стиль: тёплый, уважительный
 
 ВАЖНО:
-- Если спросят, представься кратко как INKA (например: "Я — INKA, я помогу с записью").
-- Отвечай естественно, как реальный человек; избегай односложных, однословных ответов
+    • НЕЛЬЗЯ задавать пользователю просьбы переформулировать один и тот же запрос более одного раза.
+    • Если намерение клиента частично ясно, ты ДОЛЖЕН: сделать разумное предположение, продвинуть диалог и задать конкретный направляющий вопрос.
+    • Всегда избегай бесконечных циклов уточнений и переформулировок.
 
-ОТВЕТЫ КОРОТКО, НО НАТУРАЛЬНО (1-3 предложения)."""
-
+"""
     def get_system_prompt_multilingual(self, language: str = "ru") -> str:
         """
         Get system prompt in the user's language
@@ -425,7 +414,9 @@ Your tone:
 ✓ Natural, conversational replies (avoid single-word answers)
 ✓ Short but human-like (1-3 sentences when possible)
 
-PREFER: concise, helpful, human-sounding responses. If asked about your name, reply briefly: "I am INKA.""" 
+PREFER: concise, helpful, human-sounding responses. If asked about your name, reply briefly: "I am INKA." 
+
+You are NOT allowed to ask the user to rephrase the same request more than once. If user intent is partially clear, make a reasonable assumption, move the conversation forward, and ask a specific guiding question."""
 
         elif language == "he":
             return """אתה INKA, העוזר האישי של הסטודיו.
@@ -571,6 +562,7 @@ Booking type: {booking_type}
                     "You MUST output ONLY a JSON object with the following keys:\n"
                     "{\"text\": string, \"next_action\": string, \"meta\": {\"antirepeat_key\": string, \"client_profile\": object}}\n"
                     "next_action must be one of: continue_consultation, offer_slots, other.\n"
+                    "IMPORTANT: You are NOT allowed to ask the user to rephrase the same request more than once.\n"
                     "client_profile should be a short object with any extracted facts (style, size, preferred days, constraints).\n"
                     "Do NOT include any extra commentary outside the JSON. Keep text 1-3 short sentences.\n"
                 )
@@ -581,7 +573,7 @@ Booking type: {booking_type}
                 incr("llm_calls_total", 1)
                 response = self.openai_service.chat_completion(
                     messages=[{"role": "system", "content": system}, {"role": "user", "content": user_prompt}],
-                    temperature=0.6,
+                    temperature=0.25,
                     max_tokens=400,
                     model=self.model
                 )
@@ -595,6 +587,18 @@ Booking type: {booking_type}
                     text = payload.get("text", "Извини, не поняла — уточни, пожалуйста.")
                     next_action = payload.get("next_action", "other")
                     meta = payload.get("meta", {})
+                    # Safety: avoid simple echo loops where model repeats client's message
+                    try:
+                        norm_text = " ".join(text.lower().split())
+                        norm_msg = " ".join(message.lower().split())
+                        if norm_text == norm_msg or norm_msg in norm_text:
+                            # Replace with a clarifying prompt instead of echoing
+                            text = "Извини, не совсем понимаю — уточни, пожалуйста: где именно (место), какого размера примерно и есть ли референсы?"
+                            next_action = "other"
+                            meta["antirepeat_key"] = self._make_antirepeat_key(text, context.get("route", "other"), booking_type)
+                    except Exception:
+                        # If normalization check fails, ignore and proceed
+                        pass
                     # Ensure antirepeat & client_profile exist
                     if "antirepeat_key" not in meta or not meta.get("antirepeat_key"):
                         meta["antirepeat_key"] = self._make_antirepeat_key(text, context.get("route", "other"), booking_type)

@@ -75,7 +75,7 @@ async def telegram_webhook(request: Request):
     # If dispatcher isn't configured yet, attempt lazy initialization using the
     # same token helper. This allows us to recover if secrets became available
     # after process start or a previous init failed.
-    if not dp:
+    if globals().get('dp') is None:
         logger.info("Dispatcher not configured - attempting lazy bot initialization")
         try:
             token = get_bot_token()
@@ -112,7 +112,7 @@ async def telegram_webhook(request: Request):
         except Exception as e:
             logger.exception(f"Error during lazy init: {e}")
 
-    if not dp:
+    if globals().get('dp') is None:
         logger.error("Telegram webhook called but dispatcher not configured")
         return {"ok": False, "error": "Bot not configured"}
 
@@ -156,7 +156,12 @@ async def telegram_webhook(request: Request):
             return {"ok": True}
 
         try:
-            await dp.feed_update(bot=bot, update=update)
+            local_dp = globals().get('dp')
+            local_bot = globals().get('bot')
+            if not local_dp:
+                logger.error("Dispatcher became unavailable before processing update")
+                return {"ok": False, "error": "Bot not configured"}
+            await local_dp.feed_update(bot=local_bot, update=update)
         except Exception as inner_e:
             # Log handler-level errors with update summary for debugging
             logger.exception(f"Error while processing update (summary={summary}): {inner_e}")

@@ -119,14 +119,14 @@ def get_available_slots(master_id: str, service_duration_min: int,
 
 def lock_slot(master_id: str, start: datetime, lock_holder: str, ttl_seconds: int = DEFAULT_LOCK_TTL_SECONDS, caller_role: str = '') -> bool:
     """Try to lock slot via atomic insert into slot_locks. Return True if succeeded."""
-    db = get_db()
-    conn = db.get_connection()
-    cur = conn.cursor()
-    expires_at = datetime.now(timezone.utc) + timedelta(seconds=ttl_seconds)
     # Role check: only booking agent may lock slots
     if caller_role and not can_inka_write(caller_role, 'slot_locks'):
         logger.warning(f"lock_slot forbidden for role {caller_role}")
         return False
+    db = get_db()
+    conn = db.get_connection()
+    cur = conn.cursor()
+    expires_at = datetime.now(timezone.utc) + timedelta(seconds=ttl_seconds)
     try:
         cur.execute(
             "INSERT INTO slot_locks (master_id, start_time, locked_by, locked_at, expires_at) VALUES (%s, %s, %s, now(), %s)",
@@ -147,14 +147,13 @@ def create_pending_booking(user_id: int, master_id: str, service_id: str, start:
     """Create a pending booking and return the pending_id on success.
     This does a lock + insert into bookings_pending.
     """
-    db = get_db()
-    conn = db.get_connection()
-    cur = conn.cursor()
-
     # Permission check
     if caller_role and not can_inka_write(caller_role, 'bookings_pending'):
         logger.warning(f"create_pending_booking forbidden for role {caller_role}")
         return None
+    db = get_db()
+    conn = db.get_connection()
+    cur = conn.cursor()
     # Lock first
     if not lock_slot(master_id, start, lock_holder, ttl_seconds, caller_role=caller_role):
         return None
